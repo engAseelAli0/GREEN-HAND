@@ -200,6 +200,10 @@ select.form-control option {
   to { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 /* Cards & Containers */
 .card {
   background: var(--surface-color);
@@ -207,4 +211,281 @@ select.form-control option {
   box-shadow: var(--shadow-sm);
   padding: 1.5rem;
   border: 1px solid var(--border-color);
+}
+
+/* ═══════════════════════════════════════════════════
+   PREMIUM TAB SYSTEM
+   ═══════════════════════════════════════════════════ */
+
+.wizard-tabs-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-height: calc(100vh - 180px);
+}
+
+/* Tab Navigation Bar */
+.tab-nav {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.5rem;
+  background: rgba(22, 27, 34, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(212, 175, 55, 0.15);
+  border-radius: var(--radius-lg);
+  overflow-x: auto;
+  scrollbar-width: none;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.tab-nav::-webkit-scrollbar {
+  display: none;
+}
+
+/* Individual Tab Button */
+.tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.25rem;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: 'Tajawal', sans-serif;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+  position: relative;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.tab-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(212, 175, 55, 0.15), rgba(212, 175, 55, 0.05));
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  border-radius: var(--radius-md);
+}
+
+.tab-btn:hover {
+  color: var(--primary-color);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.tab-btn:hover::before {
+  opacity: 0.5;
+}
+
+.tab-btn .tab-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  transition: all 0.35s ease;
+  flex-shrink: 0;
+}
+
+.tab-btn .tab-num {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  transition: all 0.35s ease;
+  flex-shrink: 0;
+}
+
+/* Active Tab */
+.tab-btn.active {
+  color: #fff;
+  background: linear-gradient(135deg, rgba(212, 175, 55, 0.2), rgba(212, 175, 55, 0.08));
+  box-shadow: 0 2px 12px rgba(212, 175, 55, 0.2), inset 0 1px 0 rgba(212, 175, 55, 0.3);
+}
+
+.tab-btn.active::before {
+  opacity: 1;
+}
+
+.tab-btn.active .tab-icon {
+  background: var(--accent-color);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(212, 175, 55, 0.4);
+}
+
+.tab-btn.active .tab-num {
+  background: var(--accent-color);
+  color: #fff;
+  box-shadow: 0 0 8px rgba(212, 175, 55, 0.5);
+}
+
+/* Tab Content Area */
+.tab-content-wrapper {
+  flex: 1;
+  margin-top: 1.5rem;
+  position: relative;
+}
+
+.tab-panel {
+  animation: tabSlideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes tabSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Tab Panel Card - Enhanced */
+.tab-panel .card {
+  background: linear-gradient(180deg, var(--surface-color) 0%, rgba(22, 27, 34, 0.95) 100%);
+  border: 1px solid rgba(212, 175, 55, 0.1);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+/* Section Header inside tabs */
+.tab-section-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 2px solid transparent;
+  border-image: linear-gradient(to left, transparent, var(--accent-color), transparent) 1;
+}
+
+.tab-section-header h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.25rem;
+  background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Bottom Actions Bar */
+.wizard-bottom-bar {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.5rem;
+  margin-top: 1.5rem;
+  background: rgba(22, 27, 34, 0.85);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(212, 175, 55, 0.15);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.3);
+}
+
+/* Navigation arrows between tabs */
+.tab-nav-arrows {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+  justify-content: space-between;
+}
+
+.tab-nav-arrow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  border: 1px solid rgba(212, 175, 55, 0.3);
+  background: rgba(212, 175, 55, 0.08);
+  color: var(--accent-color);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-family: 'Tajawal', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 600;
+  transition: all 0.3s ease;
+}
+
+.tab-nav-arrow:hover {
+  background: rgba(212, 175, 55, 0.15);
+  border-color: var(--accent-color);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(212, 175, 55, 0.2);
+}
+
+.tab-nav-arrow:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Progress dots */
+.tab-progress {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.tab-progress-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border-color);
+  transition: all 0.3s ease;
+}
+
+.tab-progress-dot.active {
+  width: 24px;
+  border-radius: 4px;
+  background: var(--accent-color);
+  box-shadow: 0 0 8px rgba(212, 175, 55, 0.5);
+}
+
+.tab-progress-dot.completed {
+  background: rgba(212, 175, 55, 0.5);
+}
+
+/* Responsive tabs */
+@media (max-width: 900px) {
+  .tab-nav {
+    gap: 0.15rem;
+    padding: 0.35rem;
+  }
+  
+  .tab-btn {
+    padding: 0.6rem 0.8rem;
+    font-size: 0.8rem;
+  }
+  
+  .tab-btn .tab-label {
+    display: none;
+  }
+  
+  .tab-btn .tab-icon {
+    width: 28px;
+    height: 28px;
+  }
 }

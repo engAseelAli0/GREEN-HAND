@@ -468,7 +468,17 @@ const ExportOrder = () => {
               <tr>
                 <td style={{ fontWeight: '700', fontSize: '1.1rem' }}>
                   {order.productName || '-'}
-                  <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '0.25rem', fontWeight: 'normal' }}>Trade Mark: {order.tradeMark || '-'}</div>
+                  <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '0.25rem', fontWeight: 'normal', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    Trade Mark: {order.tradeMark || '-'}
+                    {(() => {
+                      const tmObj = lookups.tradeMarks?.find(t => (typeof t === 'object' ? t.name : t) === order.tradeMark);
+                      const tmImage = tmObj && typeof tmObj === 'object' ? tmObj.imageUrl : null;
+                      if (tmImage) {
+                        return <img src={tmImage} alt={order.tradeMark} style={{ width: '60px', height: '60px', objectFit: 'contain', borderRadius: '6px', border: '1px solid #e5e7eb', background: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,0.1)' }} crossOrigin="anonymous" />;
+                      }
+                      return null;
+                    })()}
+                  </div>
                 </td>
                 <td style={{ textAlign: 'center', fontWeight: 'bold' }}>{order.productPrice || '-'} {order.currency || ''}</td>
                 <td style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '1.1rem' }}>{order.totalQuantity} Units</td>
@@ -482,6 +492,49 @@ const ExportOrder = () => {
                <span style={{ fontWeight: '600', color: '#4b5563', marginRight: '0.5rem' }}>Main Fabric 核心面料:</span>
                <span style={{ fontWeight: '700', color: '#111827' }}>{order.productFabric}</span>
              </div>
+          )}
+
+          {/* Product Images */}
+          {order.productImages && order.productImages.length > 0 && (
+            <>
+              <h3 className="section-title">Product Images <span>(产品图片)</span></h3>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 200px))',
+                gap: '1rem',
+                marginBottom: '2.5rem',
+                padding: '1rem',
+                background: '#f9fafb',
+                borderRadius: '8px',
+                border: '1px solid #e5e7eb'
+              }}>
+                {order.productImages.map((img, idx) => (
+                  <div key={idx} style={{
+                    borderRadius: '8px',
+                    overflow: 'hidden',
+                    border: '1px solid #e5e7eb',
+                    background: '#fff'
+                  }}>
+                    <img
+                      src={img.url}
+                      alt={img.name || `Product ${idx + 1}`}
+                      style={{ width: '100%', height: '220px', objectFit: 'cover', display: 'block' }}
+                      crossOrigin="anonymous"
+                    />
+                    <div style={{
+                      padding: '0.4rem',
+                      fontSize: '0.7rem',
+                      color: '#6b7280',
+                      textAlign: 'center',
+                      fontWeight: '600',
+                      background: '#f3f4f6'
+                    }}>
+                      {img.name}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
           )}
 
           {/* Materials & Fabrics */}

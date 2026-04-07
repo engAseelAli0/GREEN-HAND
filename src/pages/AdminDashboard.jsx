@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useAppData } from '../context/AppDataContext';
-import { Plus, Trash2, Edit, Edit2, Check, X } from 'lucide-react';
+import { Plus, Trash2, Edit, Edit2, Check, X, ImagePlus } from 'lucide-react';
+import { supabase } from '../supabaseClient';
 import toast from 'react-hot-toast';
 
 const AdminDashboard = () => {
@@ -11,6 +12,10 @@ const AdminDashboard = () => {
   const [newValueMobile, setNewValueMobile] = useState('');
   const [newValueAddress, setNewValueAddress] = useState('');
   const [editIndex, setEditIndex] = useState(null);
+  const [tradeMarkImage, setTradeMarkImage] = useState(null);
+  const [tradeMarkImageUrl, setTradeMarkImageUrl] = useState('');
+  const [uploadingTmImage, setUploadingTmImage] = useState(false);
+  const tmImageRef = useRef(null);
 
   const tabs = [
     { id: 'products', name: 'المنتجات' },
@@ -48,6 +53,11 @@ const AdminDashboard = () => {
         mobile: newValueMobile.trim(), 
         address: newValueAddress.trim() 
       };
+    } else if (activeTab === 'tradeMarks') {
+      newItem = { 
+        name: newValue.trim(), 
+        imageUrl: tradeMarkImageUrl || (editIndex !== null && typeof currentList[editIndex] === 'object' ? currentList[editIndex].imageUrl : '') || ''
+      };
     }
 
     if (editIndex !== null) {
@@ -65,6 +75,8 @@ const AdminDashboard = () => {
     setNewValueHex('#000000');
     setNewValueMobile('');
     setNewValueAddress('');
+    setTradeMarkImage(null);
+    setTradeMarkImageUrl('');
   };
 
   const startEdit = (index, item) => {
@@ -76,8 +88,11 @@ const AdminDashboard = () => {
       setNewValue(item.name || item);
       setNewValueMobile(item.mobile || '');
       setNewValueAddress(item.address || '');
+    } else if (activeTab === 'tradeMarks' && typeof item === 'object') {
+      setNewValue(item.name || '');
+      setTradeMarkImageUrl(item.imageUrl || '');
     } else {
-      setNewValue(item);
+      setNewValue(typeof item === 'object' ? item.name : item);
     }
     toast('وضع التعديل قيد التفعيل...', { icon: '🛠️' });
   };
@@ -88,6 +103,43 @@ const AdminDashboard = () => {
     setNewValueHex('#000000');
     setNewValueMobile('');
     setNewValueAddress('');
+    setTradeMarkImage(null);
+    setTradeMarkImageUrl('');
+  };
+
+  const handleTradeMarkImageUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (!newValue.trim()) {
+      toast.error('الرجاء كتابة اسم العلامة التجارية أولاً');
+      return;
+    }
+    setUploadingTmImage(true);
+    try {
+      const ext = file.name.split('.').pop();
+      const safeId = Date.now().toString(36);
+      const fileName = `tm_${safeId}.${ext}`;
+      const filePath = `trademarks/${fileName}`;
+      const { data, error } = await supabase.storage
+        .from('product_images')
+        .upload(filePath, file, { upsert: true });
+      if (error) {
+        toast.error(`فشل رفع الصورة: ${error.message}`);
+        return;
+      }
+      const { data: urlData } = supabase.storage
+        .from('product_images')
+        .getPublicUrl(filePath);
+      setTradeMarkImageUrl(urlData.publicUrl);
+      setTradeMarkImage(URL.createObjectURL(file));
+      toast.success('تم رفع صورة العلامة التجارية بنجاح!');
+    } catch (err) {
+      console.error(err);
+      toast.error('خطأ في رفع الصورة!');
+    } finally {
+      setUploadingTmImage(false);
+      if (tmImageRef.current) tmImageRef.current.value = '';
+    }
   };
 
   const handleDelete = (indexToDelete) => {
@@ -210,6 +262,24 @@ const AdminDashboard = () => {
                 title="تحديد اللون المظهري"
               />
             )}
+            {activeTab === 'tradeMarks' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <input type="file" ref={tmImageRef} accept="image/*" onChange={handleTradeMarkImageUpload} style={{ display: 'none' }} />
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={() => tmImageRef.current?.click()}
+                  disabled={uploadingTmImage}
+                  style={{ borderColor: 'rgba(212, 175, 55, 0.3)', gap: '0.5rem', whiteSpace: 'nowrap' }}
+                >
+                  <ImagePlus size={18} />
+                  {uploadingTmImage ? 'جاري الرفع...' : 'صورة العلامة'}
+                </button>
+                {(tradeMarkImageUrl || tradeMarkImage) && (
+                  <img src={tradeMarkImage || tradeMarkImageUrl} alt="TM" style={{ width: '70px', height: '70px', objectFit: 'contain', borderRadius: '8px', border: '2px solid rgba(212, 175, 55, 0.3)', background: '#fff', boxShadow: '0 2px 8px rgba(0,0,0,0.2)' }} />
+                )}
+              </div>
+            )}
             
             {editIndex !== null ? (
               <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -250,9 +320,12 @@ const AdminDashboard = () => {
                   {activeTab === 'colors' && item.hex && (
                     <span style={{ width: '18px', height: '18px', borderRadius: '50%', backgroundColor: item.hex, border: '1px solid var(--border-color)', flexShrink: 0 }}></span>
                   )}
+                  {activeTab === 'tradeMarks' && typeof item === 'object' && item.imageUrl && (
+                    <img src={item.imageUrl} alt={item.name} style={{ width: '55px', height: '55px', objectFit: 'contain', borderRadius: '8px', border: '1px solid var(--border-color)', background: '#fff', flexShrink: 0, boxShadow: '0 1px 4px rgba(0,0,0,0.15)' }} />
+                  )}
                   <div style={{ display: 'flex', flexDirection: 'column' }}>
                     <span style={{ fontWeight: isEditing ? '600' : '500', color: isEditing ? 'var(--accent-color)' : 'var(--text-main)', textOverflow: 'ellipsis', whiteSpace: 'nowrap', overflow: 'hidden' }}>
-                      {activeTab === 'colors' ? item.name : (activeTab === 'factories' ? item.name : item)}
+                      {activeTab === 'colors' ? item.name : (activeTab === 'factories' ? item.name : (typeof item === 'object' ? item.name : item))}
                     </span>
                     {activeTab === 'factories' && item.mobile && (
                       <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{item.mobile} • {item.address}</span>

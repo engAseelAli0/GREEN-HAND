@@ -21,6 +21,7 @@ const initialLookups = {
 
 export const defaultOrderState = {
   serialNumber: '',
+  barcode: '',
   buyerMobile: '',
   buyerId: '',
   buyerCompany: '',
@@ -42,7 +43,8 @@ export const defaultOrderState = {
   cartonSize: '',
   plasticBagSize: '',
   remarks: '',
-  colorDistribution: {}
+  colorDistribution: {},
+  groupedMeasurements: {}
 };
 
 export const AppDataProvider = ({ children }) => {

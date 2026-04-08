@@ -6,6 +6,8 @@ import HomePortal from './pages/HomePortal'
 import DataEntryWizard from './pages/DataEntryWizard'
 import AdminDashboard from './pages/AdminDashboard'
 import ExportOrder from './pages/ExportOrder'
+import FactoryReceiving from './pages/FactoryReceiving'
+import PrintBarcodes from './pages/PrintBarcodes'
 import { AppDataProvider } from './context/AppDataContext'
 import './index.css'
 
@@ -19,6 +21,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             <Route path="entry" element={<DataEntryWizard />} />
             <Route path="admin" element={<AdminDashboard />} />
             <Route path="export" element={<ExportOrder />} />
+            <Route path="receiving" element={<FactoryReceiving />} />
+            <Route path="barcodes" element={<PrintBarcodes />} />
           </Route>
         </Routes>
       </BrowserRouter>

@@ -8,7 +8,7 @@ const AppLayout = () => {
 
   return (
     <div className="app-container">
-      <header className="glass-panel" style={{ margin: '1rem 2rem', padding: '1rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <header className="glass-panel hide-on-print" style={{ margin: '1rem 2rem', padding: '1rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <div style={{ 
             background: 'var(--accent-color)', 
@@ -48,6 +48,7 @@ const AppLayout = () => {
       </main>
 
       <Toaster 
+        containerClassName="hide-on-print"
         position="top-center"
         toastOptions={{
           style: {

@@ -8,6 +8,17 @@ const ExportOrder = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [order, setOrder] = useState(null);
   const { lookups } = useAppData();
+  
+  const formatDate = (dateStr) => {
+    if (!dateStr) return '-';
+    // Native ISO date is YYYY-MM-DD
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      const [year, month, day] = parts;
+      return `${day}/${month}/${year}`;
+    }
+    return dateStr;
+  };
 
   const handleFetch = async () => {
     if (!searchTerm.trim()) {
@@ -406,7 +417,7 @@ const ExportOrder = () => {
               <div className="doc-subtitle">产品订单 (Product Order Document)</div>
             </div>
             <div style={{ textAlign: 'left' }}>
-              <div style={{ fontSize: '2.5rem', fontWeight: '900', color: '#111827', lineHeight: '1' }}>#{order.serialNumber}</div>
+              <div style={{ fontSize: '2.5rem', fontWeight: '900', color: '#111827', lineHeight: '1' }}>#{order.barcode || order.serialNumber}</div>
               <div style={{ color: '#6b7280', fontSize: '0.9rem', marginTop: '0.5rem', fontWeight: '600' }}>ORDER / MODEL NO 款号</div>
             </div>
           </div>
@@ -445,11 +456,11 @@ const ExportOrder = () => {
           <div style={{ display: 'flex', gap: '2rem', marginBottom: '2.5rem' }}>
              <div style={{ flex: 1, borderLeft: '4px solid #111827', paddingLeft: '1rem' }}>
                 <div style={{ fontSize: '0.85rem', color: '#6b7280', fontWeight: '600', textTransform: 'uppercase' }}>Request Date 订单日期</div>
-                <div style={{ fontSize: '1.25rem', fontWeight: '800' }}>{order.requestDate}</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: '800' }}>{formatDate(order.requestDate)}</div>
              </div>
              <div style={{ flex: 1, borderLeft: '4px solid #b48c26', paddingLeft: '1rem' }}>
                 <div style={{ fontSize: '0.85rem', color: '#6b7280', fontWeight: '600', textTransform: 'uppercase' }}>Delivery Date 交货日期</div>
-                <div style={{ fontSize: '1.25rem', fontWeight: '800' }}>{order.deliveryDate || 'TBD'}</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: '800' }}>{formatDate(order.deliveryDate)}</div>
              </div>
           </div>
 
@@ -596,7 +607,35 @@ const ExportOrder = () => {
           )}
 
           {/* Measurements Details */}
-          {order.measurements && Object.keys(order.measurements).length > 0 && (
+          {order.groupedMeasurements && Object.keys(order.groupedMeasurements).length > 0 ? (
+             Object.keys(order.groupedMeasurements).map((partName, pIdx) => (
+               <React.Fragment key={pIdx}>
+                 <h3 className="section-title">Measurements: {partName} <span>(尺寸细节: {partName})</span></h3>
+                 <table className="elegant-grid" style={{ marginBottom: '1.5rem' }}>
+                   <thead>
+                     <tr>
+                       <th style={{ width: '25%', left: 0 }}>Measurement 测量部位</th>
+                       {sizesToRender.map(size => (
+                         <th key={size} style={{ textAlign: 'center' }}>{size}</th>
+                       ))}
+                     </tr>
+                   </thead>
+                   <tbody>
+                     {Object.keys(order.groupedMeasurements[partName]).map((mName, idx) => (
+                       <tr key={idx}>
+                         <td style={{ fontWeight: '600', color: '#111827' }}>{mName}</td>
+                         {sizesToRender.map(s => (
+                            <td key={s} style={{ textAlign: 'center', color: order.groupedMeasurements[partName][mName]?.[s] ? '#111827' : '#9ca3af', fontWeight: order.groupedMeasurements[partName][mName]?.[s] ? 'bold' : 'normal' }}>
+                              {order.groupedMeasurements[partName][mName]?.[s] || '-'}
+                            </td>
+                         ))}
+                       </tr>
+                     ))}
+                   </tbody>
+                 </table>
+               </React.Fragment>
+             ))
+          ) : order.measurements && Object.keys(order.measurements).length > 0 && (
              <>
                <h3 className="section-title">Measurements Details <span>(尺寸细节)</span></h3>
                <table className="elegant-grid">

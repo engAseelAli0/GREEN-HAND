@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Edit3, Printer, Settings, Hexagon } from 'lucide-react';
+import { Edit3, Printer, Settings, Hexagon, Truck, Barcode } from 'lucide-react';
 
 const HomePortal = () => {
   return (
@@ -153,6 +153,28 @@ const HomePortal = () => {
           <h2 className="capsule-title">لوحة الإدارة والإعدادات</h2>
           <p className="capsule-desc">
             مركز البيانات. إضافة وتحرير الأقمشة، الألوان، المصانع، العملات، وجميع القوائم المنسدلة التي تغذي النظام بالكامل.
+          </p>
+        </Link>
+
+        {/* Capsule 4: Factory Receiving */}
+        <Link to="/receiving" className="capsule-card">
+          <div className="icon-ring" style={{ color: '#4ade80', borderColor: 'rgba(74, 222, 128, 0.3)' }}>
+            <Truck size={40} />
+          </div>
+          <h2 className="capsule-title">استلام البضائع والفرز</h2>
+          <p className="capsule-desc">
+            واجهة المطابقة المتقدمة. إضافة تفاصيل الكراتين المستلمة من المصانع والتحقق الرياضي من مطابقة الكميات.
+          </p>
+        </Link>
+
+        {/* Capsule 5: Batch Barcodes */}
+        <Link to="/barcodes" className="capsule-card">
+          <div className="icon-ring" style={{ color: '#fb923c', borderColor: 'rgba(251, 146, 60, 0.3)' }}>
+            <Barcode size={40} />
+          </div>
+          <h2 className="capsule-title">دفعات الباركود (Batches)</h2>
+          <p className="capsule-desc">
+            توليد ومطابقة باركودات متسلسلة للمصانع والماسحات الضوئية بناءً على الألوان والمقاسات.
           </p>
         </Link>
 

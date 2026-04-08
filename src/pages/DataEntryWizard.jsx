@@ -14,6 +14,72 @@ const TABS = [
   { id: 'measurements', label: 'المقاسات التفصيلية', icon: Ruler, num: 7 },
 ];
 
+// Helper to format date as DD/MM/YYYY for display
+const formatDateForDisplay = (dateStr) => {
+  if (!dateStr) return '';
+  const parts = dateStr.split('-');
+  if (parts.length === 3) {
+    const [year, month, day] = parts;
+    return `${day}/${month}/${year}`;
+  }
+  return dateStr;
+};
+
+const CustomDateInput = ({ label, value, onChange, min }) => {
+  return (
+    <div className="form-group">
+      <label className="form-label">{label}</label>
+      <div style={{ position: 'relative' }}>
+        <input 
+          type="text" 
+          className="form-control" 
+          value={formatDateForDisplay(value)} 
+          placeholder="DD/MM/YYYY"
+          readOnly
+          style={{ cursor: 'pointer', backgroundColor: 'var(--bg-color)' }}
+          onClick={(e) => {
+             const picker = e.currentTarget.nextSibling;
+             if (picker && picker.showPicker) picker.showPicker();
+          }}
+        />
+        <input 
+          type="date" 
+          className="form-control"
+          style={{ 
+            position: 'absolute', 
+            top: 0, 
+            left: 0, 
+            width: '100%', 
+            height: '100%', 
+            opacity: 0, 
+            cursor: 'pointer',
+            padding: 0
+          }} 
+          value={value || ''} 
+          min={min || ''}
+          onChange={(e) => onChange(e.target.value)} 
+          onClick={(e) => {
+            if (e.target.showPicker) e.target.showPicker();
+          }}
+        />
+        <div style={{ 
+          position: 'absolute', 
+          left: '12px', 
+          top: '50%', 
+          transform: 'translateY(-50%)', 
+          pointerEvents: 'none',
+          opacity: 0.7,
+          color: 'var(--accent-color)',
+          display: 'flex',
+          alignItems: 'center'
+        }}>
+          <Calendar size={18} />
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const DataEntryWizard = () => {
   const { lookups, currentOrder, updateOrder, setCurrentOrder } = useAppData();
   const [activeTab, setActiveTab] = useState('buyer');
@@ -157,6 +223,20 @@ const DataEntryWizard = () => {
       }
     });
   };
+
+  useEffect(() => {
+    if (currentOrder.productName) {
+      const prodObj = lookups.products?.find(p => (typeof p === 'object' ? p.name : p) === currentOrder.productName);
+      if (prodObj && typeof prodObj === 'object' && prodObj.codePrefix) {
+        updateOrder('barcode', `${prodObj.codePrefix}${currentOrder.serialNumber || ''}`);
+      } else {
+        updateOrder('barcode', '');
+      }
+    } else {
+      updateOrder('barcode', '');
+    }
+  }, [currentOrder.productName, currentOrder.serialNumber, lookups.products]);
+
 
   const handleSerialChange = async (val) => {
     updateOrder('serialNumber', val);
@@ -342,16 +422,40 @@ const DataEntryWizard = () => {
 
   const handleMaterialChange = (index, field, value) => {
     const newMaterials = [...(currentOrder.materials || [])];
-    if (!newMaterials[index]) newMaterials[index] = { name: '', percentage: '' };
-    newMaterials[index][field] = value;
+    // Ensure the array has enough slots
+    while (newMaterials.length <= index) {
+      newMaterials.push({ name: '', percentage: '' });
+    }
+    
+    if (field === 'percentage') {
+       // Force Western digits (English digits)
+       const standardValue = value.toString().replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d));
+       const valNum = parseFloat(standardValue) || 0;
+       
+       let otherTotal = 0;
+       newMaterials.forEach((m, i) => {
+         if (i !== index) otherTotal += (parseFloat(m.percentage) || 0);
+       });
+
+       if (otherTotal + valNum > 100) {
+         const allowed = 100 - otherTotal;
+         newMaterials[index].percentage = allowed > 0 ? allowed.toString() : '0';
+         toast(`لقد وصلت للحد الأقصى (100%). المسموح لهذا الحقل هو ${allowed}% فقط.`, { icon: '⚠️' });
+       } else {
+         newMaterials[index].percentage = standardValue;
+       }
+    } else {
+       newMaterials[index][field] = value;
+    }
     updateOrder('materials', newMaterials);
   };
 
-  const handleMeasurementChange = (mName, size, value) => {
-    const dist = { ...(currentOrder.measurements || {}) };
-    if (!dist[mName]) dist[mName] = {};
-    dist[mName][size] = value;
-    updateOrder('measurements', dist);
+  const handleMeasurementChange = (part, mName, size, value) => {
+    const grouped = { ...(currentOrder.groupedMeasurements || {}) };
+    if (!grouped[part]) grouped[part] = {};
+    if (!grouped[part][mName]) grouped[part][mName] = {};
+    grouped[part][mName][size] = value;
+    updateOrder('groupedMeasurements', grouped);
   };
   
   const handlePackagingConditionChange = (cond, isChecked) => {
@@ -428,6 +532,11 @@ const DataEntryWizard = () => {
                   {serialStatus === 'checking' && <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>جاري التحقق...</span>}
                   {serialStatus === 'used' && <span style={{ fontSize: '0.8rem', color: '#ef4444', fontWeight: 'bold' }}>⚠️ هذا الرقم التسلسلي مستخدم مسبقاً!</span>}
                   {serialStatus === 'available' && <span style={{ fontSize: '0.8rem', color: '#22c55e', fontWeight: 'bold' }}>✅ الرقم متاح، يمكن استخدامه.</span>}
+                  {currentOrder.barcode && (
+                    <div style={{ marginTop: '8px', padding: '6px', backgroundColor: 'rgba(212, 175, 55, 0.1)', border: '1px dashed var(--accent-color)', borderRadius: '6px', color: 'var(--accent-color)', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                       الباركود المولد: <strong style={{ letterSpacing: '2px', fontSize: '1.1rem' }}>{currentOrder.barcode}</strong>
+                    </div>
+                  )}
                 </div>
                 <div className="form-group">
                   <label className="form-label">جوال المشتري و رقم العميل</label>
@@ -445,7 +554,10 @@ const DataEntryWizard = () => {
                   <label className="form-label">اسم المنتج</label>
                   <select className="form-control" value={currentOrder.productName} onChange={(e) => updateOrder('productName', e.target.value)}>
                     <option value="">اختر...</option>
-                    {lookups.products?.map((p, i) => <option key={i} value={p}>{p}</option>)}
+                    {lookups.products?.map((p, i) => {
+                      const val = typeof p === 'object' ? p.name : p;
+                      return <option key={i} value={val}>{val}</option>;
+                    })}
                   </select>
                 </div>
                 <div className="form-group">
@@ -601,21 +713,44 @@ const DataEntryWizard = () => {
                 <h3><Calendar size={22} /> المواعيد والكمية والمقاسات</h3>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div className="form-group">
-                  <label className="form-label">تاريخ طلب المشتري</label>
-                  <input type="date" className="form-control" value={currentOrder.requestDate || ''} onChange={(e) => updateOrder('requestDate', e.target.value)} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">تاريخ التسليم في المصنع</label>
-                  <input type="date" className="form-control" value={currentOrder.deliveryDate || ''} onChange={(e) => updateOrder('deliveryDate', e.target.value)} />
-                </div>
+                <CustomDateInput 
+                  label="تاريخ طلب المشتري" 
+                  value={currentOrder.requestDate} 
+                  onChange={(val) => {
+                    updateOrder('requestDate', val);
+                    // If delivery date is now before request date, clear it or adjust it
+                    if (currentOrder.deliveryDate && val && currentOrder.deliveryDate < val) {
+                      updateOrder('deliveryDate', '');
+                      toast('تم مسح تاريخ التسليم لأنه أصبح قبل تاريخ الطلب الجديد', { icon: 'ℹ️' });
+                    }
+                  }} 
+                />
+                <CustomDateInput 
+                  label="تاريخ التسليم في المصنع" 
+                  value={currentOrder.deliveryDate} 
+                  onChange={(val) => updateOrder('deliveryDate', val)} 
+                  min={currentOrder.requestDate}
+                />
                 <div className="form-group" style={{ gridColumn: '1 / -1' }}>
                   <label className="form-label">الكمية الإجمالية (Product Quantity)</label>
                   <input type="number" className="form-control" value={currentOrder.totalQuantity} onChange={(e) => updateOrder('totalQuantity', e.target.value)} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">المقاس من (Size From)</label>
-                  <select className="form-control" value={currentOrder.sizeFrom || ''} onChange={(e) => updateOrder('sizeFrom', e.target.value)}>
+                  <select className="form-control" value={currentOrder.sizeFrom || ''} onChange={(e) => {
+                    const newVal = e.target.value;
+                    const oldVal = currentOrder.sizeFrom;
+                    updateOrder('sizeFrom', newVal);
+                    
+                    // Logic to clear sizeTo if types are different (Num vs Text)
+                    if (newVal && oldVal) {
+                      const wasNumeric = !isNaN(parseFloat(oldVal)) && isFinite(oldVal);
+                      const isNumeric = !isNaN(parseFloat(newVal)) && isFinite(newVal);
+                      if (wasNumeric !== isNumeric) {
+                        updateOrder('sizeTo', '');
+                      }
+                    }
+                  }}>
                     <option value="">اختر...</option>
                     {lookups.sizes?.map((s, i) => <option key={i} value={s}>{s}</option>)}
                   </select>
@@ -624,7 +759,23 @@ const DataEntryWizard = () => {
                   <label className="form-label">المقاس إلى (Size To)</label>
                   <select className="form-control" value={currentOrder.sizeTo || ''} onChange={(e) => updateOrder('sizeTo', e.target.value)}>
                     <option value="">اختر...</option>
-                    {lookups.sizes?.map((s, i) => <option key={i} value={s}>{s}</option>)}
+                    {(() => {
+                      if (!currentOrder.sizeFrom) return lookups.sizes;
+                      const isNumeric = !isNaN(parseFloat(currentOrder.sizeFrom)) && isFinite(currentOrder.sizeFrom);
+                      const baseIdx = lookups.sizes?.indexOf(currentOrder.sizeFrom);
+
+                      return lookups.sizes?.filter((s, idx) => {
+                        const sIsNumeric = !isNaN(parseFloat(s)) && isFinite(s);
+                        if (sIsNumeric !== isNumeric) return false;
+                        
+                        if (isNumeric) {
+                          return parseFloat(s) >= parseFloat(currentOrder.sizeFrom);
+                        } else {
+                          // For text sizes, we assume the sorting in lookups.sizes is the correct order
+                          return idx >= baseIdx;
+                        }
+                      });
+                    })()?.map((s, i) => <option key={i} value={s}>{s}</option>)}
                   </select>
                 </div>
               </div>
@@ -685,7 +836,18 @@ const DataEntryWizard = () => {
                         <option value="">اختر القماش...</option>
                         {lookups.fabrics?.map((f, j) => <option key={j} value={f}>{f}</option>)}
                       </select>
-                      <input type="number" className="form-control" placeholder="%" style={{ width: '60px' }} value={currentOrder.materials?.[i]?.percentage || ''} onChange={(e) => handleMaterialChange(i, 'percentage', e.target.value)} />
+                      <input 
+                        type="text" 
+                        inputMode="numeric"
+                        className="form-control no-spinner" 
+                        placeholder="%" 
+                        style={{ width: '85px', fontWeight: 'bold', fontSize: '1.2rem', borderColor: 'var(--accent-color)' }} 
+                        value={currentOrder.materials?.[i]?.percentage || ''} 
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[^0-9]/g, '');
+                          handleMaterialChange(i, 'percentage', val);
+                        }} 
+                      />
                     </div>
                   </div>
                 ))}
@@ -843,40 +1005,66 @@ const DataEntryWizard = () => {
           </div>
         );
 
-      case 'measurements':
+      case 'measurements': {
+        const productObj = lookups.products?.find(p => (typeof p === 'object' ? p.name : p) === currentOrder.productName);
+        const partsList = (productObj && productObj.parts && productObj.parts.length > 0) 
+            ? productObj.parts : [currentOrder.productName || 'القطعة الأساسية'];
+        
         return (
           <div className="tab-panel" key={tabKey}>
-            <div className="card">
-              <div className="tab-section-header">
-                <h3><Ruler size={22} /> مقاسات المنتج التفصيلية (Size Details)</h3>
-              </div>
-              <div style={{ overflowX: 'auto', backgroundColor: 'var(--surface-color)', borderRadius: 'var(--radius-md)', padding: '1rem', border: '1px solid var(--border-color)' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '600px' }}>
-                  <thead>
-                    <tr>
-                      <th style={{ padding: '0.75rem', textAlign: 'right', borderBottom: '2px solid var(--border-color)', backgroundColor: 'var(--surface-highlight)', width: '200px' }}>نوع القياس (Size Name)</th>
-                      {targetSizes.map((s, i) => (
-                        <th key={i} style={{ padding: '0.75rem', textAlign: 'center', borderBottom: '2px solid var(--border-color)', backgroundColor: 'var(--surface-highlight)' }}>{s}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {lookups.measurements?.map((mName, i) => (
-                      <tr key={i} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                        <td style={{ padding: '0.75rem', fontWeight: '500', backgroundColor: 'var(--bg-color)' }}>{mName}</td>
-                        {targetSizes.map((size, j) => (
-                          <td key={j} style={{ padding: '0.5rem' }}>
-                            <input type="text" className="form-control" value={currentOrder.measurements?.[mName]?.[size] || ''} onChange={(e) => handleMeasurementChange(mName, size, e.target.value)} style={{ width: '100%', margin: 'auto', display: 'block', textAlign: 'center' }} />
-                          </td>
+             {partsList.map((partName, pIdx) => {
+               const partMeasurements = (lookups.measurements || []).filter(m => {
+                  if (typeof m === 'object') {
+                     // If measurement belongs to this part, or no part is defined
+                     return m.part === partName || !m.part; 
+                  }
+                  return true;
+               }).map(m => typeof m === 'object' ? m.name : m);
+
+               return (
+                <div className="card" key={pIdx} style={{ marginBottom: '2rem' }}>
+                  <div className="tab-section-header">
+                    <h3><Ruler size={22} /> مقاسات المنتج التفصيلية ({partName})</h3>
+                  </div>
+                  <div style={{ overflowX: 'auto', backgroundColor: 'var(--surface-color)', borderRadius: 'var(--radius-md)', padding: '1rem', border: '1px solid var(--border-color)' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '600px' }}>
+                      <thead>
+                        <tr>
+                          <th style={{ padding: '0.75rem', textAlign: 'right', borderBottom: '2px solid var(--border-color)', backgroundColor: 'var(--surface-highlight)', width: '200px' }}>نوع القياس (Size Name)</th>
+                          {targetSizes.map((s, i) => (
+                            <th key={i} style={{ padding: '0.75rem', textAlign: 'center', borderBottom: '2px solid var(--border-color)', backgroundColor: 'var(--surface-highlight)' }}>{s}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {partMeasurements.length === 0 && (
+                          <tr><td colSpan={targetSizes.length + 1} style={{ textAlign: 'center', padding: '1rem', color: 'var(--text-muted)' }}>لا توجد مقاسات مسجلة تدعم ({partName}). قم بإضافتها عبر إعدادات المقاسات.</td></tr>
+                        )}
+                        {partMeasurements.map((mName, i) => (
+                          <tr key={i} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                            <td style={{ padding: '0.75rem', fontWeight: '500', backgroundColor: 'var(--bg-color)' }}>{mName}</td>
+                            {targetSizes.map((size, j) => (
+                              <td key={j} style={{ padding: '0.5rem' }}>
+                                <input 
+                                   type="text" 
+                                   className="form-control" 
+                                   value={currentOrder.groupedMeasurements?.[partName]?.[mName]?.[size] || currentOrder.measurements?.[mName]?.[size] || ''} 
+                                   onChange={(e) => handleMeasurementChange(partName, mName, size, e.target.value)} 
+                                   style={{ width: '100%', margin: 'auto', display: 'block', textAlign: 'center' }} 
+                                />
+                              </td>
+                            ))}
+                          </tr>
                         ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+               );
+             })}
           </div>
         );
+      }
 
       default:
         return null;

@@ -189,16 +189,21 @@ select.form-control option {
   color: var(--text-main);
 }
 
-/* Hide number input arrows globally or via utility */
+/* Hide number input arrows globally */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button,
 .no-spinner::-webkit-inner-spin-button,
 .no-spinner::-webkit-outer-spin-button {
   -webkit-appearance: none;
   margin: 0;
 }
 
-.no-spinner {
-  appearance: none;
+input[type="number"], .no-spinner {
   -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.no-spinner {
   font-family: 'Outfit', sans-serif !important;
   direction: ltr !important;
   text-align: center !important;
@@ -254,6 +259,16 @@ select.form-control option {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+  from { opacity: 0.6; }
+  to { opacity: 1; }
+}
+
+/* Drag & Drop active state */
+[draggable="true"]:active {
+  cursor: grabbing;
 }
 
 /* Cards & Containers */

@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAppData, defaultOrderState } from '../context/AppDataContext';
-import { Save, RefreshCw, Hash, Calendar, Box, Scissors, Palette, LayoutGrid, ChevronRight, ChevronLeft, MessageSquare, CheckSquare, Ruler, Camera, X, ImagePlus, Edit3, Copy } from 'lucide-react';
+import { Save, RefreshCw, Hash, Calendar, Box, Scissors, Palette, LayoutGrid, ChevronRight, ChevronLeft, MessageSquare, CheckSquare, Square, Ruler, Camera, X, ImagePlus, Edit3, Copy, Trash2, Layers, PanelTop } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import toast from 'react-hot-toast';
 
@@ -80,48 +80,160 @@ const CustomDateInput = ({ label, value, onChange, min }) => {
   );
 };
 
+const ClearableSelect = ({ value, onChange, children, className = "form-control", style }) => (
+  <div style={{ position: 'relative', width: '100%', ...style }}>
+    <select className={className} value={value || ''} onChange={onChange}>
+      {children}
+    </select>
+    {value && (
+      <button 
+        type="button"
+        onMouseDown={(e) => {
+          e.preventDefault(); 
+          e.stopPropagation();
+          onChange({ target: { value: '' } });
+        }}
+        style={{
+          position: 'absolute', left: '35px', top: '50%', transform: 'translateY(-50%)',
+          background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)',
+          color: '#ef4444', cursor: 'pointer', padding: '3px', borderRadius: '4px',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10
+        }}
+        title="إلغاء الاختيار"
+      >
+        <X size={12} strokeWidth={3} />
+      </button>
+    )}
+  </div>
+);
+
 const DataEntryWizard = () => {
   const { lookups, currentOrder, updateOrder, setCurrentOrder } = useAppData();
   const [activeTab, setActiveTab] = useState('buyer');
   const [selectedColorsArr, setSelectedColorsArr] = useState([]);
   const [serialStatus, setSerialStatus] = useState(null);
   const [tabKey, setTabKey] = useState(0);
-  const [productImages, setProductImages] = useState([]);
+  const [productImages, setProductImages] = useState(() => {
+     if (currentOrder?.productImages?.length > 0) {
+         return currentOrder.productImages.map(img => ({ ...img, preview: img.preview || img.url }));
+     }
+     return [];
+  });
   const [uploadingImage, setUploadingImage] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [originalSerial, setOriginalSerial] = useState('');
+  const [showSerialsList, setShowSerialsList] = useState(false);
+  const [availableSerials, setAvailableSerials] = useState([]);
+  const [fetchingSerials, setFetchingSerials] = useState(false);
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
+  const tabNavRef = useRef(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+  const [viewMode, setViewMode] = useState(() => {
+    try { return localStorage.getItem('gh_viewMode') || 'tabs'; } catch { return 'tabs'; }
+  });
+
+  // ─── Tab Scroll Logic (RTL-safe, bulletproof) ───
+  const checkTabScroll = useCallback(() => {
+    const nav = tabNavRef.current;
+    if (!nav) return;
+    const children = nav.querySelectorAll('.tab-btn');
+    if (children.length === 0) return;
+
+    const navRect = nav.getBoundingClientRect();
+    const firstBtn = children[0].getBoundingClientRect();
+    const lastBtn = children[children.length - 1].getBoundingClientRect();
+    const pad = 4; // tolerance pixels
+
+    // RTL: first tab (tab 1) is on the RIGHT, last tab (tab 7) is on the LEFT
+    // Is the last tab clipped on the left?
+    const leftHidden = lastBtn.left < navRect.left + pad;
+    // Is the first tab clipped on the right?
+    const rightHidden = firstBtn.right > navRect.right - pad;
+
+    setCanScrollLeft(leftHidden);
+    setCanScrollRight(rightHidden);
+  }, []);
+
+  useEffect(() => {
+    const nav = tabNavRef.current;
+    if (!nav) return;
+    // Multiple delayed checks to catch any layout shifts
+    const t1 = setTimeout(checkTabScroll, 50);
+    const t2 = setTimeout(checkTabScroll, 300);
+    const t3 = setTimeout(checkTabScroll, 800);
+    nav.addEventListener('scroll', checkTabScroll, { passive: true });
+    const ro = new ResizeObserver(checkTabScroll);
+    ro.observe(nav);
+    return () => {
+      clearTimeout(t1); clearTimeout(t2); clearTimeout(t3);
+      nav.removeEventListener('scroll', checkTabScroll);
+      ro.disconnect();
+    };
+  }, [checkTabScroll, viewMode]);
+
+  const scrollTabNav = (direction) => {
+    const nav = tabNavRef.current;
+    if (!nav) return;
+    const children = Array.from(nav.querySelectorAll('.tab-btn'));
+    if (children.length === 0) return;
+    const navRect = nav.getBoundingClientRect();
+
+    if (direction === 'left') {
+      // Find the first tab that's hidden/clipped on the left side
+      for (let i = children.length - 1; i >= 0; i--) {
+        const r = children[i].getBoundingClientRect();
+        if (r.left < navRect.left + 4) {
+          children[i].scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+          break;
+        }
+      }
+    } else {
+      // Find the first tab that's hidden/clipped on the right side
+      for (let i = 0; i < children.length; i++) {
+        const r = children[i].getBoundingClientRect();
+        if (r.right > navRect.right - 4) {
+          children[i].scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+          break;
+        }
+      }
+    }
+    // Re-check arrows after scroll finishes
+    setTimeout(checkTabScroll, 400);
+  };
+
+  const toggleViewMode = () => {
+    const next = viewMode === 'tabs' ? 'scroll' : 'tabs';
+    setViewMode(next);
+    try { localStorage.setItem('gh_viewMode', next); } catch {}
+  };
+
+  const fetchNextAvailableSerial = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('orders')
+        .select('serial_number')
+        .order('created_at', { ascending: false })
+        .limit(1);
+        
+      if (data && data.length > 0) {
+        const match = data[0].serial_number.match(/\d+/);
+        if (match) return (parseInt(match[0]) + 1).toString();
+      }
+      return '1000';
+    } catch (err) {
+      console.error('Error fetching latest serial', err);
+      return '1000';
+    }
+  };
 
   useEffect(() => {
     if (!currentOrder.serialNumber) {
-       const fetchLastSerial = async () => {
-         try {
-           const { data, error } = await supabase
-             .from('orders')
-             .select('serial_number')
-             .order('created_at', { ascending: false })
-             .limit(1);
-           
-           if (data && data.length > 0) {
-             const lastSerialStr = data[0].serial_number;
-             const match = lastSerialStr.match(/\d+/);
-             if (match) {
-               const nextNum = parseInt(match[0]) + 1;
-               updateOrder('serialNumber', nextNum.toString());
-             } else {
-               updateOrder('serialNumber', '1000');
-             }
-             setSerialStatus('available');
-           } else {
-             updateOrder('serialNumber', '1000');
-             setSerialStatus('available');
-           }
-         } catch (err) {
-           console.error('Error fetching latest serial', err);
-         }
-       };
-       fetchLastSerial();
+       fetchNextAvailableSerial().then(nextNum => {
+         updateOrder('serialNumber', nextNum);
+         setSerialStatus('available');
+       });
     }
   }, []); // eslint-disable-line
 
@@ -325,20 +437,70 @@ const DataEntryWizard = () => {
     }
   };
 
-  // UPDATE existing order (same serial)
+  // UPDATE existing order (same or changed serial)
   const handleUpdate = async () => {
     if (!validateOrder()) return;
+    
+    if (currentOrder.serialNumber !== originalSerial && serialStatus === 'used') {
+      toast.error('رقم الموديل المستهدف مستخدم في طلبية أخرى! اختر رقماً مختلفاً أو تراجع.');
+      return;
+    }
+
     const toastId = toast.loading('جاري تحديث الطلبية...');
     try {
+      let updatedImages = [...(currentOrder.productImages || [])];
+      let hasImageErrors = false;
+
+      if (currentOrder.serialNumber !== originalSerial && updatedImages.length > 0) {
+         toast.loading('جاري نقل الصور للرقم الجديد...', { id: toastId });
+         const newImagesObj = [];
+         
+         for (let i = 0; i < updatedImages.length; i++) {
+            const img = updatedImages[i];
+            const ext = img.name.split('.').pop();
+            const newName = i === 0 ? `${currentOrder.serialNumber}.${ext}` : `${currentOrder.serialNumber}_${i}.${ext}`;
+            const newPath = `product-images/${newName}`;
+            
+            if (img.path !== newPath) {
+               const { data, error } = await supabase.storage.from('product_images').move(img.path, newPath);
+               if (error) {
+                 console.error('Error renaming image:', error);
+                 hasImageErrors = true;
+                 newImagesObj.push(img);
+               } else {
+                 const { data: urlData } = supabase.storage.from('product_images').getPublicUrl(newPath);
+                 newImagesObj.push({
+                   name: newName,
+                   path: newPath,
+                   url: urlData.publicUrl,
+                   preview: urlData.publicUrl
+                 });
+               }
+            } else {
+               newImagesObj.push(img);
+            }
+         }
+         updatedImages = newImagesObj;
+         currentOrder.productImages = updatedImages; // Prepare to save new URLs
+      }
+
       const { data, error } = await supabase
         .from('orders')
-        .update({ order_data: currentOrder })
+        .update({ 
+            serial_number: currentOrder.serialNumber,
+            order_data: currentOrder 
+        })
         .eq('serial_number', originalSerial);
+
       if (error) {
         console.error(error);
         toast.error('حدث خطأ أثناء التحديث!', { id: toastId });
       } else {
-        toast.success(`تم تحديث الطلبية (${originalSerial}) بنجاح! ✏️`, { id: toastId });
+        if (hasImageErrors) {
+           toast.success(`تم التحديث للرقم (${currentOrder.serialNumber}) مع مشكلة في نقل بعض الصور ⚠️`, { id: toastId });
+        } else {
+           toast.success(`تم التحديث بنجاح! رقم الطلبية الآن هو (${currentOrder.serialNumber}) ✏️`, { id: toastId });
+        }
         resetAfterSave();
       }
     } catch (err) {
@@ -376,8 +538,67 @@ const DataEntryWizard = () => {
     }
   };
 
-  const handleFetch = async () => {
-    const serial = document.getElementById('fetchSerialInput')?.value;
+  const handleDeleteOrder = async () => {
+    if (!originalSerial) return;
+    
+    const confirmDelete = window.confirm(`هل أنت متأكد من حذف الطلبية رقم (${originalSerial}) بالكامل؟\n\n- سيتم مسح بياناتها نهائياً من قاعدة البيانات.\n- سيتم تحرير رقم الموديل ليمكن استخدامه مجدداً.\n- سيتم حذف جميع الصور المرتبطة بها.`);
+    
+    if (!confirmDelete) return;
+
+    const toastId = toast.loading('جاري حذف الطلبية...');
+
+    try {
+      if (currentOrder.productImages && currentOrder.productImages.length > 0) {
+         const imagePaths = currentOrder.productImages.map(img => img.path);
+         const { error: storageError } = await supabase.storage.from('product_images').remove(imagePaths);
+         if (storageError) {
+             console.error('Error deleting images:', storageError);
+         }
+      }
+
+      const { error: dbError } = await supabase
+        .from('orders')
+        .delete()
+        .eq('serial_number', originalSerial);
+
+      if (dbError) {
+        console.error(dbError);
+        toast.error('حدث خطأ أثناء حذف الطلبية!', { id: toastId });
+      } else {
+        toast.success(`تم حذف الطلبية رقم (${originalSerial}) بنجاح وتحرير الرقم! 🗑️`, { id: toastId });
+        resetAfterSave();
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('خطأ في الاتصال بقاعدة البيانات!', { id: toastId });
+    }
+  };
+
+  const handleF9Press = async (e) => {
+    if (e.key === 'F9') {
+      e.preventDefault();
+      setFetchingSerials(true);
+      setShowSerialsList(true);
+      try {
+        const { data, error } = await supabase
+          .from('orders')
+          .select('serial_number')
+          .order('created_at', { ascending: false });
+        if (data && !error) {
+           setAvailableSerials(data.map(d => d.serial_number));
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+         setFetchingSerials(false);
+      }
+    } else if (e.key === 'Escape') {
+      setShowSerialsList(false);
+    }
+  };
+
+  const handleFetch = async (overrideSerial) => {
+    const serial = typeof overrideSerial === 'string' ? overrideSerial : document.getElementById('fetchSerialInput')?.value;
     if (!serial) {
        toast.error('الرجاء إدخال رقم الطلبية التسلسلي المراد استردادها');
        return;
@@ -395,6 +616,14 @@ const DataEntryWizard = () => {
         setCurrentOrder(data.order_data);
         const savedImages = data.order_data.productImages || [];
         setProductImages(savedImages.map(img => ({ ...img, preview: img.url })));
+        
+        // Restore selected colors for the table
+        if (data.order_data.colorDistribution) {
+           setSelectedColorsArr(Object.keys(data.order_data.colorDistribution));
+        } else {
+           setSelectedColorsArr([]);
+        }
+        
         setSerialStatus('used');
         setIsEditMode(true);
         setOriginalSerial(serial);
@@ -405,11 +634,14 @@ const DataEntryWizard = () => {
     }
   };
 
-  const handleClear = () => {
-    setCurrentOrder({ ...defaultOrderState, serialNumber: currentOrder.serialNumber });
+  const handleClear = async () => {
+    const nextNum = await fetchNextAvailableSerial();
+    setCurrentOrder({ ...defaultOrderState, serialNumber: nextNum });
     setProductImages([]);
+    setSelectedColorsArr([]);
     setIsEditMode(false);
     setOriginalSerial('');
+    setSerialStatus('available');
     toast('تم تصفير وإلغاء جميع الحقول بنجاح', { icon: '🧹' });
   };
 
@@ -515,8 +747,9 @@ const DataEntryWizard = () => {
   const currentTabIdx = TABS.findIndex(t => t.id === activeTab);
 
   // ─── Render Tab Content ───
-  const renderTabContent = () => {
-    switch (activeTab) {
+  const renderTabContent = (tabId) => {
+    const targetTab = tabId || activeTab;
+    switch (targetTab) {
 
       case 'buyer':
         return (
@@ -552,22 +785,22 @@ const DataEntryWizard = () => {
                 </div>
                 <div className="form-group">
                   <label className="form-label">اسم المنتج</label>
-                  <select className="form-control" value={currentOrder.productName} onChange={(e) => updateOrder('productName', e.target.value)}>
+                  <ClearableSelect className="form-control" value={currentOrder.productName} onChange={(e) => updateOrder('productName', e.target.value)}>
                     <option value="">اختر...</option>
                     {lookups.products?.map((p, i) => {
                       const val = typeof p === 'object' ? p.name : p;
                       return <option key={i} value={val}>{val}</option>;
                     })}
-                  </select>
+                  </ClearableSelect>
                 </div>
                 <div className="form-group">
                   <label className="form-label">السعر / العملة</label>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
                     <input type="number" className="form-control" placeholder="السعر" style={{ flex: 2 }} value={currentOrder.productPrice || ''} onChange={(e) => updateOrder('productPrice', e.target.value)} />
-                    <select className="form-control" style={{ flex: 1 }} value={currentOrder.currency || ''} onChange={(e) => updateOrder('currency', e.target.value)}>
+                    <ClearableSelect className="form-control" style={{ flex: 1 }} value={currentOrder.currency || ''} onChange={(e) => updateOrder('currency', e.target.value)}>
                       <option value="">العملة...</option>
                       {lookups.currencies?.map((c, i) => <option key={i} value={c}>{c}</option>)}
-                    </select>
+                    </ClearableSelect>
                   </div>
                 </div>
 
@@ -737,7 +970,7 @@ const DataEntryWizard = () => {
                 </div>
                 <div className="form-group">
                   <label className="form-label">المقاس من (Size From)</label>
-                  <select className="form-control" value={currentOrder.sizeFrom || ''} onChange={(e) => {
+                  <ClearableSelect className="form-control" value={currentOrder.sizeFrom || ''} onChange={(e) => {
                     const newVal = e.target.value;
                     const oldVal = currentOrder.sizeFrom;
                     updateOrder('sizeFrom', newVal);
@@ -753,11 +986,11 @@ const DataEntryWizard = () => {
                   }}>
                     <option value="">اختر...</option>
                     {lookups.sizes?.map((s, i) => <option key={i} value={s}>{s}</option>)}
-                  </select>
+                  </ClearableSelect>
                 </div>
                 <div className="form-group">
                   <label className="form-label">المقاس إلى (Size To)</label>
-                  <select className="form-control" value={currentOrder.sizeTo || ''} onChange={(e) => updateOrder('sizeTo', e.target.value)}>
+                  <ClearableSelect className="form-control" value={currentOrder.sizeTo || ''} onChange={(e) => updateOrder('sizeTo', e.target.value)}>
                     <option value="">اختر...</option>
                     {(() => {
                       if (!currentOrder.sizeFrom) return lookups.sizes;
@@ -776,7 +1009,7 @@ const DataEntryWizard = () => {
                         }
                       });
                     })()?.map((s, i) => <option key={i} value={s}>{s}</option>)}
-                  </select>
+                  </ClearableSelect>
                 </div>
               </div>
             </div>
@@ -793,20 +1026,20 @@ const DataEntryWizard = () => {
               <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', alignItems: 'flex-start' }}>
                 <div className="form-group" style={{ flex: 1 }}>
                   <label className="form-label">نوع القماش (Product Fabrics)</label>
-                  <select className="form-control" value={currentOrder.productFabric || ''} onChange={(e) => updateOrder('productFabric', e.target.value)}>
+                  <ClearableSelect className="form-control" value={currentOrder.productFabric || ''} onChange={(e) => updateOrder('productFabric', e.target.value)}>
                     <option value="">اختر...</option>
                     {lookups.fabrics?.map((f, i) => <option key={i} value={f}>{f}</option>)}
-                  </select>
+                  </ClearableSelect>
                 </div>
                 <div className="form-group" style={{ flex: 1 }}>
                   <label className="form-label">العلامة التجارية (Trade Mark)</label>
-                  <select className="form-control" value={currentOrder.tradeMark || ''} onChange={(e) => updateOrder('tradeMark', e.target.value)}>
+                  <ClearableSelect className="form-control" value={currentOrder.tradeMark || ''} onChange={(e) => updateOrder('tradeMark', e.target.value)}>
                     <option value="">اختر...</option>
                     {lookups.tradeMarks?.map((t, i) => {
                       const tmName = typeof t === 'object' ? t.name : t;
                       return <option key={i} value={tmName}>{tmName}</option>;
                     })}
-                  </select>
+                  </ClearableSelect>
                 </div>
                 {/* Show trademark image */}
                 {currentOrder.tradeMark && (() => {
@@ -832,10 +1065,10 @@ const DataEntryWizard = () => {
                   <div className="form-group" key={i}>
                     <label className="form-label">المادة {num}</label>
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <select className="form-control" value={currentOrder.materials?.[i]?.name || ''} onChange={(e) => handleMaterialChange(i, 'name', e.target.value)}>
+                      <ClearableSelect className="form-control" value={currentOrder.materials?.[i]?.name || ''} onChange={(e) => handleMaterialChange(i, 'name', e.target.value)}>
                         <option value="">اختر القماش...</option>
                         {lookups.fabrics?.map((f, j) => <option key={j} value={f}>{f}</option>)}
-                      </select>
+                      </ClearableSelect>
                       <input 
                         type="text" 
                         inputMode="numeric"
@@ -865,10 +1098,10 @@ const DataEntryWizard = () => {
               </div>
               <div className="form-group">
                 <label className="form-label">المصنع</label>
-                <select className="form-control" value={currentOrder.factoryId || ''} onChange={(e) => updateOrder('factoryId', e.target.value)}>
+                <ClearableSelect className="form-control" value={currentOrder.factoryId || ''} onChange={(e) => updateOrder('factoryId', e.target.value)}>
                   <option value="">اختر المصنع...</option>
                   {lookups.factories?.map((f, i) => <option key={i} value={f.name || f}>{f.name || f}</option>)}
-                </select>
+                </ClearableSelect>
               </div>
               {currentOrder.factoryId && (() => {
                 const selectedFactoryObj = Array.isArray(lookups.factories) ? lookups.factories.find(f => (f.name === currentOrder.factoryId || f === currentOrder.factoryId)) : null;
@@ -891,10 +1124,10 @@ const DataEntryWizard = () => {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div className="form-group">
                   <label className="form-label">تعبئة الكرتون</label>
-                  <select className="form-control" value={currentOrder.cartonPackage || ''} onChange={(e) => updateOrder('cartonPackage', e.target.value)}>
+                  <ClearableSelect className="form-control" value={currentOrder.cartonPackage || ''} onChange={(e) => updateOrder('cartonPackage', e.target.value)}>
                     <option value="">اختر...</option>
                     {lookups.cartonPackages?.map((cp, i) => <option key={i} value={cp}>{cp}</option>)}
-                  </select>
+                  </ClearableSelect>
                 </div>
                 <div className="form-group">
                   <label className="form-label">كمية الكرتون (Pcs)</label>
@@ -902,17 +1135,17 @@ const DataEntryWizard = () => {
                 </div>
                 <div className="form-group">
                   <label className="form-label">حجم الكرتون</label>
-                  <select className="form-control" value={currentOrder.cartonSize || ''} onChange={(e) => updateOrder('cartonSize', e.target.value)}>
+                  <ClearableSelect className="form-control" value={currentOrder.cartonSize || ''} onChange={(e) => updateOrder('cartonSize', e.target.value)}>
                     <option value="">اختر...</option>
                     {lookups.cartonSizes?.map((cs, i) => <option key={i} value={cs}>{cs}</option>)}
-                  </select>
+                  </ClearableSelect>
                 </div>
                 <div className="form-group">
                   <label className="form-label">أحجام الأكياس</label>
-                  <select className="form-control" value={currentOrder.plasticBagSize || ''} onChange={(e) => updateOrder('plasticBagSize', e.target.value)}>
+                  <ClearableSelect className="form-control" value={currentOrder.plasticBagSize || ''} onChange={(e) => updateOrder('plasticBagSize', e.target.value)}>
                     <option value="">اختر...</option>
                     {lookups.plasticBagSizes?.map((pb, i) => <option key={i} value={pb}>{pb}</option>)}
-                  </select>
+                  </ClearableSelect>
                 </div>
               </div>
             </div>
@@ -929,38 +1162,88 @@ const DataEntryWizard = () => {
                   <LayoutGrid size={16} /> تقسيم بالتساوي
                 </button>
               </div>
+              <div style={{ marginBottom: '1.5rem', display: 'flex', flexWrap: 'wrap', gap: '0.8rem', padding: '1rem', backgroundColor: 'var(--surface-color)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+                <div style={{ width: '100%', marginBottom: '0.5rem', fontWeight: 'bold', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+                  الألوان المتاحة (اختر لإضافتها للجدول):
+                </div>
+                {lookups.colors?.map((colorObj, i) => {
+                  const colorName = colorObj.name || colorObj;
+                  const colorHex = colorObj.hex || '#cccccc';
+                  const isSelected = selectedColorsArr.includes(colorName);
+                  
+                  return (
+                    <button
+                      key={`chip-${i}`}
+                      type="button"
+                      onClick={() => toggleColor(colorName)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: '0.5rem',
+                        padding: '0.5rem 1rem', borderRadius: '50px',
+                        border: isSelected ? '2px solid var(--accent-color)' : '1px solid var(--border-color)',
+                        backgroundColor: isSelected ? 'rgba(212, 175, 55, 0.1)' : 'var(--bg-color)',
+                        color: 'var(--text-color)', cursor: 'pointer',
+                        transition: 'all 0.2s', opacity: isSelected ? 1 : 0.7,
+                        fontWeight: isSelected ? 'bold' : 'normal'
+                      }}
+                    >
+                      {isSelected ? <CheckSquare size={16} color="var(--accent-color)" /> : <Square size={16} />}
+                      <span style={{ width: '14px', height: '14px', borderRadius: '50%', backgroundColor: colorHex, border: '1px solid rgba(0,0,0,0.2)' }}></span>
+                      {colorName}
+                    </button>
+                  );
+                })}
+                {(!lookups.colors || lookups.colors.length === 0) && (
+                  <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>لا توجد ألوان محفوظة في النظام.</div>
+                )}
+              </div>
+
               <div style={{ overflowX: 'auto', backgroundColor: 'var(--surface-color)', borderRadius: 'var(--radius-md)', padding: '1rem', border: '1px solid var(--border-color)' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '600px' }}>
                   <thead>
                     <tr>
-                      <th style={{ padding: '0.75rem', textAlign: 'right', borderBottom: '2px solid var(--border-color)' }}>تحديد اللون</th>
+                      <th style={{ padding: '0.75rem', textAlign: 'right', borderBottom: '2px solid var(--border-color)' }}>اللون (المختار)</th>
                       {targetSizes.map((s, i) => (
                         <th key={i} style={{ padding: '0.75rem', textAlign: 'center', borderBottom: '2px solid var(--border-color)' }}>{s}</th>
                       ))}
+                      <th style={{ padding: '0.75rem', textAlign: 'center', borderBottom: '2px solid var(--border-color)', color: 'var(--accent-color)', fontWeight: 'bold' }}>الإجمالي</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {lookups.colors?.map((colorObj, i) => {
-                      const colorName = colorObj.name || colorObj;
-                      const colorHex = colorObj.hex || '#cccccc';
-                      const isSelected = selectedColorsArr.includes(colorName);
-                      return (
-                        <tr key={i} style={{ borderBottom: '1px solid var(--border-color)', backgroundColor: isSelected ? 'rgba(212, 175, 55, 0.1)' : 'transparent' }}>
-                          <td style={{ padding: '0.75rem', fontWeight: '500' }}>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
-                              <input type="checkbox" checked={isSelected} onChange={() => toggleColor(colorName)} style={{ width: '18px', height: '18px', accentColor: 'var(--accent-color)', cursor: 'pointer' }} />
-                              <span style={{ width: '18px', height: '18px', borderRadius: '50%', backgroundColor: colorHex, border: '1px solid var(--border-color)', display: 'inline-block' }}></span>
-                              {colorName}
-                            </label>
-                          </td>
-                          {targetSizes.map((size, j) => (
-                            <td key={j} style={{ padding: '0.5rem' }}>
-                              <input type="number" className="form-control" style={{ width: '70px', margin: 'auto', display: 'block', textAlign: 'center', opacity: isSelected ? 1 : 0.4, cursor: isSelected ? 'text' : 'not-allowed' }} placeholder="0" disabled={!isSelected} value={currentOrder.colorDistribution?.[colorName]?.[size] || ''} onChange={(e) => handleColorChange(colorName, size, e.target.value)} />
+                    {selectedColorsArr.length === 0 ? (
+                      <tr>
+                        <td colSpan={targetSizes.length + 2} style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                          <Palette size={32} style={{ opacity: 0.3, marginBottom: '0.5rem', display: 'block', margin: '0 auto' }} />
+                          يرجى اختيار الألوان من القائمة أعلاه لإضافتها هنا.
+                        </td>
+                      </tr>
+                    ) : (
+                      selectedColorsArr.map((colorName, i) => {
+                        const colorObj = lookups.colors?.find(c => (c.name || c) === colorName);
+                        const colorHex = colorObj?.hex || '#cccccc';
+                        
+                        return (
+                          <tr key={`row-${i}`} style={{ borderBottom: '1px solid var(--border-color)', backgroundColor: 'rgba(212, 175, 55, 0.05)' }}>
+                            <td style={{ padding: '0.75rem', fontWeight: '500' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                <button type="button" onClick={() => toggleColor(colorName)} style={{ background: 'var(--bg-color)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '4px', color: '#ef4444', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="إزالة من الجدول">
+                                  <X size={14} />
+                                </button>
+                                <span style={{ width: '18px', height: '18px', borderRadius: '50%', backgroundColor: colorHex, border: '1px solid var(--border-color)', display: 'inline-block' }}></span>
+                                {colorName}
+                              </div>
                             </td>
-                          ))}
-                        </tr>
-                      );
-                    })}
+                            {targetSizes.map((size, j) => (
+                              <td key={j} style={{ padding: '0.5rem' }}>
+                                <input type="number" className="form-control" style={{ width: '70px', margin: 'auto', display: 'block', textAlign: 'center' }} placeholder="0" value={currentOrder.colorDistribution?.[colorName]?.[size] || ''} onChange={(e) => handleColorChange(colorName, size, e.target.value)} />
+                              </td>
+                            ))}
+                            <td style={{ padding: '0.5rem', textAlign: 'center', verticalAlign: 'middle', fontWeight: 'bold', color: 'var(--accent-color)', fontSize: '1.1rem', backgroundColor: 'rgba(212, 175, 55, 0.05)' }}>
+                              {targetSizes.reduce((sum, size) => sum + (parseInt(currentOrder.colorDistribution?.[colorName]?.[size]) || 0), 0)}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -976,24 +1259,7 @@ const DataEntryWizard = () => {
                 <h3><CheckSquare size={22} /> شروط وتفاصيل التعبئة الخاصة</h3>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <input type="checkbox" id="cond1" checked={!!currentOrder.packagingConditions?.cond1} onChange={(e) => handlePackagingConditionChange('cond1', e.target.checked)} style={{ width: '20px', height: '20px', accentColor: 'var(--accent-color)' }} />
-                  <label htmlFor="cond1" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                    <input type="number" className="form-control" style={{ width: '60px', padding: '0.4rem' }} value={currentOrder.packagingConditions?.cond1_val1 || ''} onChange={(e) => updateOrder('packagingConditions', { ...currentOrder.packagingConditions, cond1_val1: e.target.value })} />
-                    <span>قطعة لون واحد مقاسات مختلطة في كيس متوسط، ألوان مختلطة</span>
-                    <input type="number" className="form-control" style={{ width: '60px', padding: '0.4rem' }} value={currentOrder.packagingConditions?.cond1_val2 || ''} onChange={(e) => updateOrder('packagingConditions', { ...currentOrder.packagingConditions, cond1_val2: e.target.value })} />
-                    <span>قطعة في الكرتون (件单色混码入中包胶袋 混色 __件装箱)</span>
-                  </label>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <input type="checkbox" id="cond2" checked={!!currentOrder.packagingConditions?.cond2} onChange={(e) => handlePackagingConditionChange('cond2', e.target.checked)} style={{ width: '20px', height: '20px', accentColor: 'var(--accent-color)' }} />
-                  <label htmlFor="cond2" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                    <input type="number" className="form-control" style={{ width: '60px', padding: '0.4rem' }} value={currentOrder.packagingConditions?.cond2_val1 || ''} onChange={(e) => updateOrder('packagingConditions', { ...currentOrder.packagingConditions, cond2_val1: e.target.value })} />
-                    <span>قطعة ألوان ومقاسات مختلطة في كيس، ألوان مختلطة</span>
-                    <input type="number" className="form-control" style={{ width: '60px', padding: '0.4rem' }} value={currentOrder.packagingConditions?.cond2_val2 || ''} onChange={(e) => updateOrder('packagingConditions', { ...currentOrder.packagingConditions, cond2_val2: e.target.value })} />
-                    <span>قطعة في الكرتون (件混色混码入中包胶袋 混色 __件装箱)</span>
-                  </label>
-                </div>
+
                 {lookups.packagingConditionsList?.map((cond, i) => (
                   <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <input type="checkbox" id={`cond_dyn_${i}`} checked={!!currentOrder.packagingConditions?.[cond]} onChange={(e) => handlePackagingConditionChange(cond, e.target.checked)} style={{ width: '20px', height: '20px', accentColor: 'var(--accent-color)', cursor: 'pointer' }} />
@@ -1047,9 +1313,25 @@ const DataEntryWizard = () => {
                               <td key={j} style={{ padding: '0.5rem' }}>
                                 <input 
                                    type="text" 
-                                   className="form-control" 
+                                   inputMode="decimal"
+                                   className={`form-control measurement-input-${pIdx}`} 
                                    value={currentOrder.groupedMeasurements?.[partName]?.[mName]?.[size] || currentOrder.measurements?.[mName]?.[size] || ''} 
-                                   onChange={(e) => handleMeasurementChange(partName, mName, size, e.target.value)} 
+                                   onChange={(e) => {
+                                      let val = e.target.value.replace(/[^0-9.]/g, '');
+                                      const parts = val.split('.');
+                                      if (parts.length > 2) val = parts[0] + '.' + parts.slice(1).join('');
+                                      handleMeasurementChange(partName, mName, size, val);
+                                   }}
+                                   onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                         e.preventDefault();
+                                         const inputs = Array.from(document.querySelectorAll(`.measurement-input-${pIdx}`));
+                                         const currentIndex = inputs.indexOf(e.target);
+                                         if (currentIndex > -1 && currentIndex < inputs.length - 1) {
+                                            inputs[currentIndex + 1].focus();
+                                         }
+                                      }
+                                   }}
                                    style={{ width: '100%', margin: 'auto', display: 'block', textAlign: 'center' }} 
                                 />
                               </td>
@@ -1071,6 +1353,7 @@ const DataEntryWizard = () => {
     }
   };
 
+
   return (
     <div className="wizard-tabs-container">
 
@@ -1083,58 +1366,285 @@ const DataEntryWizard = () => {
           </div>
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label className="form-label" style={{ fontSize: '0.8rem' }}>رقم الموديل للاسترداد (Item No)</label>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <input type="text" id="fetchSerialInput" className="form-control" placeholder="أدخل الرقم..." style={{ width: '150px' }} />
+            <div style={{ display: 'flex', gap: '0.5rem', position: 'relative' }}>
+              <input 
+                type="text" 
+                id="fetchSerialInput" 
+                className="form-control" 
+                placeholder="أدخل الرقم... (F9)" 
+                style={{ width: '150px' }} 
+                onKeyDown={handleF9Press}
+                autoComplete="off"
+              />
               <button className="btn btn-primary" onClick={handleFetch} style={{ padding: '0.5rem 1rem' }}>جلب (Fetch)</button>
+              
+              {showSerialsList && (
+                <div style={{
+                  position: 'absolute', top: '100%', right: 0, marginTop: '4px',
+                  width: '200px', maxHeight: '250px', overflowY: 'auto',
+                  backgroundColor: 'var(--surface-color)',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: 'var(--radius-md)',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+                  zIndex: 1000
+                }}>
+                  <div style={{ padding: '0.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--surface-highlight)' }}>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>اختر موديلاً محفوظاً:</span>
+                      <button onClick={() => setShowSerialsList(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-color)', padding: 0, display: 'flex', alignItems: 'center' }}>
+                         <X size={16} />
+                      </button>
+                  </div>
+                  {fetchingSerials ? (
+                      <div style={{ padding: '1rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)' }}>جاري التحميل...</div>
+                  ) : (
+                     availableSerials.length === 0 ? (
+                         <div style={{ padding: '1rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)' }}>لا توجد موديلات محفوظة</div>
+                     ) : (
+                        <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                            {availableSerials.map(serial => (
+                                <li 
+                                    key={serial} 
+                                    onClick={() => {
+                                        const input = document.getElementById('fetchSerialInput');
+                                        if (input) input.value = serial;
+                                        setShowSerialsList(false);
+                                        handleFetch(serial);
+                                    }}
+                                    style={{ padding: '0.6rem 1rem', cursor: 'pointer', borderBottom: '1px solid var(--border-color)', transition: 'background-color 0.2s', fontSize: '0.9rem', color: 'var(--text-color)' }}
+                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--surface-highlight)'}
+                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                >
+                                    <strong>{serial}</strong>
+                                </li>
+                            ))}
+                        </ul>
+                     )
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
+
+        {/* ═══ View Mode Toggle ═══ */}
+        <button
+          onClick={toggleViewMode}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.6rem',
+            padding: '0.6rem 1.2rem',
+            background: viewMode === 'scroll'
+              ? 'linear-gradient(135deg, rgba(212, 175, 55, 0.2), rgba(212, 175, 55, 0.08))'
+              : 'rgba(255, 255, 255, 0.04)',
+            border: viewMode === 'scroll'
+              ? '1px solid rgba(212, 175, 55, 0.4)'
+              : '1px solid var(--border-color)',
+            borderRadius: 'var(--radius-md)',
+            color: viewMode === 'scroll' ? 'var(--accent-color)' : 'var(--text-muted)',
+            cursor: 'pointer',
+            fontFamily: 'Tajawal, sans-serif',
+            fontSize: '0.85rem',
+            fontWeight: '600',
+            transition: 'all 0.3s ease',
+            boxShadow: viewMode === 'scroll' ? '0 2px 12px rgba(212, 175, 55, 0.15)' : 'none',
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.borderColor = 'rgba(212, 175, 55, 0.5)';
+            e.currentTarget.style.color = 'var(--accent-color)';
+            e.currentTarget.style.transform = 'translateY(-1px)';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.borderColor = viewMode === 'scroll' ? 'rgba(212, 175, 55, 0.4)' : 'var(--border-color)';
+            e.currentTarget.style.color = viewMode === 'scroll' ? 'var(--accent-color)' : 'var(--text-muted)';
+            e.currentTarget.style.transform = 'translateY(0)';
+          }}
+          title={viewMode === 'tabs' ? 'التبديل إلى العرض الكامل (صفحة واحدة)' : 'التبديل إلى عرض التبويبات'}
+        >
+          {viewMode === 'tabs' ? (
+            <><Layers size={17} /> صفحة كاملة</>
+          ) : (
+            <><PanelTop size={17} /> تبويبات</>
+          )}
+        </button>
       </div>
 
-      {/* ═══ Tab Navigation Bar ═══ */}
-      <nav className="tab-nav">
-        {TABS.map((tab) => {
-          const Icon = tab.icon;
-          return (
-            <button
-              key={tab.id}
-              className={`tab-btn ${activeTab === tab.id ? 'active' : ''}`}
-              onClick={() => switchTab(tab.id)}
-            >
-              <span className="tab-num">{tab.num}</span>
-              <span className="tab-icon"><Icon size={16} /></span>
-              <span className="tab-label">{tab.label}</span>
-            </button>
-          );
-        })}
-      </nav>
+      {viewMode === 'tabs' ? (
+        <>
+          {/* ═══ Tab Navigation Bar ═══ */}
+          <div style={{ position: 'relative' }}>
+            {/* Arrow on LEFT side — shows when there are hidden tabs to the left (e.g. tab 7 in RTL) */}
+            {canScrollLeft && (
+              <button
+                onClick={() => scrollTabNav('left')}
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  width: '44px',
+                  zIndex: 25,
+                  border: 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: 'linear-gradient(to right, rgba(22, 27, 34, 0.98) 60%, transparent)',
+                  color: 'var(--accent-color)',
+                  borderRadius: 'var(--radius-lg) 0 0 var(--radius-lg)',
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseEnter={e => e.currentTarget.style.width = '52px'}
+                onMouseLeave={e => e.currentTarget.style.width = '44px'}
+                title="عرض المزيد"
+              >
+                <ChevronLeft size={20} />
+              </button>
+            )}
 
-      {/* Progress Dots */}
-      <div className="tab-progress">
-        {TABS.map((tab, i) => (
-          <div
-            key={tab.id}
-            className={`tab-progress-dot ${activeTab === tab.id ? 'active' : i < currentTabIdx ? 'completed' : ''}`}
-          />
-        ))}
-      </div>
+            <nav className="tab-nav" ref={tabNavRef} style={{ position: 'relative', zIndex: 1 }}>
+              {TABS.map((tab) => {
+                const Icon = tab.icon;
+                return (
+                  <button
+                    key={tab.id}
+                    className={`tab-btn ${activeTab === tab.id ? 'active' : ''}`}
+                    onClick={() => switchTab(tab.id)}
+                  >
+                    <span className="tab-num">{tab.num}</span>
+                    <span className="tab-icon"><Icon size={16} /></span>
+                    <span className="tab-label">{tab.label}</span>
+                  </button>
+                );
+              })}
+            </nav>
 
-      {/* ═══ Tab Content ═══ */}
-      <div className="tab-content-wrapper">
-        {renderTabContent()}
+            {/* Arrow on RIGHT side — shows when there are hidden tabs to the right (e.g. tab 1 scrolled out) */}
+            {canScrollRight && (
+              <button
+                onClick={() => scrollTabNav('right')}
+                style={{
+                  position: 'absolute',
+                  right: 0,
+                  top: 0,
+                  bottom: 0,
+                  width: '44px',
+                  zIndex: 25,
+                  border: 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: 'linear-gradient(to left, rgba(22, 27, 34, 0.98) 60%, transparent)',
+                  color: 'var(--accent-color)',
+                  borderRadius: '0 var(--radius-lg) var(--radius-lg) 0',
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseEnter={e => e.currentTarget.style.width = '52px'}
+                onMouseLeave={e => e.currentTarget.style.width = '44px'}
+                title="عرض المزيد"
+              >
+                <ChevronRight size={20} />
+              </button>
+            )}
+          </div>
 
-        {/* Navigation Arrows */}
-        <div className="tab-nav-arrows">
-          <button className="tab-nav-arrow" onClick={goPrev} disabled={currentTabIdx === 0}>
-            <ChevronRight size={18} />
-            {currentTabIdx > 0 ? TABS[currentTabIdx - 1].label : 'السابق'}
-          </button>
-          <button className="tab-nav-arrow" onClick={goNext} disabled={currentTabIdx === TABS.length - 1}>
-            {currentTabIdx < TABS.length - 1 ? TABS[currentTabIdx + 1].label : 'التالي'}
-            <ChevronLeft size={18} />
-          </button>
+          {/* Progress Dots */}
+          <div className="tab-progress">
+            {TABS.map((tab, i) => (
+              <div
+                key={tab.id}
+                className={`tab-progress-dot ${activeTab === tab.id ? 'active' : i < currentTabIdx ? 'completed' : ''}`}
+              />
+            ))}
+          </div>
+
+          {/* ═══ Tab Content ═══ */}
+          <div className="tab-content-wrapper">
+            {renderTabContent()}
+
+            {/* Navigation Arrows */}
+            <div className="tab-nav-arrows">
+              <button className="tab-nav-arrow" onClick={goPrev} disabled={currentTabIdx === 0}>
+                <ChevronRight size={18} />
+                {currentTabIdx > 0 ? TABS[currentTabIdx - 1].label : 'السابق'}
+              </button>
+              <button className="tab-nav-arrow" onClick={goNext} disabled={currentTabIdx === TABS.length - 1}>
+                {currentTabIdx < TABS.length - 1 ? TABS[currentTabIdx + 1].label : 'التالي'}
+                <ChevronLeft size={18} />
+              </button>
+            </div>
+          </div>
+        </>
+      ) : (
+        /* ═══ SCROLL VIEW MODE ═══ */
+        <div className="tab-content-wrapper fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          {/* Sticky section jump bar */}
+          <div style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: '0.4rem',
+            padding: '0.75rem 1rem',
+            background: 'rgba(22, 27, 34, 0.85)',
+            backdropFilter: 'blur(16px)',
+            border: '1px solid rgba(212, 175, 55, 0.15)',
+            borderRadius: 'var(--radius-lg)',
+            position: 'sticky',
+            top: 0,
+            zIndex: 20,
+            boxShadow: '0 4px 24px rgba(0, 0, 0, 0.4)',
+          }}>
+            {TABS.map((tab) => {
+              const Icon = tab.icon;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => {
+                    const el = document.getElementById(`scroll-section-${tab.id}`);
+                    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    padding: '0.45rem 0.85rem',
+                    border: '1px solid rgba(212, 175, 55, 0.15)',
+                    background: 'rgba(212, 175, 55, 0.06)',
+                    color: 'var(--text-muted)',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontFamily: 'Tajawal, sans-serif',
+                    fontSize: '0.8rem',
+                    fontWeight: '500',
+                    transition: 'all 0.2s ease',
+                    flexShrink: 0,
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = 'rgba(212, 175, 55, 0.15)';
+                    e.currentTarget.style.color = 'var(--accent-color)';
+                    e.currentTarget.style.borderColor = 'rgba(212, 175, 55, 0.4)';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = 'rgba(212, 175, 55, 0.06)';
+                    e.currentTarget.style.color = 'var(--text-muted)';
+                    e.currentTarget.style.borderColor = 'rgba(212, 175, 55, 0.15)';
+                  }}
+                >
+                  <Icon size={13} />
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* All sections rendered */}
+          {TABS.map((tab) => (
+            <div key={tab.id} id={`scroll-section-${tab.id}`} style={{ scrollMarginTop: '5rem' }}>
+              {renderTabContent(tab.id)}
+            </div>
+          ))}
         </div>
-      </div>
+      )}
 
       {/* ═══ Edit Mode Banner ═══ */}
       {isEditMode && (
@@ -1156,10 +1666,10 @@ const DataEntryWizard = () => {
           </span>
           <button
             className="btn btn-outline"
-            onClick={() => { setIsEditMode(false); setOriginalSerial(''); setSerialStatus('available'); }}
+            onClick={handleClear}
             style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderColor: 'rgba(212, 175, 55, 0.3)' }}
           >
-            <X size={14} /> إلغاء وضع التعديل
+            <X size={14} /> إلغاء وضع التعديل وتفريغ الحقول
           </button>
         </div>
       )}
@@ -1172,6 +1682,15 @@ const DataEntryWizard = () => {
 
         {isEditMode ? (
           <>
+            <button
+              className="btn btn-outline"
+              style={{ flex: 1, maxWidth: '180px', fontSize: '0.95rem', padding: '0.9rem', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.4)' }}
+              onClick={handleDeleteOrder}
+              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.1)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+            >
+              <Trash2 size={18} /> حذف الطلبية
+            </button>
             <button
               className="btn btn-accent"
               style={{ flex: 2, maxWidth: '300px', fontSize: '1.1rem', padding: '0.9rem' }}

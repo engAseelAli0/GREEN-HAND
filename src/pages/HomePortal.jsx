@@ -178,6 +178,17 @@ const HomePortal = () => {
           </p>
         </Link>
 
+        {/* Capsule 6: Reports */}
+        <Link to="/reports" className="capsule-card">
+          <div className="icon-ring" style={{ color: '#ec4899', borderColor: 'rgba(236, 72, 153, 0.3)' }}>
+            <Printer size={40} />
+          </div>
+          <h2 className="capsule-title">التقارير والإحصائيات</h2>
+          <p className="capsule-desc">
+            بوابة الفلترة المتقدمة. استخراج تقارير شاملة ومحددة بالمصنع، رقم الموديل، أو التاريخ مع إمكانية التصدير لاكسل و PDF.
+          </p>
+        </Link>
+
       </div>
     </div>
   );

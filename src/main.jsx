@@ -8,8 +8,24 @@ import AdminDashboard from './pages/AdminDashboard'
 import ExportOrder from './pages/ExportOrder'
 import FactoryReceiving from './pages/FactoryReceiving'
 import PrintBarcodes from './pages/PrintBarcodes'
+import ReportsPortal from './pages/ReportsPortal'
 import { AppDataProvider } from './context/AppDataContext'
 import './index.css'
+
+// Global fix to prevent mouse wheel and arrow keys from altering number inputs everywhere
+document.addEventListener('wheel', function(e) {
+  if (document.activeElement && document.activeElement.type === 'number') {
+    document.activeElement.blur();
+  }
+}, { passive: true });
+
+document.addEventListener('keydown', function(e) {
+  if (document.activeElement && document.activeElement.type === 'number') {
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      e.preventDefault();
+    }
+  }
+});
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
@@ -23,6 +39,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             <Route path="export" element={<ExportOrder />} />
             <Route path="receiving" element={<FactoryReceiving />} />
             <Route path="barcodes" element={<PrintBarcodes />} />
+            <Route path="reports" element={<ReportsPortal />} />
           </Route>
         </Routes>
       </BrowserRouter>

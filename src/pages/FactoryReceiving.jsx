@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useAppData } from '../context/AppDataContext';
 import { supabase } from '../supabaseClient';
-import { Search, Save, PackageCheck, AlertCircle, Info, Box, Palette, Calculator, CheckCircle2, XCircle } from 'lucide-react';
+import { Search, Save, PackageCheck, AlertCircle, Info, Box, Palette, Calculator, CheckCircle2, XCircle, Download, Printer } from 'lucide-react';
 import toast from 'react-hot-toast';
+import * as XLSX from 'xlsx';
 
 const FactoryReceiving = () => {
   const { lookups } = useAppData();
@@ -223,6 +224,117 @@ const FactoryReceiving = () => {
     }
   };
 
+  const exportToExcel = () => {
+    if (!isFetched) return toast.error('لا توجد بيانات لتصديرها');
+    
+    const excelData = {
+      "رقم الموديل": modelNo,
+      "الاسم الكامل": productInfo.prodFullName,
+      "الباركود": productInfo.mainBarcode,
+      "المصنع": `${productInfo.factoryId} - ${productInfo.factoryName}`,
+      "الكمية الأصلية المطلوبة": productInfo.reqTotalQuantity,
+      "الكراتين المستلمة": totals.totalCtn,
+      "إجمالي القطع المستلمة": totals.totalProd,
+      "حالة المنتج": productInfo.productStatus,
+      "مطابقة البيانات": (isQtyMatching && isColorsQtyMatching) ? 'نعم' : 'لا'
+    };
+
+    const pkgsData = packages.filter(p => p.kind).map(p => ({
+        "معرف الكرتون": p.id,
+        "النوع": p.kind,
+        "حالة الكرتون": p.status,
+        "من رقم": p.fromCtn,
+        "إلى رقم": p.toCtn,
+        "الكمية بالكرتون": p.pcsPerCtn,
+        "إجمالي عدد القطع": getPackageCalculations(p).totalProdQty
+    }));
+
+    const colorsData = colors.filter(c => c.colorName).map(c => ({
+        "اللون": c.colorName,
+        "مطلوب": c.expected,
+        "تم استلام": c.quantity || 0,
+        "الفارق": (parseInt(c.quantity) || 0) - c.expected
+    }));
+
+    const workbook = XLSX.utils.book_new();
+    
+    const ws1 = XLSX.utils.json_to_sheet([excelData]);
+    XLSX.utils.book_append_sheet(workbook, ws1, "ملخص الاستلام");
+
+    if (pkgsData.length > 0) {
+        const ws2 = XLSX.utils.json_to_sheet(pkgsData);
+        XLSX.utils.book_append_sheet(workbook, ws2, "بيانات الكراتين");
+    }
+
+    if (colorsData.length > 0) {
+        const ws3 = XLSX.utils.json_to_sheet(colorsData);
+        XLSX.utils.book_append_sheet(workbook, ws3, "كميات الألوان");
+    }
+
+    XLSX.writeFile(workbook, `Receiving_${modelNo}_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
+  const exportToPDF = async () => {
+    if (!isFetched) return toast.error('لا توجد بيانات لتصديرها');
+    const toastId = toast.loading('جاري تجهيز وتصدير التقرير...');
+    const element = document.getElementById('receiving-print-area');
+
+    // Just clean up shadows for a crisper PDF — keep all colors as-is
+    const origBoxShadow = element.style.boxShadow;
+    const origPadding = element.style.padding;
+    element.style.boxShadow = 'none';
+    element.style.padding = '20px';
+
+    try {
+       const { default: html2canvas } = await import('html2canvas');
+       const { default: jsPDF } = await import('jspdf');
+
+       await new Promise(r => setTimeout(r, 100));
+
+       // Get the actual background color from CSS variables
+       const computedBg = getComputedStyle(document.documentElement).getPropertyValue('--bg-color').trim() || '#0d1117';
+
+       const canvas = await html2canvas(element, { 
+         scale: 2, 
+         useCORS: true, 
+         logging: false, 
+         windowWidth: element.scrollWidth,
+         backgroundColor: computedBg
+       });
+       const imgData = canvas.toDataURL('image/png');
+       const imgWidthPx = canvas.width;
+       const imgHeightPx = canvas.height;
+
+       const pdfWidthMM = 210; 
+       const margin = 5;
+       const contentWidthMM = pdfWidthMM - margin * 2;
+       const contentHeightMM = (imgHeightPx * contentWidthMM) / imgWidthPx;
+       const pdfHeightMM = contentHeightMM + margin * 2;
+
+       const pdf = new jsPDF({
+         orientation: 'portrait',
+         unit: 'mm',
+         format: [pdfWidthMM, Math.max(pdfHeightMM, 297)],
+       });
+
+       // Fill PDF background with the same dark color
+       pdf.setFillColor(computedBg);
+       pdf.rect(0, 0, pdfWidthMM, Math.max(pdfHeightMM, 297), 'F');
+
+       pdf.addImage(imgData, 'PNG', margin, margin, contentWidthMM, contentHeightMM);
+       pdf.save(`Receiving_${modelNo}_${new Date().toISOString().split('T')[0]}.pdf`);
+       
+       toast.success('تم التصدير بنجاح!', { id: toastId });
+    } catch (err) {
+       toast.error('حدث خطأ أثناء تحميل الـ PDF', { id: toastId });
+       console.error(err);
+    } finally {
+       element.style.boxShadow = origBoxShadow;
+       element.style.padding = origPadding;
+    }
+  };
+
+
   // Helper component for Product Info fields
   const InfoBox = ({ label, value, highlight }) => (
     <div style={{ background: highlight ? 'rgba(212,175,55,0.05)' : 'var(--bg-color)', padding: '12px 16px', borderRadius: '10px', border: highlight ? '1px solid rgba(212,175,55,0.3)' : '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -268,10 +380,22 @@ const FactoryReceiving = () => {
             {isSearching ? <div className="spinner" style={{ width: '22px', height: '22px', border: '3px solid #fff', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} /> : 'بحث واسترداد'}
           </button>
         </div>
+        
+        {/* Export Action Buttons */}
+        {isFetched && (
+          <div className="fade-in" style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border-color)', justifyContent: 'flex-end' }}>
+            <button className="btn" onClick={exportToExcel} style={{ backgroundColor: '#10b981', color: 'white', boxShadow: '0 4px 15px rgba(16, 185, 129, 0.3)' }}>
+              <Download size={20} /> تصدير Excel
+            </button>
+            <button className="btn" onClick={exportToPDF} style={{ backgroundColor: '#ef4444', color: 'white', boxShadow: '0 4px 15px rgba(239, 68, 68, 0.3)' }}>
+              <Printer size={20} /> طباعة PDF
+            </button>
+          </div>
+        )}
       </div>
 
       {isFetched && (
-        <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+        <div id="receiving-print-area" className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
           
           {/* ─── PRODUCT INFO CARD ─── */}
           <div className="card">
@@ -316,7 +440,7 @@ const FactoryReceiving = () => {
                 return (
                   <div key={idx} style={{ 
                     display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center', 
-                    background: 'rgba(0,0,0,0.15)', padding: '1rem', 
+                    background: 'var(--surface-highlight)', padding: '1rem', 
                     borderRadius: '12px', border: '1px solid var(--border-color)' 
                   }}>
                     <div style={{ background: 'var(--accent-color)', color: '#000', padding: '6px 12px', borderRadius: '8px', fontWeight: 'bold', fontSize: '0.9rem' }}>
@@ -388,7 +512,7 @@ const FactoryReceiving = () => {
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '1rem', marginTop: '1.5rem' }}>
               {colors.filter(c => c.colorName).map((c, i) => (
-                <div key={i} style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)', borderRadius: '10px', overflow: 'hidden' }}>
+                <div key={i} style={{ background: 'var(--surface-highlight)', border: '1px solid var(--border-color)', borderRadius: '10px', overflow: 'hidden' }}>
                   <div style={{ background: 'var(--surface-color)', padding: '8px', textAlign: 'center', fontSize: '0.85rem', fontWeight: 'bold', borderBottom: '1px solid var(--border-color)' }}>
                     {c.colorName}
                   </div>

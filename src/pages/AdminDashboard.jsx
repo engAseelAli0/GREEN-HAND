@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { useAppData } from '../context/AppDataContext';
-import { Plus, Trash2, Edit, Edit2, Check, X, ImagePlus, ShoppingBag, Banknote, Scissors, Palette, Factory, Ruler, Package, Box, ShoppingCart, Stamp, SlidersHorizontal, ListChecks, Search, Sparkles } from 'lucide-react';
+import { Plus, Trash2, Edit, Edit2, Check, X, ImagePlus, ShoppingBag, Banknote, Scissors, Palette, Factory, Ruler, Package, Box, ShoppingCart, Stamp, SlidersHorizontal, ListChecks, Search, Sparkles, GripVertical } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import toast from 'react-hot-toast';
 
@@ -20,6 +20,8 @@ const AdminDashboard = () => {
   const [tradeMarkImageUrl, setTradeMarkImageUrl] = useState('');
   const [uploadingTmImage, setUploadingTmImage] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [dragIndex, setDragIndex] = useState(null);
+  const [dragOverIndex, setDragOverIndex] = useState(null);
   const tmImageRef = useRef(null);
 
   const tabs = [
@@ -178,6 +180,59 @@ const AdminDashboard = () => {
     updateLookup(activeTab, newList);
     toast('تم حذف العنصر 🗑️');
     if (editIndex === indexToDelete) cancelEdit();
+  };
+
+  // ─── Drag & Drop Reorder Handlers ──────────────────────
+  const handleDragStart = (e, index) => {
+    setDragIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    // Make the drag image slightly transparent
+    if (e.currentTarget) {
+      setTimeout(() => {
+        e.currentTarget.style.opacity = '0.4';
+      }, 0);
+    }
+  };
+
+  const handleDragEnd = (e) => {
+    e.currentTarget.style.opacity = '1';
+    // If we have a valid drop target different from origin, perform the reorder
+    if (dragIndex !== null && dragOverIndex !== null && dragIndex !== dragOverIndex) {
+      const currentList = [...(lookups[activeTab] || [])];
+      const [draggedItem] = currentList.splice(dragIndex, 1);
+      currentList.splice(dragOverIndex, 0, draggedItem);
+      updateLookup(activeTab, currentList);
+      // Update editIndex to follow the edited item
+      if (editIndex !== null) {
+        if (editIndex === dragIndex) {
+          setEditIndex(dragOverIndex);
+        } else if (dragIndex < editIndex && dragOverIndex >= editIndex) {
+          setEditIndex(editIndex - 1);
+        } else if (dragIndex > editIndex && dragOverIndex <= editIndex) {
+          setEditIndex(editIndex + 1);
+        }
+      }
+      toast.success('تم إعادة ترتيب العنصر بنجاح ✨');
+    }
+    setDragIndex(null);
+    setDragOverIndex(null);
+  };
+
+  const handleDragOver = (e, index) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverIndex !== index) {
+      setDragOverIndex(index);
+    }
+  };
+
+  const handleDragLeave = (e) => {
+    // Only clear if leaving the card entirely
+    const rect = e.currentTarget.getBoundingClientRect();
+    const { clientX, clientY } = e;
+    if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) {
+      setDragOverIndex(null);
+    }
   };
 
   const currentItems = lookups[activeTab] || [];
@@ -412,22 +467,66 @@ const AdminDashboard = () => {
       pointerEvents: 'none',
     },
     itemsGrid: {
-      display: 'grid',
-      gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-      gap: '0.85rem',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '0.5rem',
     },
-    itemCard: (isEditing) => ({
+    orderIndex: {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      width: '26px',
+      height: '26px',
+      borderRadius: '8px',
+      background: 'rgba(212, 175, 55, 0.1)',
+      color: 'var(--accent-color)',
+      fontSize: '0.75rem',
+      fontWeight: '700',
+      fontFamily: 'Outfit, sans-serif',
+      flexShrink: 0,
+      border: '1px solid rgba(212, 175, 55, 0.15)',
+    },
+    dragHandle: {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      cursor: 'grab',
+      padding: '0.35rem 0.25rem',
+      borderRadius: '8px',
+      color: 'var(--text-muted)',
+      flexShrink: 0,
+      transition: 'all 0.2s ease',
+      opacity: 0.5,
+    },
+    dropIndicator: {
+      height: '3px',
+      borderRadius: '4px',
+      background: 'linear-gradient(90deg, transparent, var(--accent-color), transparent)',
+      margin: '-0.25rem 2rem',
+      boxShadow: '0 0 12px rgba(212, 175, 55, 0.5), 0 0 4px rgba(212, 175, 55, 0.3)',
+      animation: 'pulse 1s ease-in-out infinite alternate',
+    },
+    itemCard: (isEditing, isDragging, isDragOver) => ({
       display: 'flex',
       justifyContent: 'space-between',
       alignItems: 'center',
       padding: '0.9rem 1.15rem',
-      background: isEditing
-        ? 'linear-gradient(135deg, rgba(212, 175, 55, 0.08), rgba(212, 175, 55, 0.03))'
-        : 'var(--surface-color)',
+      background: isDragging
+        ? 'rgba(212, 175, 55, 0.04)'
+        : isEditing
+          ? 'linear-gradient(135deg, rgba(212, 175, 55, 0.08), rgba(212, 175, 55, 0.03))'
+          : 'var(--surface-color)',
       borderRadius: '12px',
-      border: isEditing ? '1px solid rgba(212, 175, 55, 0.35)' : '1px solid var(--border-color)',
-      transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+      border: isDragOver
+        ? '1px solid rgba(212, 175, 55, 0.5)'
+        : isEditing
+          ? '1px solid rgba(212, 175, 55, 0.35)'
+          : '1px solid var(--border-color)',
+      transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
       cursor: 'default',
+      opacity: isDragging ? 0.4 : 1,
+      transform: isDragOver ? 'scale(1.01)' : 'scale(1)',
+      boxShadow: isDragOver ? '0 0 20px rgba(212, 175, 55, 0.15)' : 'none',
     }),
     itemName: (isEditing) => ({
       fontWeight: isEditing ? '600' : '500',
@@ -754,32 +853,63 @@ const AdminDashboard = () => {
             </div>
           )}
 
-          {/* ─── Items Grid ─── */}
+          {/* ─── Items List ─── */}
           <div style={styles.itemsGrid}>
             {filteredItems.map((item, index) => {
               const realIndex = currentItems.indexOf(item);
               const isEditing = editIndex === realIndex;
+              const isDragging = dragIndex === realIndex;
+              const isDragOver = dragOverIndex === realIndex && dragIndex !== realIndex;
+              const canDrag = !searchQuery.trim();
               return (
-                <div
-                  key={realIndex}
-                  className="fade-in"
-                  style={styles.itemCard(isEditing)}
-                  onMouseEnter={e => {
-                    if (!isEditing) {
-                      e.currentTarget.style.borderColor = 'rgba(212, 175, 55, 0.25)';
-                      e.currentTarget.style.boxShadow = '0 4px 16px rgba(0, 0, 0, 0.2)';
-                      e.currentTarget.style.transform = 'translateY(-1px)';
-                    }
-                  }}
-                  onMouseLeave={e => {
-                    if (!isEditing) {
-                      e.currentTarget.style.borderColor = 'var(--border-color)';
-                      e.currentTarget.style.boxShadow = 'none';
-                      e.currentTarget.style.transform = 'translateY(0)';
-                    }
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', overflow: 'hidden', flex: 1 }}>
+                <React.Fragment key={realIndex}>
+                  {/* Drop indicator ABOVE this item */}
+                  {isDragOver && dragIndex > realIndex && (
+                    <div style={styles.dropIndicator} />
+                  )}
+                  <div
+                    className="fade-in"
+                    draggable={canDrag}
+                    onDragStart={canDrag ? (e) => handleDragStart(e, realIndex) : undefined}
+                    onDragEnd={canDrag ? handleDragEnd : undefined}
+                    onDragOver={canDrag ? (e) => handleDragOver(e, realIndex) : undefined}
+                    onDragLeave={canDrag ? handleDragLeave : undefined}
+                    style={styles.itemCard(isEditing, isDragging, isDragOver)}
+                    onMouseEnter={e => {
+                      if (!isEditing && !isDragging) {
+                        e.currentTarget.style.borderColor = 'rgba(212, 175, 55, 0.25)';
+                        if (!dragIndex && dragIndex !== 0) e.currentTarget.style.boxShadow = '0 4px 16px rgba(0, 0, 0, 0.2)';
+                      }
+                    }}
+                    onMouseLeave={e => {
+                      if (!isEditing && !isDragOver) {
+                        e.currentTarget.style.borderColor = 'var(--border-color)';
+                        e.currentTarget.style.boxShadow = 'none';
+                      }
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', overflow: 'hidden', flex: 1 }}>
+                      {/* Drag Handle */}
+                      {canDrag && (
+                        <div
+                          style={styles.dragHandle}
+                          title="اسحب لإعادة الترتيب"
+                          onMouseEnter={e => {
+                            e.currentTarget.style.opacity = '1';
+                            e.currentTarget.style.color = 'var(--accent-color)';
+                            e.currentTarget.style.background = 'rgba(212, 175, 55, 0.08)';
+                          }}
+                          onMouseLeave={e => {
+                            e.currentTarget.style.opacity = '0.5';
+                            e.currentTarget.style.color = 'var(--text-muted)';
+                            e.currentTarget.style.background = 'transparent';
+                          }}
+                        >
+                          <GripVertical size={16} />
+                        </div>
+                      )}
+                      {/* Position number */}
+                      <div style={styles.orderIndex}>{realIndex + 1}</div>
                     {/* Color swatch */}
                     {activeTab === 'colors' && typeof item === 'object' && item.hex && (
                       <div style={{
@@ -862,7 +992,12 @@ const AdminDashboard = () => {
                       <Trash2 size={16} />
                     </button>
                   </div>
-                </div>
+                  </div>
+                  {/* Drop indicator BELOW this item */}
+                  {isDragOver && dragIndex < realIndex && (
+                    <div style={styles.dropIndicator} />
+                  )}
+                </React.Fragment>
               );
             })}
 

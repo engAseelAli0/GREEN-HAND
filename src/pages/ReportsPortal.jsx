@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAppData } from '../context/AppDataContext';
-import { Filter, Download, FileText, ChevronDown, ChevronUp, Printer, Calendar, Factory } from 'lucide-react';
+import { Filter, Download, FileText, ChevronDown, ChevronUp, Printer, Calendar, Factory, ArrowUpDown, Camera } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 
@@ -9,7 +9,10 @@ const ReportsPortal = () => {
   const { lookups } = useAppData();
   const [orders, setOrders] = useState([]);
   const [filteredOrders, setFilteredOrders] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
+  const [dataLoaded, setDataLoaded] = useState(false);
+  const [sortConfig, setSortConfig] = useState({ key: 'serial_number', direction: 'desc' });
+
   
   // Filters state
   const [filters, setFilters] = useState({
@@ -26,12 +29,9 @@ const ReportsPortal = () => {
 
   const [expandedRows, setExpandedRows] = useState([]);
 
-  useEffect(() => {
-    fetchOrders();
-  }, []);
-
   const fetchOrders = async () => {
     setIsLoading(true);
+    let sortedData = [];
     try {
       const { data, error } = await supabase
         .from('orders')
@@ -40,22 +40,29 @@ const ReportsPortal = () => {
 
       if (error) throw error;
       
-      const sortedData = (data || []).sort((a, b) => {
+      sortedData = (data || []).sort((a, b) => {
          return (parseInt(b.serial_number) || 0) - (parseInt(a.serial_number) || 0);
       });
       
       setOrders(sortedData);
       setFilteredOrders(sortedData);
+      setDataLoaded(true);
     } catch (err) {
       console.error(err);
       toast.error('حدث خطأ أثناء جلب الطلبيات');
     } finally {
       setIsLoading(false);
     }
+    return sortedData;
   };
 
-  const applyFilters = () => {
-    let result = [...orders];
+  const applyFilters = async () => {
+    let currentData = orders;
+    if (!dataLoaded) {
+      currentData = await fetchOrders();
+    }
+    
+    let result = [...currentData];
 
     if (filters.fromSerial) {
       result = result.filter(o => parseInt(o.serial_number) >= parseInt(filters.fromSerial));
@@ -73,9 +80,42 @@ const ReportsPortal = () => {
       result = result.filter(o => (o.order_data.factoryId || '').includes(filters.factory));
     }
 
-    // Ensure it remains sorted descending by Serial Number (Large to Small)
+    // Apply dynamic sorting based on sortConfig
     result.sort((a, b) => {
-       return (parseInt(b.serial_number) || 0) - (parseInt(a.serial_number) || 0);
+      const dA = a.order_data || {};
+      const dB = b.order_data || {};
+      let valA, valB;
+      switch(sortConfig.key) {
+        case 'serial_number':
+          valA = parseInt(a.serial_number) || 0;
+          valB = parseInt(b.serial_number) || 0;
+          break;
+        case 'productName':
+          valA = (dA.productName || '').toLowerCase();
+          valB = (dB.productName || '').toLowerCase();
+          break;
+        case 'buyerCompany':
+          valA = (dA.buyerCompany || '').toLowerCase();
+          valB = (dB.buyerCompany || '').toLowerCase();
+          break;
+        case 'factoryId':
+          valA = (dA.factoryId || '').toLowerCase();
+          valB = (dB.factoryId || '').toLowerCase();
+          break;
+        case 'totalQuantity':
+          valA = calculateTotalPiecesCount(dA) || parseInt(dA.totalQuantity) || 0;
+          valB = calculateTotalPiecesCount(dB) || parseInt(dB.totalQuantity) || 0;
+          break;
+        case 'requestDate':
+          valA = new Date(dA.requestDate || a.created_at).getTime();
+          valB = new Date(dB.requestDate || b.created_at).getTime();
+          break;
+        default:
+          valA = 0; valB = 0;
+      }
+      if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
     });
 
     setFilteredOrders(result);
@@ -93,6 +133,54 @@ const ReportsPortal = () => {
     });
     setFilteredOrders(orders);
     setExpandedRows([]);
+  };
+
+  const handleSort = (key) => {
+    let direction = 'desc';
+    if (sortConfig.key === key && sortConfig.direction === 'desc') {
+      direction = 'asc';
+    }
+    const newConfig = { key, direction };
+    setSortConfig(newConfig);
+
+    // Apply sort immediately to filteredOrders
+    const sorted = [...filteredOrders].sort((a, b) => {
+      const dA = a.order_data || {};
+      const dB = b.order_data || {};
+      let valA, valB;
+      switch(key) {
+        case 'serial_number':
+          valA = parseInt(a.serial_number) || 0;
+          valB = parseInt(b.serial_number) || 0;
+          break;
+        case 'productName':
+          valA = (dA.productName || '').toLowerCase();
+          valB = (dB.productName || '').toLowerCase();
+          break;
+        case 'buyerCompany':
+          valA = (dA.buyerCompany || '').toLowerCase();
+          valB = (dB.buyerCompany || '').toLowerCase();
+          break;
+        case 'factoryId':
+          valA = (dA.factoryId || '').toLowerCase();
+          valB = (dB.factoryId || '').toLowerCase();
+          break;
+        case 'totalQuantity':
+          valA = calculateTotalPiecesCount(dA) || parseInt(dA.totalQuantity) || 0;
+          valB = calculateTotalPiecesCount(dB) || parseInt(dB.totalQuantity) || 0;
+          break;
+        case 'requestDate':
+          valA = new Date(dA.requestDate || a.created_at).getTime();
+          valB = new Date(dB.requestDate || b.created_at).getTime();
+          break;
+        default:
+          valA = 0; valB = 0;
+      }
+      if (valA < valB) return direction === 'asc' ? -1 : 1;
+      if (valA > valB) return direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+    setFilteredOrders(sorted);
   };
 
   const toggleRow = (serial) => {
@@ -274,6 +362,7 @@ const ReportsPortal = () => {
         
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '2rem' }}>
           <button className="btn btn-outline" onClick={clearFilters}>إفراغ الفلاتر</button>
+          <button className="btn btn-accent" onClick={async () => { await fetchOrders(); toast.success('تم عرض جميع المنتجات', { id: 'filter-toast' }); }} style={{ backgroundColor: 'var(--accent-color)', color: '#000', fontWeight: 'bold', padding: '0.5rem 1.5rem' }}>إظهار كل المنتجات</button>
           <button className="btn btn-primary" onClick={applyFilters} style={{ padding: '0.5rem 3rem' }}>بحث وعرض</button>
         </div>
       </div>
@@ -289,6 +378,10 @@ const ReportsPortal = () => {
 
         {isLoading ? (
           <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-muted)' }}>جاري تحميل البيانات...</div>
+        ) : !dataLoaded ? (
+          <div style={{ textAlign: 'center', padding: '4rem', backgroundColor: 'var(--surface-highlight)', borderRadius: 'var(--radius-md)' }}>
+            <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem' }}>الرجاء تحديد معايير البحث والضغط على "بحث وعرض"، أو الضغط على زر "إظهار كل المنتجات".</p>
+          </div>
         ) : filteredOrders.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '4rem', backgroundColor: 'var(--surface-highlight)', borderRadius: 'var(--radius-md)' }}>
             <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem' }}>لا توجد طلبيات تطابق الفلاتر الحالية.</p>
@@ -298,12 +391,24 @@ const ReportsPortal = () => {
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right' }}>
               <thead>
                 <tr style={{ backgroundColor: 'rgba(212, 175, 55, 0.1)', borderBottom: '2px solid var(--accent-color)' }}>
-                  <th style={{ padding: '1rem', color: 'var(--accent-color)' }}>رقم الموديل</th>
-                  <th style={{ padding: '1rem' }}>المنتج</th>
-                  <th style={{ padding: '1rem' }}>الشركة (المشتري)</th>
-                  <th style={{ padding: '1rem' }}>المصنع المستلم</th>
-                  <th style={{ padding: '1rem', textAlign: 'center' }}>المقاسات (الكمية الإجمالية)</th>
-                  <th style={{ padding: '1rem', textAlign: 'center' }}>تاريخ الطلب</th>
+                  <th style={{ padding: '1rem', color: sortConfig.key === 'serial_number' ? 'var(--accent-color)' : 'inherit', cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('serial_number')}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'flex-start' }}>رقم الموديل <ArrowUpDown size={14} opacity={sortConfig.key === 'serial_number' ? 1 : 0.3}/></div>
+                  </th>
+                  <th style={{ padding: '1rem', color: sortConfig.key === 'productName' ? 'var(--accent-color)' : 'inherit', cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('productName')}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'flex-start' }}>المنتج <ArrowUpDown size={14} opacity={sortConfig.key === 'productName' ? 1 : 0.3}/></div>
+                  </th>
+                  <th style={{ padding: '1rem', color: sortConfig.key === 'buyerCompany' ? 'var(--accent-color)' : 'inherit', cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('buyerCompany')}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'flex-start' }}>الشركة (المشتري) <ArrowUpDown size={14} opacity={sortConfig.key === 'buyerCompany' ? 1 : 0.3}/></div>
+                  </th>
+                  <th style={{ padding: '1rem', color: sortConfig.key === 'factoryId' ? 'var(--accent-color)' : 'inherit', cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('factoryId')}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'flex-start' }}>المصنع المستلم <ArrowUpDown size={14} opacity={sortConfig.key === 'factoryId' ? 1 : 0.3}/></div>
+                  </th>
+                  <th style={{ padding: '1rem', color: sortConfig.key === 'totalQuantity' ? 'var(--accent-color)' : 'inherit', cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('totalQuantity')}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'center' }}>الكمية الإجمالية <ArrowUpDown size={14} opacity={sortConfig.key === 'totalQuantity' ? 1 : 0.3}/></div>
+                  </th>
+                  <th style={{ padding: '1rem', color: sortConfig.key === 'requestDate' ? 'var(--accent-color)' : 'inherit', cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('requestDate')}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'center' }}>تاريخ الطلب <ArrowUpDown size={14} opacity={sortConfig.key === 'requestDate' ? 1 : 0.3}/></div>
+                  </th>
                   <th style={{ padding: '1rem', textAlign: 'center' }}>تفاصيل</th>
                 </tr>
               </thead>
@@ -393,6 +498,23 @@ const ReportsPortal = () => {
                                <div style={{ marginTop: '1rem', padding: '1.2rem', backgroundColor: 'var(--surface-highlight)', borderRadius: 'var(--radius-md)', borderRight: '4px solid var(--accent-color)' }}>
                                  <strong style={{ color: 'var(--accent-color)', display: 'block', marginBottom: '0.5rem' }}>ملاحظات الطلبية: </strong> 
                                  <span style={{ lineHeight: '1.6' }}>{d.remarks}</span>
+                               </div>
+                             )}
+
+                             {/* Product Images Details */}
+                             {d.productImages && d.productImages.length > 0 && (
+                               <div style={{ marginTop: '2rem' }}>
+                                 <h4 style={{ color: 'var(--primary-color)', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
+                                   <Camera size={18} color="var(--accent-color)" /> صور المنتج
+                                 </h4>
+                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '1rem' }}>
+                                   {d.productImages.map((img, idx) => (
+                                     <div key={idx} style={{ borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border-color)', backgroundColor: 'var(--surface-color)', transition: 'transform 0.2s', cursor: 'pointer' }} onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.02)'} onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}>
+                                       <img src={img.url} alt={img.name} style={{ width: '100%', height: '150px', objectFit: 'cover', display: 'block' }} crossOrigin="anonymous"/>
+                                       <div style={{ padding: '0.4rem', fontSize: '0.75rem', textAlign: 'center', color: 'var(--text-muted)' }}>{img.name}</div>
+                                     </div>
+                                   ))}
+                                 </div>
                                </div>
                              )}
                           </td>

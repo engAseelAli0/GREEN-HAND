@@ -125,6 +125,8 @@ const DataEntryWizard = () => {
   const [showSerialsList, setShowSerialsList] = useState(false);
   const [availableSerials, setAvailableSerials] = useState([]);
   const [fetchingSerials, setFetchingSerials] = useState(false);
+  const [serialSearchQuery, setSerialSearchQuery] = useState('');
+  const serialSearchRef = useRef(null);
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
   const tabNavRef = useRef(null);
@@ -262,7 +264,7 @@ const DataEntryWizard = () => {
         const file = files[i];
         const ext = file.name.split('.').pop();
         const currentCount = productImages.length + newImages.length;
-        const fileName = currentCount === 0 ? `${modelNum}.${ext}` : `${modelNum}_${currentCount}.${ext}`;
+        const fileName = currentCount === 0 ? `${modelNum}.${ext}` : `${modelNum}#${currentCount}.${ext}`;
         const filePath = `product-images/${fileName}`;
 
         const { data, error } = await supabase.storage
@@ -325,14 +327,24 @@ const DataEntryWizard = () => {
 
   const toggleColor = (colorName) => {
     setSelectedColorsArr(prev => {
+      let nextArr;
       if (prev.includes(colorName)) {
-        const dist = { ...(currentOrder.colorDistribution || {}) };
-        delete dist[colorName];
-        updateOrder('colorDistribution', dist);
-        return prev.filter(c => c !== colorName);
+        nextArr = prev.filter(c => c !== colorName);
       } else {
-        return [...prev, colorName];
+        nextArr = [...prev, colorName];
       }
+      
+      const totalQty = parseInt(currentOrder.totalQuantity);
+      if (totalQty && !isNaN(totalQty) && nextArr.length > 0) {
+         setTimeout(() => distributeQuantity(nextArr, true), 0);
+      } else {
+         if (prev.includes(colorName)) {
+            const dist = { ...(currentOrder.colorDistribution || {}) };
+            delete dist[colorName];
+            updateOrder('colorDistribution', dist);
+         }
+      }
+      return nextArr;
     });
   };
 
@@ -575,10 +587,14 @@ const DataEntryWizard = () => {
   };
 
   const handleF9Press = async (e) => {
-    if (e.key === 'F9') {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleFetch();
+    } else if (e.key === 'F9') {
       e.preventDefault();
       setFetchingSerials(true);
       setShowSerialsList(true);
+      setSerialSearchQuery('');
       try {
         const { data, error } = await supabase
           .from('orders')
@@ -591,9 +607,12 @@ const DataEntryWizard = () => {
         console.error(err);
       } finally {
          setFetchingSerials(false);
+         // Auto-focus search input after data loads
+         setTimeout(() => serialSearchRef.current?.focus(), 100);
       }
     } else if (e.key === 'Escape') {
       setShowSerialsList(false);
+      setSerialSearchQuery('');
     }
   };
 
@@ -696,14 +715,14 @@ const DataEntryWizard = () => {
     updateOrder('packagingConditions', pc);
   };
 
-  const divideQuantityEqually = () => {
+  const distributeQuantity = (colorsArr, isSilent = false) => {
     const totalQty = parseInt(currentOrder.totalQuantity);
     if (!totalQty || isNaN(totalQty)) {
-      toast.error('الرجاء إدخال الكمية الإجمالية أولاً');
+      if (!isSilent) toast.error('الرجاء إدخال الكمية الإجمالية أولاً');
       return;
     }
-    if (selectedColorsArr.length === 0) {
-      toast.error('الرجاء تحديد لون واحد على الأقل لتوزيع الكمية');
+    if (colorsArr.length === 0) {
+      if (!isSilent) toast.error('الرجاء تحديد لون واحد على الأقل لتوزيع الكمية');
       return;
     }
     let sizes = lookups.sizes || [];
@@ -715,15 +734,23 @@ const DataEntryWizard = () => {
       }
     }
     if (sizes.length === 0) {
-      toast.error('لا توجد مقاسات محددة للتوزيع');
+      if (!isSilent) toast.error('لا توجد مقاسات محددة للتوزيع');
       return;
     }
-    const cellsCount = selectedColorsArr.length * sizes.length;
+    const cellsCount = colorsArr.length * sizes.length;
     const qtyPerCell = Math.floor(totalQty / cellsCount);
     const remainder = totalQty % cellsCount;
     const newDist = { ...(currentOrder.colorDistribution || {}) };
     let remainderAdded = 0;
-    selectedColorsArr.forEach(color => {
+    
+    // Clear out unselected colors completely
+    Object.keys(newDist).forEach(col => {
+       if (!colorsArr.includes(col)) {
+          delete newDist[col];
+       }
+    });
+    
+    colorsArr.forEach(color => {
       if (!newDist[color]) newDist[color] = {};
       sizes.forEach(size => {
          let val = qtyPerCell;
@@ -731,9 +758,12 @@ const DataEntryWizard = () => {
          newDist[color][size] = val;
       });
     });
+    
     updateOrder('colorDistribution', newDist);
-    toast.success('تم توزيع الكمية الإجمالية بالتساوي بين الألوان والمقاسات!');
+    if (!isSilent) toast.success('تم توزيع الكمية الإجمالية بالتساوي بين الألوان والمقاسات!');
   };
+
+  const divideQuantityEqually = () => distributeQuantity(selectedColorsArr, false);
 
   let targetSizes = lookups.sizes || [];
   if (currentOrder.sizeFrom && currentOrder.sizeTo) {
@@ -761,10 +791,22 @@ const DataEntryWizard = () => {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div className="form-group">
                   <label className="form-label">الرقم التسلسلي (إدخال يدوي)</label>
-                  <input type="text" className="form-control" value={currentOrder.serialNumber} onChange={(e) => handleSerialChange(e.target.value)} placeholder="أدخل الرقم التسلسلي هنا..." />
-                  {serialStatus === 'checking' && <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>جاري التحقق...</span>}
-                  {serialStatus === 'used' && <span style={{ fontSize: '0.8rem', color: '#ef4444', fontWeight: 'bold' }}>⚠️ هذا الرقم التسلسلي مستخدم مسبقاً!</span>}
-                  {serialStatus === 'available' && <span style={{ fontSize: '0.8rem', color: '#22c55e', fontWeight: 'bold' }}>✅ الرقم متاح، يمكن استخدامه.</span>}
+                  <input 
+                    type="text" 
+                    className="form-control" 
+                    value={currentOrder.serialNumber} 
+                    onChange={(e) => handleSerialChange(e.target.value)} 
+                    onKeyDown={(e) => e.key === 'Enter' && handleFetch(currentOrder.serialNumber)}
+                    placeholder="أدخل الرقم واضغط Enter لجلبه..." 
+                  />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', margin: '4px 0' }}>
+                    <span>
+                      {serialStatus === 'checking' && <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>جاري التحقق...</span>}
+                      {serialStatus === 'used' && <span style={{ fontSize: '0.8rem', color: '#ef4444', fontWeight: 'bold' }}>⚠️ مستخدمة مسبقاً!</span>}
+                      {serialStatus === 'available' && <span style={{ fontSize: '0.8rem', color: '#22c55e', fontWeight: 'bold' }}>✅ الرقم متاح، يمكن استخدامه.</span>}
+                    </span>
+                    {serialStatus === 'used' && <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>اضغط Enter لجلب بيانات المنتج</span>}
+                  </div>
                   {currentOrder.barcode && (
                     <div style={{ marginTop: '8px', padding: '6px', backgroundColor: 'rgba(212, 175, 55, 0.1)', border: '1px dashed var(--accent-color)', borderRadius: '6px', color: 'var(--accent-color)', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
                        الباركود المولد: <strong style={{ letterSpacing: '2px', fontSize: '1.1rem' }}>{currentOrder.barcode}</strong>
@@ -801,6 +843,84 @@ const DataEntryWizard = () => {
                       <option value="">العملة...</option>
                       {lookups.currencies?.map((c, i) => <option key={i} value={c}>{c}</option>)}
                     </ClearableSelect>
+                  </div>
+                </div>
+
+                <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                  <label className="form-label">نوع البيع (Sale Type)</label>
+                  <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                    <ClearableSelect className="form-control" style={{ flex: '0 0 200px' }} value={currentOrder.saleType || ''} onChange={(e) => {
+                       const val = e.target.value;
+                       updateOrder('saleType', val);
+                       if (val === 'تجزئة') {
+                          updateOrder('retailPercentage', '100');
+                          updateOrder('wholesalePercentage', '0');
+                       } else if (val === 'جملة') {
+                          updateOrder('wholesalePercentage', '100');
+                          updateOrder('retailPercentage', '0');
+                       } else {
+                          updateOrder('retailPercentage', '');
+                          updateOrder('wholesalePercentage', '');
+                       }
+                    }}>
+                      <option value="">اختر النوع...</option>
+                      <option value="تجزئة">تجزئة</option>
+                      <option value="جملة">جملة</option>
+                      <option value="جملة وتجزئة">جملة وتجزئة</option>
+                    </ClearableSelect>
+
+                    {currentOrder.saleType === 'تجزئة' && (
+                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>نسبة التجزئة:</span>
+                          <input type="text" className="form-control" value="100%" readOnly style={{ width: '80px', backgroundColor: 'var(--bg-color)', color: 'var(--accent-color)', fontWeight: 'bold', textAlign: 'center' }} />
+                       </div>
+                    )}
+                    
+                    {currentOrder.saleType === 'جملة' && (
+                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>نسبة الجملة:</span>
+                          <input type="text" className="form-control" value="100%" readOnly style={{ width: '80px', backgroundColor: 'var(--bg-color)', color: 'var(--accent-color)', fontWeight: 'bold', textAlign: 'center' }} />
+                       </div>
+                    )}
+
+                    {currentOrder.saleType === 'جملة وتجزئة' && (
+                       <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                             <span style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}>الجملة %:</span>
+                             <input type="number" min="0" max="100" className="form-control" placeholder="مثال: 60" 
+                               style={{ width: '100px' }}
+                               value={currentOrder.wholesalePercentage || ''} 
+                               onChange={(e) => {
+                                  let val = e.target.value;
+                                  let num = parseInt(val) || 0;
+                                  let other = parseInt(currentOrder.retailPercentage) || 0;
+                                  if (num + other > 100) {
+                                     toast.error('عذراً، مجموع النسبتين لا يمكن أن يتجاوز 100%');
+                                     return;
+                                  }
+                                  updateOrder('wholesalePercentage', val);
+                               }} 
+                             />
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                             <span style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}>التجزئة %:</span>
+                             <input type="number" min="0" max="100" className="form-control" placeholder="مثال: 40" 
+                               style={{ width: '100px' }}
+                               value={currentOrder.retailPercentage || ''}
+                               onChange={(e) => {
+                                  let val = e.target.value;
+                                  let num = parseInt(val) || 0;
+                                  let other = parseInt(currentOrder.wholesalePercentage) || 0;
+                                  if (num + other > 100) {
+                                     toast.error('عذراً، مجموع النسبتين لا يمكن أن يتجاوز 100%');
+                                     return;
+                                  }
+                                  updateOrder('retailPercentage', val);
+                               }} 
+                             />
+                          </div>
+                       </div>
+                    )}
                   </div>
                 </div>
 
@@ -1390,35 +1510,100 @@ const DataEntryWizard = () => {
                 }}>
                   <div style={{ padding: '0.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--surface-highlight)' }}>
                       <span style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>اختر موديلاً محفوظاً:</span>
-                      <button onClick={() => setShowSerialsList(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-color)', padding: 0, display: 'flex', alignItems: 'center' }}>
+                      <button onClick={() => { setShowSerialsList(false); setSerialSearchQuery(''); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-color)', padding: 0, display: 'flex', alignItems: 'center' }}>
                          <X size={16} />
                       </button>
+                  </div>
+                  {/* Search Field */}
+                  <div style={{ padding: '0.5rem', borderBottom: '1px solid var(--border-color)', backgroundColor: 'var(--bg-color)' }}>
+                    <input
+                      ref={serialSearchRef}
+                      type="text"
+                      placeholder="🔍 ابحث برقم الموديل..."
+                      value={serialSearchQuery}
+                      onChange={(e) => setSerialSearchQuery(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Escape') {
+                          setShowSerialsList(false);
+                          setSerialSearchQuery('');
+                        }
+                        // Enter to select first filtered result
+                        if (e.key === 'Enter') {
+                          const filtered = availableSerials.filter(s => s.toString().includes(serialSearchQuery));
+                          if (filtered.length > 0) {
+                            const input = document.getElementById('fetchSerialInput');
+                            if (input) input.value = filtered[0];
+                            setShowSerialsList(false);
+                            setSerialSearchQuery('');
+                            handleFetch(filtered[0]);
+                          }
+                        }
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '0.5rem 0.75rem',
+                        fontSize: '0.9rem',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: 'var(--radius-sm, 6px)',
+                        backgroundColor: 'var(--surface-color)',
+                        color: 'var(--text-color)',
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                        direction: 'rtl',
+                        transition: 'border-color 0.2s'
+                      }}
+                      onFocus={(e) => e.currentTarget.style.borderColor = 'var(--accent-color)'}
+                      onBlur={(e) => e.currentTarget.style.borderColor = 'var(--border-color)'}
+                      autoComplete="off"
+                    />
                   </div>
                   {fetchingSerials ? (
                       <div style={{ padding: '1rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)' }}>جاري التحميل...</div>
                   ) : (
-                     availableSerials.length === 0 ? (
-                         <div style={{ padding: '1rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)' }}>لا توجد موديلات محفوظة</div>
-                     ) : (
+                     (() => {
+                       const filteredSerials = serialSearchQuery.trim()
+                         ? availableSerials.filter(s => s.toString().includes(serialSearchQuery.trim()))
+                         : availableSerials;
+                       return filteredSerials.length === 0 ? (
+                         <div style={{ padding: '1rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                           {availableSerials.length === 0 ? 'لا توجد موديلات محفوظة' : 'لا توجد نتائج مطابقة للبحث'}
+                         </div>
+                       ) : (
                         <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-                            {availableSerials.map(serial => (
+                            {filteredSerials.map(serial => {
+                                // Highlight matching part
+                                const query = serialSearchQuery.trim();
+                                const serialStr = serial.toString();
+                                const matchIdx = query ? serialStr.indexOf(query) : -1;
+                                return (
                                 <li 
                                     key={serial} 
                                     onClick={() => {
                                         const input = document.getElementById('fetchSerialInput');
                                         if (input) input.value = serial;
                                         setShowSerialsList(false);
+                                        setSerialSearchQuery('');
                                         handleFetch(serial);
                                     }}
                                     style={{ padding: '0.6rem 1rem', cursor: 'pointer', borderBottom: '1px solid var(--border-color)', transition: 'background-color 0.2s', fontSize: '0.9rem', color: 'var(--text-color)' }}
                                     onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--surface-highlight)'}
                                     onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                                 >
-                                    <strong>{serial}</strong>
+                                    {matchIdx !== -1 ? (
+                                      <strong>
+                                        {serialStr.substring(0, matchIdx)}
+                                        <span style={{ color: 'var(--accent-color)', textDecoration: 'underline' }}>{serialStr.substring(matchIdx, matchIdx + query.length)}</span>
+                                        {serialStr.substring(matchIdx + query.length)}
+                                      </strong>
+                                    ) : (
+                                      <strong>{serialStr}</strong>
+                                    )}
                                 </li>
-                            ))}
+                                );
+                            })}
                         </ul>
-                     )
+                       );
+                     })()
                   )}
                 </div>
               )}

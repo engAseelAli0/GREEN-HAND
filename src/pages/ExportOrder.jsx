@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { supabase } from '../supabaseClient';
 import toast from 'react-hot-toast';
-import { Search, Printer, FileText, CheckCircle2, DownloadCloud } from 'lucide-react';
+import { Search, Printer, FileText, CheckCircle2, DownloadCloud, RectangleVertical, RectangleHorizontal } from 'lucide-react';
 import { useAppData } from '../context/AppDataContext';
 
 const ExportOrder = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [order, setOrder] = useState(null);
+  const [printOrientation, setPrintOrientation] = useState('portrait');
   const { lookups } = useAppData();
   
   const formatDate = (dateStr) => {
@@ -71,8 +72,8 @@ const ExportOrder = () => {
        const imgWidthPx = canvas.width;
        const imgHeightPx = canvas.height;
 
-       // A4 width in mm = 210, use with small margin
-       const pdfWidthMM = 210;
+       // A4 width in mm = 210 (portrait), 297 (landscape)
+       const pdfWidthMM = printOrientation === 'landscape' ? 297 : 210;
        const margin = 8; // mm margin on each side
        const contentWidthMM = pdfWidthMM - margin * 2;
        // Calculate height proportionally to fit all content on one page
@@ -81,7 +82,7 @@ const ExportOrder = () => {
 
        // Create PDF with custom page size that fits all content
        const pdf = new jsPDF({
-         orientation: pdfWidthMM > pdfHeightMM ? 'landscape' : 'portrait',
+         orientation: printOrientation,
          unit: 'mm',
          format: [pdfWidthMM, pdfHeightMM],
        });
@@ -176,13 +177,35 @@ const ExportOrder = () => {
             color: #111827;
             padding: 3rem;
             border-radius: 12px;
-            max-width: 1100px;
+            max-width: ${printOrientation === 'landscape' ? '1123px' : '900px'};
             margin: 0 auto;
             box-shadow: 0 10px 40px rgba(0,0,0,0.5);
             font-family: 'Inter', 'Tajawal', sans-serif;
             text-align: right;
             border: 1px solid #e5e7eb;
+            transition: max-width 0.3s ease;
         }
+        .print-mode-portrait { display: flex; flex-direction: column; }
+        .print-mode-landscape {
+            display: grid;
+            grid-template-areas: "header header" "info product" "info measurements" "dates colors" "fabric colors" "materials images" "remarks images" "logistics logistics" "signatures signatures";
+            grid-template-columns: 35% 61%;
+            gap: 1.5rem 2.5rem;
+            align-items: start;
+        }
+        .print-mode-landscape .doc-header { grid-area: header; }
+        .print-mode-landscape .print-area-info { grid-area: info; grid-template-columns: 1fr; margin-bottom: 0 !important; }
+        .print-mode-landscape .print-area-dates { grid-area: dates; margin-bottom: 0 !important; }
+        .print-mode-landscape .print-area-product { grid-area: product; margin-bottom: 0 !important; }
+        .print-mode-landscape .print-area-fabric { grid-area: fabric; margin-bottom: 0 !important; }
+        .print-mode-landscape .print-area-images { grid-area: images; margin-bottom: 0 !important; }
+        .print-mode-landscape .print-area-images > div { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)) !important; }
+        .print-mode-landscape .print-area-materials { grid-area: materials; margin-bottom: 0 !important; }
+        .print-mode-landscape .print-area-colors { grid-area: colors; margin-bottom: 0 !important; }
+        .print-mode-landscape .print-area-measurements { grid-area: measurements; margin-bottom: 0 !important; }
+        .print-mode-landscape .print-area-remarks { grid-area: remarks; margin-bottom: 0 !important; }
+        .print-mode-landscape .print-area-logistics { grid-area: logistics; margin-bottom: 0 !important; }
+        .print-mode-landscape .signatures { grid-area: signatures; margin-top: 0 !important; }
 
         .doc-header {
             display: flex;
@@ -387,7 +410,23 @@ const ExportOrder = () => {
           </div>
         </div>
         {order && (
-          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
+             <div style={{ display: 'flex', gap: '0.5rem', background: 'var(--surface-highlight)', padding: '0.4rem', borderRadius: '50px', border: '1px solid var(--border-color)' }}>
+                <button 
+                  className={`btn ${printOrientation === 'portrait' ? 'btn-primary' : ''}`} 
+                  style={{ padding: '0.5rem 1.2rem', borderRadius: '50px', background: printOrientation === 'portrait' ? 'var(--accent-color)' : 'transparent', color: printOrientation === 'portrait' ? '#000' : 'var(--text-color)', border: 'none', display: 'flex', alignItems: 'center' }}
+                  onClick={() => setPrintOrientation('portrait')}
+                >
+                  <RectangleVertical size={18} style={{ marginLeft: '0.5rem' }} /> طولي (Portrait)
+                </button>
+                <button 
+                  className={`btn ${printOrientation === 'landscape' ? 'btn-primary' : ''}`} 
+                  style={{ padding: '0.5rem 1.2rem', borderRadius: '50px', background: printOrientation === 'landscape' ? 'var(--accent-color)' : 'transparent', color: printOrientation === 'landscape' ? '#000' : 'var(--text-color)', border: 'none', display: 'flex', alignItems: 'center' }}
+                  onClick={() => setPrintOrientation('landscape')}
+                >
+                  <RectangleHorizontal size={18} style={{ marginLeft: '0.5rem' }} /> عرضي (Landscape)
+                </button>
+             </div>
              <button className="btn btn-accent" style={{ padding: '0.8rem 2rem', fontSize: '1.15rem', gap: '0.75rem', borderRadius: '50px', background: 'linear-gradient(135deg, var(--accent-color), #b48c26)', color: '#000', fontWeight: 'bold', boxShadow: '0 4px 15px rgba(212, 175, 55, 0.4)' }} onClick={handleDownloadPDF}>
                <DownloadCloud size={22} /> تحميل كملف PDF مباشرة
              </button>
@@ -408,7 +447,7 @@ const ExportOrder = () => {
       )}
 
       {order && (
-        <div className="print-doc" id="export-doc">
+        <div className={`print-doc print-mode-${printOrientation}`} id="export-doc">
           
           {/* Header Area */}
           <div className="doc-header">
@@ -423,7 +462,7 @@ const ExportOrder = () => {
           </div>
 
           {/* Metadata Cards */}
-          <div className="info-grid">
+          <div className="info-grid print-area-info">
             <div className="doc-card">
               <h4>Purchasing Party 买方公司信息</h4>
               <div className="kp-row">
@@ -453,7 +492,7 @@ const ExportOrder = () => {
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: '2rem', marginBottom: '2.5rem' }}>
+          <div className="print-area-dates" style={{ display: 'flex', gap: printOrientation === 'landscape' ? '1rem' : '2rem', marginBottom: '2.5rem', flexDirection: printOrientation === 'landscape' ? 'column' : 'row' }}>
              <div style={{ flex: 1, borderLeft: '4px solid #111827', paddingLeft: '1rem' }}>
                 <div style={{ fontSize: '0.85rem', color: '#6b7280', fontWeight: '600', textTransform: 'uppercase' }}>Request Date 订单日期</div>
                 <div style={{ fontSize: '1.25rem', fontWeight: '800' }}>{formatDate(order.requestDate)}</div>
@@ -465,6 +504,7 @@ const ExportOrder = () => {
           </div>
 
           {/* Product Overview */}
+          <div className="print-area-product">
           <h3 className="section-title">Product Details <span>(产品详情)</span></h3>
           <table className="elegant-grid">
             <thead>
@@ -490,6 +530,14 @@ const ExportOrder = () => {
                       return null;
                     })()}
                   </div>
+                  {order.saleType && (
+                    <div style={{ marginTop: '0.6rem', fontSize: '0.85rem', color: '#4b5563', fontWeight: '600', display: 'inline-flex', background: '#f3f4f6', padding: '0.25rem 0.5rem', borderRadius: '4px' }}>
+                       Sale Type: <span style={{ color: '#111827', fontWeight: '800', marginLeft: '0.5rem' }}>{order.saleType}</span>
+                       {order.saleType === 'تجزئة' && <span style={{ marginLeft: '4px', color: 'var(--accent-color)' }}>(100%)</span>}
+                       {order.saleType === 'جملة' && <span style={{ marginLeft: '4px', color: 'var(--accent-color)' }}>(100%)</span>}
+                       {order.saleType === 'جملة وتجزئة' && <span style={{ marginLeft: '4px', color: 'var(--accent-color)' }}>({order.wholesalePercentage}% جملة / {order.retailPercentage}% تجزئة)</span>}
+                    </div>
+                  )}
                 </td>
                 <td style={{ textAlign: 'center', fontWeight: 'bold' }}>{order.productPrice || '-'} {order.currency || ''}</td>
                 <td style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '1.1rem' }}>{order.totalQuantity} Units</td>
@@ -497,9 +545,10 @@ const ExportOrder = () => {
               </tr>
             </tbody>
           </table>
+          </div>
           
           {order.productFabric && (
-             <div style={{ marginBottom: '2.5rem', background: '#f9fafb', padding: '1rem', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+             <div className="print-area-fabric" style={{ marginBottom: '2.5rem', background: '#f9fafb', padding: '1rem', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
                <span style={{ fontWeight: '600', color: '#4b5563', marginRight: '0.5rem' }}>Main Fabric 核心面料:</span>
                <span style={{ fontWeight: '700', color: '#111827' }}>{order.productFabric}</span>
              </div>
@@ -507,7 +556,7 @@ const ExportOrder = () => {
 
           {/* Product Images */}
           {order.productImages && order.productImages.length > 0 && (
-            <>
+            <div className="print-area-images">
               <h3 className="section-title">Product Images <span>(产品图片)</span></h3>
               <div style={{
                 display: 'grid',
@@ -545,12 +594,12 @@ const ExportOrder = () => {
                   </div>
                 ))}
               </div>
-            </>
+            </div>
           )}
 
           {/* Materials & Fabrics */}
           {(order.materials && order.materials.some(m => m.name)) && (
-             <>
+             <div className="print-area-materials">
                <h3 className="section-title">Fabrics & Materials <span>(面料种类&材质)</span></h3>
                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', marginBottom: '2.5rem' }}>
                  {order.materials.filter(m => m.name).map((mat, idx) => (
@@ -560,10 +609,11 @@ const ExportOrder = () => {
                    </div>
                  ))}
                </div>
-             </>
+             </div>
           )}
 
           {/* Colors Matrix */}
+          <div className="print-area-colors">
           <h3 className="section-title">Colors & Sizing Distribution <span>(颜色数量 & 码数)</span></h3>
           {activeColors.length > 0 ? (
             <table className="elegant-grid">
@@ -605,8 +655,10 @@ const ExportOrder = () => {
                No specific colors or sizes allocated yet. (没有特别指定的颜色/尺寸)
              </div>
           )}
+          </div>
 
           {/* Measurements Details */}
+          <div className="print-area-measurements">
           {order.groupedMeasurements && Object.keys(order.groupedMeasurements).length > 0 ? (
              Object.keys(order.groupedMeasurements).map((partName, pIdx) => (
                <React.Fragment key={pIdx}>
@@ -662,17 +714,18 @@ const ExportOrder = () => {
                </table>
              </>
           )}
+          </div>
 
           {/* Remarks */}
           {order.remarks && (
-             <div style={{ marginBottom: '2.5rem', background: '#fefcbf', padding: '1.5rem', borderRadius: '8px', border: '1px solid #fef08a' }}>
+             <div className="print-area-remarks" style={{ marginBottom: '2.5rem', background: '#fefcbf', padding: '1.5rem', borderRadius: '8px', border: '1px solid #fef08a' }}>
                <h4 style={{ margin: '0 0 0.5rem 0', color: '#854d0e', fontSize: '0.95rem', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: '800' }}>Order Remarks 订单备注</h4>
                <p style={{ margin: 0, color: '#422006', lineHeight: '1.6', whiteSpace: 'pre-wrap', fontSize: '1.05rem', fontWeight: '500' }}>{order.remarks}</p>
              </div>
           )}
 
           {/* Packaging Logistics */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', marginBottom: '1rem' }}>
+          <div className="print-area-logistics" style={{ display: printOrientation === 'landscape' ? 'flex' : 'grid', flexDirection: printOrientation === 'landscape' ? 'column' : 'row', gridTemplateColumns: '1fr 1fr', gap: '2rem', marginBottom: '1rem' }}>
              <div>
                <h3 className="section-title">Packaging Logistics <span>(纸箱数量&包装)</span></h3>
                <div className="doc-card">

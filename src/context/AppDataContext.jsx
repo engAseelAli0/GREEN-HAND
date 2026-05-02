@@ -8,6 +8,7 @@ const initialLookups = {
   products: [],
   currencies: [],
   fabrics: [],
+  materials: [],
   factories: [],
   colors: [],
   sizes: [],

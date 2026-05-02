@@ -1186,8 +1186,8 @@ const DataEntryWizard = () => {
                     <label className="form-label">المادة {num}</label>
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
                       <ClearableSelect className="form-control" value={currentOrder.materials?.[i]?.name || ''} onChange={(e) => handleMaterialChange(i, 'name', e.target.value)}>
-                        <option value="">اختر القماش...</option>
-                        {lookups.fabrics?.map((f, j) => <option key={j} value={f}>{f}</option>)}
+                        <option value="">اختر المادة...</option>
+                        {lookups.materials?.map((m, j) => <option key={j} value={m}>{m}</option>)}
                       </ClearableSelect>
                       <input 
                         type="text" 
@@ -1402,7 +1402,7 @@ const DataEntryWizard = () => {
                const partMeasurements = (lookups.measurements || []).filter(m => {
                   if (typeof m === 'object') {
                      // If measurement belongs to this part, or no part is defined
-                     return m.part === partName || !m.part; 
+                     return !m.part || m.part.split('،').map(p => p.trim()).includes(partName); 
                   }
                   return true;
                }).map(m => typeof m === 'object' ? m.name : m);

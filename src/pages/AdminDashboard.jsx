@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { useAppData } from '../context/AppDataContext';
-import { Plus, Trash2, Edit, Edit2, Check, X, ImagePlus, ShoppingBag, Banknote, Scissors, Palette, Factory, Ruler, Package, Box, ShoppingCart, Stamp, SlidersHorizontal, ListChecks, Search, Sparkles, GripVertical } from 'lucide-react';
+import { Plus, Trash2, Edit, Edit2, Check, X, ImagePlus, ShoppingBag, Banknote, Scissors, Palette, Factory, Ruler, Package, Box, ShoppingCart, Stamp, SlidersHorizontal, ListChecks, Search, Sparkles, GripVertical, Tag, Layers } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import toast from 'react-hot-toast';
 
@@ -24,10 +24,22 @@ const AdminDashboard = () => {
   const [dragOverIndex, setDragOverIndex] = useState(null);
   const tmImageRef = useRef(null);
 
+  const [assignModalOpen, setAssignModalOpen] = useState(false);
+  const [assignMeasurementIndex, setAssignMeasurementIndex] = useState(null);
+  const [assignSelectedParts, setAssignSelectedParts] = useState([]);
+
+  const allParts = Array.from(new Set(
+    (lookups.products || []).flatMap(p => {
+      if (typeof p === 'object' && p.parts && p.parts.length > 0) return p.parts;
+      return typeof p === 'object' ? p.name : p;
+    })
+  )).filter(Boolean);
+
   const tabs = [
     { id: 'products', name: 'المنتجات', icon: ShoppingBag },
     { id: 'currencies', name: 'العملات', icon: Banknote },
     { id: 'fabrics', name: 'الأقمشة', icon: Scissors },
+    { id: 'materials', name: 'مواد القماش', icon: Layers },
     { id: 'colors', name: 'الألوان', icon: Palette },
     { id: 'factories', name: 'المصانع (Factories)', icon: Factory },
     { id: 'sizes', name: 'المقاسات', icon: Ruler },
@@ -54,8 +66,8 @@ const AdminDashboard = () => {
     } else if (activeTab === 'measurements') {
       newItem = { name: newValue.trim(), part: newValuePartAssignment.trim() };
     } else if (activeTab === 'colors') {
-      if (!newValueAbbr.trim() || newValueAbbr.trim().length > 4) {
-         toast.error('الرجاء إدخال اختصار لون لا يزيد عن 4 أحرف (مثلاً WHT)');
+      if (!newValueAbbr.trim() || newValueAbbr.trim().length > 7) {
+         toast.error('الرجاء إدخال اختصار لون لا يزيد عن 7 أحرف (مثلاً WHT)');
          return;
       }
       newItem = { name: newValue.trim(), hex: newValueHex, abbr: newValueAbbr.trim().toUpperCase() };
@@ -704,20 +716,7 @@ const AdminDashboard = () => {
                 </>
               )}
 
-              {/* Measurements extra field */}
-              {activeTab === 'measurements' && (
-                <div style={styles.formField}>
-                  <label style={styles.formLabel}>يتبع لأي جزء؟</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="جاكيت؟ بنطلون؟..."
-                    value={newValuePartAssignment}
-                    onChange={(e) => setNewValuePartAssignment(e.target.value)}
-                    style={{ backgroundColor: 'var(--bg-color)' }}
-                  />
-                </div>
-              )}
+              {/* Measurements extra field removed, now handled via Assign Modal */}
 
               {/* Factories extra fields */}
               {activeTab === 'factories' && (
@@ -770,7 +769,7 @@ const AdminDashboard = () => {
                       value={newValueAbbr}
                       onChange={(e) => setNewValueAbbr(e.target.value.toUpperCase())}
                       style={{ backgroundColor: 'var(--bg-color)' }}
-                      maxLength={4}
+                      maxLength={7}
                     />
                   </div>
                 </>
@@ -973,6 +972,22 @@ const AdminDashboard = () => {
                   </div>
 
                   <div style={{ display: 'flex', gap: '0.25rem', flexShrink: 0 }}>
+                    {activeTab === 'measurements' && (
+                      <button
+                        onClick={() => {
+                          setAssignMeasurementIndex(realIndex);
+                          const currentParts = (typeof item === 'object' && item.part) ? item.part.split('،').map(p => p.trim()).filter(Boolean) : [];
+                          setAssignSelectedParts(currentParts);
+                          setAssignModalOpen(true);
+                        }}
+                        title="تحديد المنتجات"
+                        style={styles.actionBtn}
+                        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(139, 92, 246, 0.1)'; e.currentTarget.style.color = '#a78bfa'; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+                      >
+                        <Tag size={16} />
+                      </button>
+                    )}
                     <button
                       onClick={() => startEdit(realIndex, item)}
                       title="تعديل"
@@ -1022,6 +1037,98 @@ const AdminDashboard = () => {
           </div>
         </div>
       </div>
+
+      {/* ─── Assign Products/Parts Modal ─── */}
+      {assignModalOpen && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)'
+        }}>
+          <div style={{
+            background: 'var(--surface-color)', width: '90%', maxWidth: '400px', borderRadius: 'var(--radius-lg)',
+            border: '1px solid rgba(212, 175, 55, 0.3)', boxShadow: '0 10px 40px rgba(0,0,0,0.5)',
+            padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem',
+            animation: 'fadeIn 0.2s ease-out'
+          }}>
+            <h3 style={{ fontSize: '1.15rem', color: 'var(--primary-color)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Tag size={20} color="var(--accent-color)" />
+              تحديد المنتجات التابعة
+            </h3>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+              اختر منتجاً أو أكثر لربط المقاس ({assignMeasurementIndex !== null ? (typeof currentItems[assignMeasurementIndex] === 'object' ? currentItems[assignMeasurementIndex].name : currentItems[assignMeasurementIndex]) : ''}) بها.
+            </p>
+            
+            <div style={{
+              display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '300px', overflowY: 'auto',
+              background: 'rgba(0,0,0,0.2)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)'
+            }}>
+              {allParts.length === 0 ? (
+                <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textAlign: 'center' }}>لا توجد منتجات مضافة بعد</div>
+              ) : (
+                allParts.map((partName, idx) => {
+                  const isSelected = assignSelectedParts.includes(partName);
+                  return (
+                    <label key={idx} style={{
+                      display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer',
+                      padding: '0.5rem', borderRadius: '8px',
+                      background: isSelected ? 'rgba(212, 175, 55, 0.1)' : 'transparent',
+                      border: isSelected ? '1px solid rgba(212, 175, 55, 0.3)' : '1px solid transparent',
+                      transition: 'all 0.2s'
+                    }}
+                    onMouseEnter={e => { if(!isSelected) e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
+                    onMouseLeave={e => { if(!isSelected) e.currentTarget.style.background = 'transparent' }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setAssignSelectedParts([...assignSelectedParts, partName]);
+                          } else {
+                            setAssignSelectedParts(assignSelectedParts.filter(p => p !== partName));
+                          }
+                        }}
+                        style={{ accentColor: 'var(--accent-color)', width: '16px', height: '16px', cursor: 'pointer' }}
+                      />
+                      <span style={{ fontSize: '0.9rem', color: isSelected ? 'var(--accent-color)' : 'var(--text-main)', fontWeight: isSelected ? '600' : '400' }}>
+                        {partName}
+                      </span>
+                    </label>
+                  );
+                })
+              )}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
+              <button
+                className="btn btn-outline"
+                onClick={() => { setAssignModalOpen(false); setAssignMeasurementIndex(null); }}
+              >
+                إلغاء
+              </button>
+              <button
+                className="btn btn-accent"
+                onClick={() => {
+                  const currentList = [...(lookups.measurements || [])];
+                  const item = currentList[assignMeasurementIndex];
+                  const newItem = {
+                    name: typeof item === 'object' ? item.name : item,
+                    part: assignSelectedParts.join('، ')
+                  };
+                  currentList[assignMeasurementIndex] = newItem;
+                  updateLookup('measurements', currentList);
+                  setAssignModalOpen(false);
+                  setAssignMeasurementIndex(null);
+                  toast.success('تم ربط المقاس بالمنتجات بنجاح ✨');
+                }}
+              >
+                حفظ التحديد
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

@@ -3,6 +3,7 @@ import { useAppData } from '../context/AppDataContext';
 import { Plus, Trash2, Edit, Edit2, Check, X, ImagePlus, ShoppingBag, Banknote, Scissors, Palette, Factory, Ruler, Package, Box, ShoppingCart, Stamp, SlidersHorizontal, ListChecks, Search, Sparkles, GripVertical, Tag, Layers } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import toast from 'react-hot-toast';
+import { compressImage } from '../utils/imageUtils';
 
 const AdminDashboard = () => {
   const { lookups, updateLookup } = useAppData();
@@ -152,14 +153,15 @@ const AdminDashboard = () => {
   };
 
   const handleTradeMarkImageUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+    const originalFile = e.target.files[0];
+    if (!originalFile) return;
     if (!newValue.trim()) {
       toast.error('الرجاء كتابة اسم العلامة التجارية أولاً');
       return;
     }
     setUploadingTmImage(true);
     try {
+      const file = await compressImage(originalFile, 800, 0.75);
       const ext = file.name.split('.').pop();
       const safeId = Date.now().toString(36);
       const fileName = `tm_${safeId}.${ext}`;

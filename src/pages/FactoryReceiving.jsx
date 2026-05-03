@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAppData } from '../context/AppDataContext';
 import { supabase } from '../supabaseClient';
-import { Search, Save, PackageCheck, AlertCircle, Info, Box, Palette, Calculator, CheckCircle2, XCircle, Download, Printer } from 'lucide-react';
+import { Search, Save, PackageCheck, AlertCircle, Info, Box, Palette, Calculator, CheckCircle2, XCircle, Download, Printer, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 
@@ -11,6 +11,13 @@ const FactoryReceiving = () => {
   const [modelNo, setModelNo] = useState('');
   const [isFetched, setIsFetched] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
+  
+  // F9 Search States
+  const [showSerialsList, setShowSerialsList] = useState(false);
+  const [availableSerials, setAvailableSerials] = useState([]);
+  const [serialSearchQuery, setSerialSearchQuery] = useState('');
+  const [fetchingSerials, setFetchingSerials] = useState(false);
+  const serialSearchRef = React.useRef(null);
   
   // Header Info State
   const [productInfo, setProductInfo] = useState({
@@ -77,25 +84,27 @@ const FactoryReceiving = () => {
 
   // Colors validation removed as requested
 
-  const handleSearch = async () => {
-    if (!modelNo.trim()) return;
+  const handleSearch = async (overrideSerial) => {
+    const termToSearch = typeof overrideSerial === 'string' ? overrideSerial : modelNo;
+    if (!termToSearch.trim()) return;
+    setModelNo(termToSearch);
     setIsSearching(true);
     
     try {
       const { data: recData } = await supabase
         .from('receivings')
         .select('receive_data')
-        .eq('serial_number', modelNo.trim())
+        .eq('serial_number', termToSearch.trim())
         .single();
 
       const { data: oDataResp, error: oError } = await supabase
         .from('orders')
         .select('order_data')
-        .eq('serial_number', modelNo.trim())
+        .eq('serial_number', termToSearch.trim())
         .single();
         
       if (oError || !oDataResp) {
-         toast.error(`لم يتم العثور على طلبية برقم الموديل: ${modelNo}`);
+         toast.error(`لم يتم العثور على طلبية برقم الموديل: ${termToSearch}`);
          setIsSearching(false);
          setIsFetched(false);
          return;
@@ -154,7 +163,7 @@ const FactoryReceiving = () => {
       if (recData && recData.receive_data) {
          toast.success(`تم استرداد بيانات استلام سابقة مقيدة لهذا الموديل!`);
       } else {
-         toast.success(`تم استرداد بيانات الموديل: ${modelNo} بنجاح`);
+         toast.success(`تم استرداد بيانات الموديل: ${termToSearch} بنجاح`);
       }
 
     } catch (err) {
@@ -162,6 +171,37 @@ const FactoryReceiving = () => {
       console.error(err);
     } finally {
       setIsSearching(false);
+    }
+  };
+
+  const handleF9Press = async (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleSearch();
+    } else if (e.key === 'F9') {
+      e.preventDefault();
+      if (showSerialsList || fetchingSerials) return;
+      setFetchingSerials(true);
+      setShowSerialsList(true);
+      setSerialSearchQuery('');
+      try {
+        const { data, error } = await supabase
+          .from('orders')
+          .select('serial_number')
+          .order('created_at', { ascending: false })
+          .limit(2000);
+        if (data && !error) {
+           setAvailableSerials(data.map(d => d.serial_number));
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+         setFetchingSerials(false);
+         setTimeout(() => serialSearchRef.current?.focus(), 100);
+      }
+    } else if (e.key === 'Escape') {
+      setShowSerialsList(false);
+      setSerialSearchQuery('');
     }
   };
 
@@ -219,6 +259,22 @@ const FactoryReceiving = () => {
       const { error } = await supabase.from('receivings').upsert(payload);
       if (error) throw error;
       toast.success('تم اعتماد الاستلام وحفظ الكراتين بنجاح!', { id: toastId });
+      
+      // Reset form to allow entering a new model
+      setModelNo('');
+      setIsFetched(false);
+      setProductInfo({
+        mainBarcode: '', prodFullName: '', prodShortName: '', prodPrice: 0,
+        priceCurrency: '', reqCartons: '', reqTotalQuantity: 0, productStatus: '',
+        factoryId: '', factoryName: ''
+      });
+      setPackages(Array.from({ length: 4 }).map((_, i) => ({
+        id: `Package_${i + 1}`, kind: '', status: '', fromCtn: '', toCtn: '', pcsPerCtn: ''
+      })));
+      setColors(Array.from({ length: 9 }).map((_, i) => ({
+        id: `Colors_${i + 1}`, colorName: '', quantity: '', expected: 0
+      })));
+
     } catch (err) {
       toast.error(`خطأ في الحفظ! تأكد من إنشاء جدول receivings بدقة. ${err.message}`, { id: toastId });
     }
@@ -366,17 +422,123 @@ const FactoryReceiving = () => {
             <div style={{ position: 'relative' }}>
               <input
                 type="text"
+                id="fetchSerialInput"
                 className="form-control"
                 value={modelNo}
                 onChange={(e) => setModelNo(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                placeholder="أدخل رقم الموديل هنا... مثلاً: 22890"
+                onKeyDown={handleF9Press}
+                placeholder="أدخل رقم الموديل هنا... (F9)"
                 style={{ fontSize: '1.2rem', padding: '14px 20px', paddingLeft: '50px', background: 'var(--surface-color)' }}
+                autoComplete="off"
               />
               <Search size={22} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+              
+              {showSerialsList && (
+                <div style={{
+                  position: 'absolute', top: '100%', right: 0, marginTop: '4px',
+                  width: '100%', maxHeight: '250px', overflowY: 'auto',
+                  backgroundColor: 'var(--surface-color)',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: 'var(--radius-md)',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+                  zIndex: 1000
+                }}>
+                  <div style={{ padding: '0.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--surface-highlight)' }}>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>اختر موديلاً محفوظاً:</span>
+                      <button onClick={() => { setShowSerialsList(false); setSerialSearchQuery(''); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-color)', padding: 0, display: 'flex', alignItems: 'center' }}>
+                         <X size={16} />
+                      </button>
+                  </div>
+                  {/* Search Field */}
+                  <div style={{ padding: '0.5rem', borderBottom: '1px solid var(--border-color)', backgroundColor: 'var(--bg-color)' }}>
+                    <input
+                      ref={serialSearchRef}
+                      type="text"
+                      placeholder="🔍 ابحث برقم الموديل..."
+                      value={serialSearchQuery}
+                      onChange={(e) => setSerialSearchQuery(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Escape') {
+                          setShowSerialsList(false);
+                          setSerialSearchQuery('');
+                        }
+                        if (e.key === 'Enter') {
+                          const filtered = availableSerials.filter(s => s.toString().includes(serialSearchQuery));
+                          if (filtered.length > 0) {
+                            setShowSerialsList(false);
+                            setSerialSearchQuery('');
+                            handleSearch(filtered[0]);
+                          }
+                        }
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '0.5rem 0.75rem',
+                        fontSize: '0.9rem',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: 'var(--radius-sm, 6px)',
+                        backgroundColor: 'var(--surface-color)',
+                        color: 'var(--text-color)',
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                        direction: 'rtl',
+                        transition: 'border-color 0.2s'
+                      }}
+                      onFocus={(e) => e.currentTarget.style.borderColor = 'var(--accent-color)'}
+                      onBlur={(e) => e.currentTarget.style.borderColor = 'var(--border-color)'}
+                      autoComplete="off"
+                    />
+                  </div>
+                  {fetchingSerials ? (
+                      <div style={{ padding: '1rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)' }}>جاري التحميل...</div>
+                  ) : (
+                     (() => {
+                       const filteredSerials = serialSearchQuery.trim()
+                         ? availableSerials.filter(s => s.toString().includes(serialSearchQuery.trim()))
+                         : availableSerials;
+                       return filteredSerials.length === 0 ? (
+                         <div style={{ padding: '1rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                           {availableSerials.length === 0 ? 'لا توجد موديلات محفوظة' : 'لا توجد نتائج مطابقة للبحث'}
+                         </div>
+                       ) : (
+                        <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                            {filteredSerials.map(serial => {
+                                const query = serialSearchQuery.trim();
+                                const serialStr = serial.toString();
+                                const matchIdx = query ? serialStr.indexOf(query) : -1;
+                                return (
+                                <li 
+                                    key={serial} 
+                                    onClick={() => {
+                                        setShowSerialsList(false);
+                                        setSerialSearchQuery('');
+                                        handleSearch(serial);
+                                    }}
+                                    style={{ padding: '0.6rem 1rem', cursor: 'pointer', borderBottom: '1px solid var(--border-color)', transition: 'background-color 0.2s', fontSize: '0.9rem', color: 'var(--text-color)' }}
+                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--surface-highlight)'}
+                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                >
+                                    {matchIdx !== -1 ? (
+                                      <strong>
+                                        {serialStr.substring(0, matchIdx)}
+                                        <span style={{ color: 'var(--accent-color)', textDecoration: 'underline' }}>{serialStr.substring(matchIdx, matchIdx + query.length)}</span>
+                                        {serialStr.substring(matchIdx + query.length)}
+                                      </strong>
+                                    ) : (
+                                      <strong>{serialStr}</strong>
+                                    )}
+                                </li>
+                                );
+                            })}
+                        </ul>
+                       );
+                     })()
+                  )}
+                </div>
+              )}
             </div>
           </div>
-          <button className="btn btn-primary" onClick={handleSearch} disabled={isSearching} style={{ padding: '14px 30px', fontSize: '1.1rem' }}>
+          <button className="btn btn-primary" onClick={() => handleSearch()} disabled={isSearching} style={{ padding: '14px 30px', fontSize: '1.1rem' }}>
             {isSearching ? <div className="spinner" style={{ width: '22px', height: '22px', border: '3px solid #fff', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} /> : 'بحث واسترداد'}
           </button>
         </div>

@@ -3,6 +3,7 @@ import { useAppData, defaultOrderState } from '../context/AppDataContext';
 import { Save, RefreshCw, Hash, Calendar, Box, Scissors, Palette, LayoutGrid, ChevronRight, ChevronLeft, MessageSquare, CheckSquare, Square, Ruler, Camera, X, ImagePlus, Edit3, Copy, Trash2, Layers, PanelTop } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import toast from 'react-hot-toast';
+import { compressImage } from '../utils/imageUtils';
 
 const TABS = [
   { id: 'buyer', label: 'المشتري والمنتج', icon: Hash, num: 1 },
@@ -80,12 +81,12 @@ const CustomDateInput = ({ label, value, onChange, min }) => {
   );
 };
 
-const ClearableSelect = ({ value, onChange, children, className = "form-control", style }) => (
+const ClearableSelect = ({ value, onChange, children, className = "form-control", style, disabled }) => (
   <div style={{ position: 'relative', width: '100%', ...style }}>
-    <select className={className} value={value || ''} onChange={onChange}>
+    <select className={className} value={value || ''} onChange={onChange} disabled={disabled}>
       {children}
     </select>
-    {value && (
+    {value && !disabled && (
       <button 
         type="button"
         onMouseDown={(e) => {
@@ -246,8 +247,8 @@ const DataEntryWizard = () => {
 
   // ─── Image Upload Handlers ───
   const handleImageUpload = async (e) => {
-    const files = Array.from(e.target.files);
-    if (!files.length) return;
+    const originalFiles = Array.from(e.target.files);
+    if (!originalFiles.length) return;
 
     const modelNum = currentOrder.serialNumber?.trim();
     if (!modelNum) {
@@ -256,12 +257,12 @@ const DataEntryWizard = () => {
     }
 
     setUploadingImage(true);
-    const toastId = toast.loading('جاري رفع الصور...');
+    const toastId = toast.loading('جاري ضغط ورفع الصور...');
 
     try {
       const newImages = [];
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
+      for (let i = 0; i < originalFiles.length; i++) {
+        const file = await compressImage(originalFiles[i], 1200, 0.75);
         const ext = file.name.split('.').pop();
         const currentCount = productImages.length + newImages.length;
         const fileName = currentCount === 0 ? `${modelNum}.${ext}` : `${modelNum}#${currentCount}.${ext}`;
@@ -361,6 +362,35 @@ const DataEntryWizard = () => {
     }
   }, [currentOrder.productName, currentOrder.serialNumber, lookups.products]);
 
+  // Auto-calculate Carton Quantity
+  useEffect(() => {
+    const totalQty = parseInt(currentOrder.totalQuantity) || 0;
+    const packageVal = currentOrder.cartonPackage || '';
+    const packageQty = parseInt(packageVal.replace(/[^0-9]/g, '')) || 0;
+    
+    if (totalQty > 0 && packageQty > 0) {
+      // Prevent packageQty from being larger than totalQty
+      if (packageQty > totalQty) {
+        toast.error(`عفواً، لا يمكن أن تكون تعبئة الكرتون (${packageQty}) أكبر من الكمية الإجمالية (${totalQty}).`, { id: 'carton-error' });
+        // Clear the invalid selections
+        updateOrder('cartonPackage', '');
+        updateOrder('cartonQty', '');
+        return;
+      }
+
+      const cartons = parseFloat((totalQty / packageQty).toFixed(2));
+      const resultText = `${cartons} كرتون × ${packageQty} قطعة`;
+      
+      if (currentOrder.cartonQty !== resultText) {
+        updateOrder('cartonQty', resultText);
+      }
+    } else if ((!totalQty || !packageQty) && currentOrder.cartonQty) {
+      // Auto clear if prerequisites are missing
+      if (currentOrder.cartonQty.includes('كرتون')) {
+         updateOrder('cartonQty', '');
+      }
+    }
+  }, [currentOrder.totalQuantity, currentOrder.cartonPackage, currentOrder.cartonQty, updateOrder]);
 
   const handleSerialChange = async (val) => {
     updateOrder('serialNumber', val);
@@ -422,6 +452,7 @@ const DataEntryWizard = () => {
     setIsEditMode(false);
     setOriginalSerial('');
     switchTab('buyer');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   // Save as NEW order
@@ -592,6 +623,7 @@ const DataEntryWizard = () => {
       handleFetch();
     } else if (e.key === 'F9') {
       e.preventDefault();
+      if (showSerialsList || fetchingSerials) return;
       setFetchingSerials(true);
       setShowSerialsList(true);
       setSerialSearchQuery('');
@@ -599,7 +631,8 @@ const DataEntryWizard = () => {
         const { data, error } = await supabase
           .from('orders')
           .select('serial_number')
-          .order('created_at', { ascending: false });
+          .order('created_at', { ascending: false })
+          .limit(2000);
         if (data && !error) {
            setAvailableSerials(data.map(d => d.serial_number));
         }
@@ -661,18 +694,24 @@ const DataEntryWizard = () => {
     setIsEditMode(false);
     setOriginalSerial('');
     setSerialStatus('available');
+    switchTab('buyer');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     toast('تم تصفير وإلغاء جميع الحقول بنجاح', { icon: '🧹' });
   };
 
   const handleColorChange = (color, size, qty) => {
     const dist = { ...(currentOrder.colorDistribution || {}) };
-    if (!dist[color]) dist[color] = {};
+    if (dist[color]) {
+      dist[color] = { ...dist[color] };
+    } else {
+      dist[color] = {};
+    }
     dist[color][size] = qty;
     updateOrder('colorDistribution', dist);
   };
 
   const handleMaterialChange = (index, field, value) => {
-    const newMaterials = [...(currentOrder.materials || [])];
+    const newMaterials = (currentOrder.materials || []).map(m => ({ ...m }));
     // Ensure the array has enough slots
     while (newMaterials.length <= index) {
       newMaterials.push({ name: '', percentage: '' });
@@ -703,8 +742,16 @@ const DataEntryWizard = () => {
 
   const handleMeasurementChange = (part, mName, size, value) => {
     const grouped = { ...(currentOrder.groupedMeasurements || {}) };
-    if (!grouped[part]) grouped[part] = {};
-    if (!grouped[part][mName]) grouped[part][mName] = {};
+    if (grouped[part]) {
+       grouped[part] = { ...grouped[part] };
+    } else {
+       grouped[part] = {};
+    }
+    if (grouped[part][mName]) {
+       grouped[part][mName] = { ...grouped[part][mName] };
+    } else {
+       grouped[part][mName] = {};
+    }
     grouped[part][mName][size] = value;
     updateOrder('groupedMeasurements', grouped);
   };
@@ -1181,29 +1228,62 @@ const DataEntryWizard = () => {
                 })()}
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem' }}>
-                {[1, 2, 3].map((num, i) => (
-                  <div className="form-group" key={i}>
-                    <label className="form-label">المادة {num}</label>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <ClearableSelect className="form-control" value={currentOrder.materials?.[i]?.name || ''} onChange={(e) => handleMaterialChange(i, 'name', e.target.value)}>
-                        <option value="">اختر المادة...</option>
-                        {lookups.materials?.map((m, j) => <option key={j} value={m}>{m}</option>)}
-                      </ClearableSelect>
-                      <input 
-                        type="text" 
-                        inputMode="numeric"
-                        className="form-control no-spinner" 
-                        placeholder="%" 
-                        style={{ width: '85px', fontWeight: 'bold', fontSize: '1.2rem', borderColor: 'var(--accent-color)' }} 
-                        value={currentOrder.materials?.[i]?.percentage || ''} 
-                        onChange={(e) => {
-                          const val = e.target.value.replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[^0-9]/g, '');
-                          handleMaterialChange(i, 'percentage', val);
-                        }} 
-                      />
+                {[1, 2, 3].map((num, i) => {
+                  const currentTotal = (currentOrder.materials || []).reduce((sum, m) => sum + (parseFloat(m.percentage) || 0), 0);
+                  const isFilled = currentOrder.materials?.[i]?.name || currentOrder.materials?.[i]?.percentage;
+                  const isLocked = currentTotal >= 100 && !isFilled;
+
+                  return (
+                    <div className="form-group" key={i}>
+                      <label className="form-label">المادة {num}</label>
+                      <div 
+                        style={{ display: 'flex', gap: '0.5rem' }}
+                        onClickCapture={(e) => {
+                          if (isLocked) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            toast.error('لا يوجد نسبة متبقية! مجموع المواد السابقة وصل إلى 100%');
+                          }
+                        }}
+                      >
+                        <ClearableSelect 
+                          className="form-control" 
+                          value={currentOrder.materials?.[i]?.name || ''} 
+                          onChange={(e) => {
+                             if (!isLocked) handleMaterialChange(i, 'name', e.target.value);
+                          }}
+                          disabled={isLocked}
+                          style={{ opacity: isLocked ? 0.5 : 1, cursor: isLocked ? 'not-allowed' : 'auto' }}
+                        >
+                          <option value="">اختر المادة...</option>
+                          {lookups.materials?.map((m, j) => <option key={j} value={m}>{m}</option>)}
+                        </ClearableSelect>
+                        <input 
+                          type="text" 
+                          inputMode="numeric"
+                          className="form-control no-spinner" 
+                          placeholder="%" 
+                          style={{ 
+                            width: '85px', 
+                            fontWeight: 'bold', 
+                            fontSize: '1.2rem', 
+                            borderColor: 'var(--accent-color)',
+                            opacity: isLocked ? 0.5 : 1,
+                            cursor: isLocked ? 'not-allowed' : 'auto',
+                            backgroundColor: isLocked ? 'var(--bg-color)' : ''
+                          }} 
+                          value={currentOrder.materials?.[i]?.percentage || ''} 
+                          readOnly={isLocked}
+                          onChange={(e) => {
+                            if (isLocked) return;
+                            const val = e.target.value.replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[^0-9]/g, '');
+                            handleMaterialChange(i, 'percentage', val);
+                          }} 
+                        />
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -1251,7 +1331,14 @@ const DataEntryWizard = () => {
                 </div>
                 <div className="form-group">
                   <label className="form-label">كمية الكرتون (Pcs)</label>
-                  <input type="number" className="form-control" value={currentOrder.cartonQty || ''} onChange={(e) => updateOrder('cartonQty', e.target.value)} />
+                  <input 
+                    type="text" 
+                    className="form-control" 
+                    value={currentOrder.cartonQty || ''} 
+                    readOnly 
+                    style={{ backgroundColor: 'var(--surface-highlight)', color: 'var(--accent-color)', fontWeight: 'bold' }} 
+                    placeholder="تُحسب تلقائياً..." 
+                  />
                 </div>
                 <div className="form-group">
                   <label className="form-label">حجم الكرتون</label>
@@ -1392,19 +1479,32 @@ const DataEntryWizard = () => {
         );
 
       case 'measurements': {
+        if (!currentOrder.productName) {
+           return (
+             <div className="tab-panel fade-in" key={tabKey}>
+               <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-muted)', backgroundColor: 'var(--surface-color)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+                 <Ruler size={48} color="var(--accent-color)" style={{ marginBottom: '1rem', opacity: 0.5 }} />
+                 <h3 style={{ margin: '0 0 0.5rem 0', color: 'var(--text-main)' }}>لم يتم تحديد منتج</h3>
+                 <p style={{ margin: 0 }}>الرجاء اختيار "اسم المنتج" من قسم البيانات الأساسية أولاً لعرض المقاسات التفصيلية الخاصة به.</p>
+               </div>
+             </div>
+           );
+        }
+
         const productObj = lookups.products?.find(p => (typeof p === 'object' ? p.name : p) === currentOrder.productName);
         const partsList = (productObj && productObj.parts && productObj.parts.length > 0) 
-            ? productObj.parts : [currentOrder.productName || 'القطعة الأساسية'];
+            ? productObj.parts : [currentOrder.productName];
         
         return (
           <div className="tab-panel" key={tabKey}>
              {partsList.map((partName, pIdx) => {
                const partMeasurements = (lookups.measurements || []).filter(m => {
-                  if (typeof m === 'object') {
-                     // If measurement belongs to this part, or no part is defined
-                     return !m.part || m.part.split('،').map(p => p.trim()).includes(partName); 
+                  if (typeof m === 'object' && m.part) {
+                     // Strictly match assigned parts
+                     return m.part.split('،').map(p => p.trim()).includes(partName.trim()); 
                   }
-                  return true;
+                  // Hide all legacy unassigned or string measurements
+                  return false;
                }).map(m => typeof m === 'object' ? m.name : m);
 
                return (

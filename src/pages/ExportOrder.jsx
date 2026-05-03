@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { supabase } from '../supabaseClient';
 import toast from 'react-hot-toast';
-import { Search, Printer, FileText, CheckCircle2, DownloadCloud, RectangleVertical, RectangleHorizontal } from 'lucide-react';
+import { Search, Printer, FileText, CheckCircle2, DownloadCloud, RectangleVertical, RectangleHorizontal, X } from 'lucide-react';
 import { useAppData } from '../context/AppDataContext';
 
 const ExportOrder = () => {
@@ -9,6 +9,13 @@ const ExportOrder = () => {
   const [order, setOrder] = useState(null);
   const [printOrientation, setPrintOrientation] = useState('portrait');
   const { lookups } = useAppData();
+  
+  // F9 Search States
+  const [showSerialsList, setShowSerialsList] = useState(false);
+  const [availableSerials, setAvailableSerials] = useState([]);
+  const [serialSearchQuery, setSerialSearchQuery] = useState('');
+  const [fetchingSerials, setFetchingSerials] = useState(false);
+  const serialSearchRef = React.useRef(null);
   
   const formatDate = (dateStr) => {
     if (!dateStr) return '-';
@@ -21,17 +28,19 @@ const ExportOrder = () => {
     return dateStr;
   };
 
-  const handleFetch = async () => {
-    if (!searchTerm.trim()) {
+  const handleFetch = async (overrideSerial) => {
+    const termToSearch = typeof overrideSerial === 'string' ? overrideSerial : searchTerm;
+    if (!termToSearch.trim()) {
       toast.error('أدخل رقم الطلبية أو الموديل أولاً');
       return;
     }
+    setSearchTerm(termToSearch);
     const toastId = toast.loading('جاري البحث في السحابة...');
     try {
       const { data, error } = await supabase
         .from('orders')
         .select('*')
-        .eq('serial_number', searchTerm.trim())
+        .eq('serial_number', termToSearch.trim())
         .single();
 
       if (error || !data) {
@@ -43,6 +52,37 @@ const ExportOrder = () => {
       }
     } catch (err) {
       toast.error('خطأ في الاتصال!', { id: toastId });
+    }
+  };
+
+  const handleF9Press = async (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleFetch();
+    } else if (e.key === 'F9') {
+      e.preventDefault();
+      if (showSerialsList || fetchingSerials) return;
+      setFetchingSerials(true);
+      setShowSerialsList(true);
+      setSerialSearchQuery('');
+      try {
+        const { data, error } = await supabase
+          .from('orders')
+          .select('serial_number')
+          .order('created_at', { ascending: false })
+          .limit(2000);
+        if (data && !error) {
+           setAvailableSerials(data.map(d => d.serial_number));
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+         setFetchingSerials(false);
+         setTimeout(() => serialSearchRef.current?.focus(), 100);
+      }
+    } else if (e.key === 'Escape') {
+      setShowSerialsList(false);
+      setSerialSearchQuery('');
     }
   };
 
@@ -394,18 +434,124 @@ const ExportOrder = () => {
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end', flex: 1 }}>
           <div className="form-group" style={{ marginBottom: 0, flex: 1, maxWidth: '300px' }}>
             <label className="form-label">رقم الموديل للاسترداد والطباعة (Model No)</label>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <div style={{ display: 'flex', gap: '0.5rem', position: 'relative' }}>
               <input 
                 type="text" 
+                id="fetchSerialInput"
                 className="form-control" 
-                placeholder="أدخل الرقم..." 
+                placeholder="أدخل الرقم... (F9)" 
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleFetch()}
+                onKeyDown={handleF9Press}
+                autoComplete="off"
               />
-              <button className="btn btn-primary" onClick={handleFetch}>
+              <button className="btn btn-primary" onClick={() => handleFetch()}>
                 <Search size={20} /> جلب
               </button>
+              
+              {showSerialsList && (
+                <div style={{
+                  position: 'absolute', top: '100%', right: 0, marginTop: '4px',
+                  width: '200px', maxHeight: '250px', overflowY: 'auto',
+                  backgroundColor: 'var(--surface-color)',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: 'var(--radius-md)',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+                  zIndex: 1000
+                }}>
+                  <div style={{ padding: '0.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--surface-highlight)' }}>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>اختر موديلاً محفوظاً:</span>
+                      <button onClick={() => { setShowSerialsList(false); setSerialSearchQuery(''); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-color)', padding: 0, display: 'flex', alignItems: 'center' }}>
+                         <X size={16} />
+                      </button>
+                  </div>
+                  {/* Search Field */}
+                  <div style={{ padding: '0.5rem', borderBottom: '1px solid var(--border-color)', backgroundColor: 'var(--bg-color)' }}>
+                    <input
+                      ref={serialSearchRef}
+                      type="text"
+                      placeholder="🔍 ابحث برقم الموديل..."
+                      value={serialSearchQuery}
+                      onChange={(e) => setSerialSearchQuery(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Escape') {
+                          setShowSerialsList(false);
+                          setSerialSearchQuery('');
+                        }
+                        if (e.key === 'Enter') {
+                          const filtered = availableSerials.filter(s => s.toString().includes(serialSearchQuery));
+                          if (filtered.length > 0) {
+                            setShowSerialsList(false);
+                            setSerialSearchQuery('');
+                            handleFetch(filtered[0]);
+                          }
+                        }
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '0.5rem 0.75rem',
+                        fontSize: '0.9rem',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: 'var(--radius-sm, 6px)',
+                        backgroundColor: 'var(--surface-color)',
+                        color: 'var(--text-color)',
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                        direction: 'rtl',
+                        transition: 'border-color 0.2s'
+                      }}
+                      onFocus={(e) => e.currentTarget.style.borderColor = 'var(--accent-color)'}
+                      onBlur={(e) => e.currentTarget.style.borderColor = 'var(--border-color)'}
+                      autoComplete="off"
+                    />
+                  </div>
+                  {fetchingSerials ? (
+                      <div style={{ padding: '1rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)' }}>جاري التحميل...</div>
+                  ) : (
+                     (() => {
+                       const filteredSerials = serialSearchQuery.trim()
+                         ? availableSerials.filter(s => s.toString().includes(serialSearchQuery.trim()))
+                         : availableSerials;
+                       return filteredSerials.length === 0 ? (
+                         <div style={{ padding: '1rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                           {availableSerials.length === 0 ? 'لا توجد موديلات محفوظة' : 'لا توجد نتائج مطابقة للبحث'}
+                         </div>
+                       ) : (
+                        <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                            {filteredSerials.map(serial => {
+                                const query = serialSearchQuery.trim();
+                                const serialStr = serial.toString();
+                                const matchIdx = query ? serialStr.indexOf(query) : -1;
+                                return (
+                                <li 
+                                    key={serial} 
+                                    onClick={() => {
+                                        setShowSerialsList(false);
+                                        setSerialSearchQuery('');
+                                        handleFetch(serial);
+                                    }}
+                                    style={{ padding: '0.6rem 1rem', cursor: 'pointer', borderBottom: '1px solid var(--border-color)', transition: 'background-color 0.2s', fontSize: '0.9rem', color: 'var(--text-color)' }}
+                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--surface-highlight)'}
+                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                >
+                                    {matchIdx !== -1 ? (
+                                      <strong>
+                                        {serialStr.substring(0, matchIdx)}
+                                        <span style={{ color: 'var(--accent-color)', textDecoration: 'underline' }}>{serialStr.substring(matchIdx, matchIdx + query.length)}</span>
+                                        {serialStr.substring(matchIdx + query.length)}
+                                      </strong>
+                                    ) : (
+                                      <strong>{serialStr}</strong>
+                                    )}
+                                </li>
+                                );
+                            })}
+                        </ul>
+                       );
+                     })()
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>

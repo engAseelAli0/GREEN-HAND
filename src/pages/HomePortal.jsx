@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Edit3, Printer, Settings, Hexagon, Truck, Barcode } from 'lucide-react';
+import { Edit3, Printer, Settings, Hexagon, Truck, Barcode, Factory, FileSpreadsheet, Package } from 'lucide-react';
 
 const HomePortal = () => {
   return (
@@ -167,6 +167,17 @@ const HomePortal = () => {
           </p>
         </Link>
 
+        {/* Capsule 4.5: Factory Portal */}
+        <Link to="/factory-portal" className="capsule-card">
+          <div className="icon-ring" style={{ color: '#d4af37', borderColor: 'rgba(212, 175, 55, 0.3)' }}>
+            <Factory size={40} />
+          </div>
+          <h2 className="capsule-title">بوابة المصنع</h2>
+          <p className="capsule-desc">
+            واجهة صاحب المصنع. تسجيل الكميات المصنعة فعلياً وتغيير حالة التسليم للموديلات الجاهزة.
+          </p>
+        </Link>
+
         {/* Capsule 5: Batch Barcodes */}
         <Link to="/barcodes" className="capsule-card">
           <div className="icon-ring" style={{ color: '#fb923c', borderColor: 'rgba(251, 146, 60, 0.3)' }}>
@@ -186,6 +197,28 @@ const HomePortal = () => {
           <h2 className="capsule-title">التقارير والإحصائيات</h2>
           <p className="capsule-desc">
             بوابة الفلترة المتقدمة. استخراج تقارير شاملة ومحددة بالمصنع، رقم الموديل، أو التاريخ مع إمكانية التصدير لاكسل و PDF.
+          </p>
+        </Link>
+
+        {/* Capsule 7: Shipping Invoice */}
+        <Link to="/shipping-invoice" className="capsule-card">
+          <div className="icon-ring" style={{ color: '#06b6d4', borderColor: 'rgba(6, 182, 212, 0.3)' }}>
+            <FileSpreadsheet size={40} />
+          </div>
+          <h2 className="capsule-title">فاتورة الشحن والتقارير المجمعة</h2>
+          <p className="capsule-desc">
+            إنشاء فواتير شحن وتقارير مجمعة مرنة ومخصصة للطباعة والتصدير.
+          </p>
+        </Link>
+
+        {/* Capsule 8: Packing List */}
+        <Link to="/packing-list" className="capsule-card">
+          <div className="icon-ring" style={{ color: '#10b981', borderColor: 'rgba(16, 185, 129, 0.3)' }}>
+            <Package size={40} />
+          </div>
+          <h2 className="capsule-title">بوليصة التعبئة (Packing List)</h2>
+          <p className="capsule-desc">
+            كشف تعبئة البضائع للجمارك مع إمكانية دمج عدة موديلات في كرتون واحد ومطابقتها للتصدير.
           </p>
         </Link>
 

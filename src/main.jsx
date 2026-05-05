@@ -7,8 +7,11 @@ import DataEntryWizard from './pages/DataEntryWizard'
 import AdminDashboard from './pages/AdminDashboard'
 import ExportOrder from './pages/ExportOrder'
 import FactoryReceiving from './pages/FactoryReceiving'
+import FactoryOwnerPortal from './pages/FactoryOwnerPortal'
 import PrintBarcodes from './pages/PrintBarcodes'
 import ReportsPortal from './pages/ReportsPortal'
+import ShippingInvoice from './pages/ShippingInvoice'
+import PackingList from './pages/PackingList'
 import { AppDataProvider } from './context/AppDataContext'
 import './index.css'
 
@@ -38,8 +41,11 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             <Route path="admin" element={<AdminDashboard />} />
             <Route path="export" element={<ExportOrder />} />
             <Route path="receiving" element={<FactoryReceiving />} />
+            <Route path="factory-portal" element={<FactoryOwnerPortal />} />
             <Route path="barcodes" element={<PrintBarcodes />} />
             <Route path="reports" element={<ReportsPortal />} />
+            <Route path="shipping-invoice" element={<ShippingInvoice />} />
+            <Route path="packing-list" element={<PackingList />} />
           </Route>
         </Routes>
       </BrowserRouter>

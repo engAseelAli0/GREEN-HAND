@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { useAppData } from '../context/AppDataContext';
-import { Plus, Trash2, Edit, Edit2, Check, X, ImagePlus, ShoppingBag, Banknote, Scissors, Palette, Factory, Ruler, Package, Box, ShoppingCart, Stamp, SlidersHorizontal, ListChecks, Search, Sparkles, GripVertical, Tag, Layers } from 'lucide-react';
+import { Plus, Trash2, Edit, Edit2, Check, X, ImagePlus, ShoppingBag, Banknote, Scissors, Palette, Factory, Ruler, Package, Box, ShoppingCart, Stamp, SlidersHorizontal, ListChecks, Search, Sparkles, GripVertical, Tag, Layers, Puzzle, ChevronDown } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import toast from 'react-hot-toast';
 import { compressImage } from '../utils/imageUtils';
@@ -23,21 +23,22 @@ const AdminDashboard = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [dragIndex, setDragIndex] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
+  const [showPartsDropdown, setShowPartsDropdown] = useState(false);
+  const [selectedPartsArr, setSelectedPartsArr] = useState([]);
+  const [showProductsDropdown, setShowProductsDropdown] = useState(false);
+  const [selectedProductsArr, setSelectedProductsArr] = useState([]);
   const tmImageRef = useRef(null);
+  const formCardRef = useRef(null);
 
   const [assignModalOpen, setAssignModalOpen] = useState(false);
   const [assignMeasurementIndex, setAssignMeasurementIndex] = useState(null);
   const [assignSelectedParts, setAssignSelectedParts] = useState([]);
 
-  const allParts = Array.from(new Set(
-    (lookups.products || []).flatMap(p => {
-      if (typeof p === 'object' && p.parts && p.parts.length > 0) return p.parts;
-      return typeof p === 'object' ? p.name : p;
-    })
-  )).filter(Boolean);
+  const allParts = (lookups.componentParts || []).map(p => typeof p === 'object' ? p.name : p).filter(Boolean);
 
   const tabs = [
     { id: 'products', name: 'المنتجات', icon: ShoppingBag },
+    { id: 'componentParts', name: 'القطع المكونة', icon: Puzzle },
     { id: 'currencies', name: 'العملات', icon: Banknote },
     { id: 'fabrics', name: 'الأقمشة', icon: Scissors },
     { id: 'materials', name: 'مواد القماش', icon: Layers },
@@ -62,10 +63,10 @@ const AdminDashboard = () => {
     
     let newItem = newValue.trim();
     if (activeTab === 'products') {
-      const partsArr = newValueParts.trim() ? newValueParts.split(',').map(p => p.trim()).filter(Boolean) : [newValue.trim()];
+      const partsArr = selectedPartsArr.length > 0 ? [...selectedPartsArr] : [newValue.trim()];
       newItem = { name: newValue.trim(), codePrefix: newValuePrefix.trim(), parts: partsArr };
     } else if (activeTab === 'measurements') {
-      newItem = { name: newValue.trim(), part: newValuePartAssignment.trim() };
+      newItem = { name: newValue.trim(), part: selectedProductsArr.length > 0 ? selectedProductsArr.join('، ') : newValuePartAssignment.trim() };
     } else if (activeTab === 'colors') {
       if (!newValueAbbr.trim() || newValueAbbr.trim().length > 7) {
          toast.error('الرجاء إدخال اختصار لون لا يزيد عن 7 أحرف (مثلاً WHT)');
@@ -110,6 +111,10 @@ const AdminDashboard = () => {
     setNewValueAbbr('');
     setTradeMarkImage(null);
     setTradeMarkImageUrl('');
+    setSelectedPartsArr([]);
+    setSelectedProductsArr([]);
+    setShowPartsDropdown(false);
+    setShowProductsDropdown(false);
   };
 
   const startEdit = (index, item) => {
@@ -122,9 +127,11 @@ const AdminDashboard = () => {
       setNewValue(typeof item === 'object' ? item.name : item);
       setNewValuePrefix(typeof item === 'object' ? (item.codePrefix || '') : '');
       setNewValueParts(typeof item === 'object' && Array.isArray(item.parts) ? item.parts.join('، ') : '');
+      setSelectedPartsArr(typeof item === 'object' && Array.isArray(item.parts) ? [...item.parts] : []);
     } else if (activeTab === 'measurements') {
       setNewValue(typeof item === 'object' ? item.name : item);
       setNewValuePartAssignment(typeof item === 'object' ? (item.part || '') : '');
+      setSelectedProductsArr(typeof item === 'object' && item.part ? item.part.split('، ').map(p => p.trim()).filter(Boolean) : []);
     } else if (activeTab === 'factories') {
       setNewValue(item.name || item);
       setNewValueMobile(item.mobile || '');
@@ -136,6 +143,10 @@ const AdminDashboard = () => {
       setNewValue(typeof item === 'object' ? item.name : item);
     }
     toast('وضع التعديل قيد التفعيل...', { icon: '🛠️' });
+    // Auto-scroll to the form
+    setTimeout(() => {
+      formCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 50);
   };
 
   const cancelEdit = () => {
@@ -150,6 +161,10 @@ const AdminDashboard = () => {
     setNewValueAbbr('');
     setTradeMarkImage(null);
     setTradeMarkImageUrl('');
+    setSelectedPartsArr([]);
+    setSelectedProductsArr([]);
+    setShowPartsDropdown(false);
+    setShowProductsDropdown(false);
   };
 
   const handleTradeMarkImageUpload = async (e) => {
@@ -626,7 +641,7 @@ const AdminDashboard = () => {
             return (
               <button
                 key={tab.id}
-                onClick={() => { setActiveTab(tab.id); cancelEdit(); setSearchQuery(''); }}
+                onClick={() => { setActiveTab(tab.id); cancelEdit(); setSearchQuery(''); setShowPartsDropdown(false); setShowProductsDropdown(false); }}
                 style={styles.tabBtn(isActive)}
                 onMouseEnter={e => {
                   if (!isActive) {
@@ -664,7 +679,7 @@ const AdminDashboard = () => {
           </div>
 
           {/* ─── Add / Edit Form ─── */}
-          <div style={styles.formCard}>
+          <div ref={formCardRef} style={styles.formCard}>
             <div style={styles.formTitle}>
               {editIndex !== null ? (
                 <><Edit2 size={16} /> تعديل عنصر موجود</>
@@ -704,21 +719,198 @@ const AdminDashboard = () => {
                       style={{ backgroundColor: 'var(--bg-color)' }}
                     />
                   </div>
-                  <div style={styles.formField}>
-                    <label style={styles.formLabel}>القطع المكونة</label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      placeholder="جاكيت، بنطلون..."
-                      value={newValueParts}
-                      onChange={(e) => setNewValueParts(e.target.value)}
-                      style={{ backgroundColor: 'var(--bg-color)' }}
-                    />
+                  <div style={{ ...styles.formField, gridColumn: '1 / -1' }}>
+                    <label style={styles.formLabel}>القطع المكونة (من قسم القطع المكونة)</label>
+                    <div style={{ position: 'relative' }}>
+                      <button
+                        type="button"
+                        onClick={() => setShowPartsDropdown(prev => !prev)}
+                        className="form-control"
+                        style={{
+                          cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                          textAlign: 'right', width: '100%', padding: '0.5rem 0.75rem',
+                          border: showPartsDropdown ? '2px solid var(--accent-color)' : '1px solid var(--border-color)',
+                          borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--bg-color)',
+                          color: selectedPartsArr.length > 0 ? 'var(--text-main)' : 'var(--text-muted)',
+                          transition: 'border-color 0.2s'
+                        }}
+                      >
+                        <span>{selectedPartsArr.length > 0 ? selectedPartsArr.join(' + ') : '— اختر القطع المكونة —'}</span>
+                        <ChevronDown size={15} style={{ transform: showPartsDropdown ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s', opacity: 0.6 }} />
+                      </button>
+                      {showPartsDropdown && (
+                        <div style={{
+                          position: 'absolute', top: '100%', right: 0, left: 0, zIndex: 100,
+                          marginTop: '4px', padding: '0.5rem',
+                          backgroundColor: 'var(--surface-color)', border: '2px solid var(--accent-color)',
+                          borderRadius: 'var(--radius-md)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+                          maxHeight: '200px', overflowY: 'auto'
+                        }}>
+                          {allParts.length === 0 ? (
+                            <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>لا توجد قطع مضافة بعد — أضف قطعاً في قسم "القطع المكونة" أولاً</div>
+                          ) : allParts.map((partName, idx) => {
+                            const isChecked = selectedPartsArr.includes(partName);
+                            return (
+                              <div
+                                key={idx}
+                                onClick={() => {
+                                  if (isChecked) {
+                                    setSelectedPartsArr(selectedPartsArr.filter(p => p !== partName));
+                                  } else {
+                                    setSelectedPartsArr([...selectedPartsArr, partName]);
+                                  }
+                                }}
+                                style={{
+                                  display: 'flex', alignItems: 'center', gap: '0.6rem',
+                                  padding: '0.45rem 0.6rem', cursor: 'pointer',
+                                  borderRadius: '6px', transition: 'background-color 0.15s',
+                                  backgroundColor: isChecked ? 'rgba(139, 92, 246, 0.12)' : 'transparent',
+                                  marginBottom: '2px'
+                                }}
+                                onMouseEnter={(e) => { if (!isChecked) e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)'; }}
+                                onMouseLeave={(e) => { if (!isChecked) e.currentTarget.style.backgroundColor = isChecked ? 'rgba(139, 92, 246, 0.12)' : 'transparent'; }}
+                              >
+                                <div style={{
+                                  width: '16px', height: '16px', borderRadius: '4px', flexShrink: 0,
+                                  border: isChecked ? '2px solid #a78bfa' : '2px solid var(--border-color)',
+                                  backgroundColor: isChecked ? '#a78bfa' : 'transparent',
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  transition: 'all 0.15s'
+                                }}>
+                                  {isChecked && <span style={{ color: '#fff', fontSize: '11px', fontWeight: 'bold', lineHeight: 1 }}>✓</span>}
+                                </div>
+                                <Puzzle size={14} style={{ color: isChecked ? '#a78bfa' : 'var(--text-muted)', flexShrink: 0 }} />
+                                <span style={{ fontWeight: isChecked ? 'bold' : 'normal', color: 'var(--text-main)', fontSize: '0.88rem' }}>{partName}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                    {/* Show selected parts as removable badges */}
+                    {selectedPartsArr.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginTop: '0.5rem' }}>
+                        {selectedPartsArr.map((pName, i) => {
+                          const isOrphan = !allParts.includes(pName);
+                          return (
+                            <span key={i} style={{
+                              display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
+                              padding: '0.2rem 0.55rem', borderRadius: '50px',
+                              backgroundColor: isOrphan ? 'rgba(239, 68, 68, 0.08)' : 'rgba(139, 92, 246, 0.1)',
+                              border: isOrphan ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid rgba(139, 92, 246, 0.25)',
+                              fontSize: '0.8rem', fontWeight: '600',
+                              color: isOrphan ? '#ef4444' : '#a78bfa'
+                            }}>
+                              <Puzzle size={12} />
+                              {pName}
+                              {isOrphan && <span style={{ fontSize: '0.65rem', opacity: 0.7 }}>(قديم)</span>}
+                              <button type="button" onClick={() => setSelectedPartsArr(selectedPartsArr.filter(p => p !== pName))} style={{
+                                background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0', display: 'flex', alignItems: 'center'
+                              }}><X size={12} strokeWidth={3} /></button>
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 </>
               )}
 
-              {/* Measurements extra field removed, now handled via Assign Modal */}
+              {/* Measurements: product assignment dropdown */}
+              {activeTab === 'measurements' && (
+                <div style={{ ...styles.formField, gridColumn: '1 / -1' }}>
+                  <label style={styles.formLabel}>ربط بالمنتجات (اختياري)</label>
+                  <div style={{ position: 'relative' }}>
+                    <button
+                      type="button"
+                      onClick={() => setShowProductsDropdown(prev => !prev)}
+                      className="form-control"
+                      style={{
+                        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        textAlign: 'right', width: '100%', padding: '0.5rem 0.75rem',
+                        border: showProductsDropdown ? '2px solid var(--accent-color)' : '1px solid var(--border-color)',
+                        borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--bg-color)',
+                        color: selectedProductsArr.length > 0 ? 'var(--text-main)' : 'var(--text-muted)',
+                        transition: 'border-color 0.2s'
+                      }}
+                    >
+                      <span>{selectedProductsArr.length > 0 ? `${selectedProductsArr.length} منتج مرتبط` : '— اربط بمنتجات —'}</span>
+                      <ChevronDown size={15} style={{ transform: showProductsDropdown ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s', opacity: 0.6 }} />
+                    </button>
+                    {showProductsDropdown && (
+                      <div style={{
+                        position: 'absolute', top: '100%', right: 0, left: 0, zIndex: 100,
+                        marginTop: '4px', padding: '0.5rem',
+                        backgroundColor: 'var(--surface-color)', border: '2px solid var(--accent-color)',
+                        borderRadius: 'var(--radius-md)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+                        maxHeight: '200px', overflowY: 'auto'
+                      }}>
+                        {(lookups.products || []).length === 0 ? (
+                          <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>لا توجد منتجات مضافة بعد</div>
+                        ) : (lookups.products || []).map((prod, idx) => {
+                          const prodName = typeof prod === 'object' ? prod.name : prod;
+                          const parts = typeof prod === 'object' && Array.isArray(prod.parts) ? prod.parts : [];
+                          const isChecked = selectedProductsArr.includes(prodName);
+                          return (
+                            <div
+                              key={idx}
+                              onClick={() => {
+                                if (isChecked) {
+                                  setSelectedProductsArr(selectedProductsArr.filter(p => p !== prodName));
+                                } else {
+                                  setSelectedProductsArr([...selectedProductsArr, prodName]);
+                                }
+                              }}
+                              style={{
+                                display: 'flex', alignItems: 'center', gap: '0.6rem',
+                                padding: '0.45rem 0.6rem', cursor: 'pointer',
+                                borderRadius: '6px', transition: 'background-color 0.15s',
+                                backgroundColor: isChecked ? 'rgba(212, 175, 55, 0.1)' : 'transparent',
+                                marginBottom: '2px'
+                              }}
+                              onMouseEnter={(e) => { if (!isChecked) e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)'; }}
+                              onMouseLeave={(e) => { if (!isChecked) e.currentTarget.style.backgroundColor = isChecked ? 'rgba(212, 175, 55, 0.1)' : 'transparent'; }}
+                            >
+                              <div style={{
+                                width: '16px', height: '16px', borderRadius: '4px', flexShrink: 0,
+                                border: isChecked ? '2px solid var(--accent-color)' : '2px solid var(--border-color)',
+                                backgroundColor: isChecked ? 'var(--accent-color)' : 'transparent',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                transition: 'all 0.15s'
+                              }}>
+                                {isChecked && <span style={{ color: '#000', fontSize: '11px', fontWeight: 'bold', lineHeight: 1 }}>✓</span>}
+                              </div>
+                              <ShoppingBag size={14} style={{ color: isChecked ? 'var(--accent-color)' : 'var(--text-muted)', flexShrink: 0 }} />
+                              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                <span style={{ fontWeight: isChecked ? 'bold' : 'normal', color: 'var(--text-main)', fontSize: '0.88rem' }}>{prodName}</span>
+                                {parts.length > 0 && <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{parts.join(' + ')}</span>}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                  {selectedProductsArr.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginTop: '0.4rem' }}>
+                      {selectedProductsArr.map((pName, i) => (
+                        <span key={i} style={{
+                          display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
+                          padding: '0.2rem 0.5rem', borderRadius: '50px',
+                          backgroundColor: 'rgba(212, 175, 55, 0.1)',
+                          border: '1px solid rgba(212, 175, 55, 0.25)',
+                          fontSize: '0.78rem', fontWeight: '600', color: 'var(--accent-color)'
+                        }}>
+                          {pName}
+                          <button type="button" onClick={() => setSelectedProductsArr(selectedProductsArr.filter(p => p !== pName))} style={{
+                            background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0', display: 'flex', alignItems: 'center'
+                          }}><X size={11} strokeWidth={3} /></button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Factories extra fields */}
               {activeTab === 'factories' && (
@@ -1064,11 +1256,13 @@ const AdminDashboard = () => {
               display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '300px', overflowY: 'auto',
               background: 'rgba(0,0,0,0.2)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)'
             }}>
-              {allParts.length === 0 ? (
+              {(lookups.products || []).length === 0 ? (
                 <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textAlign: 'center' }}>لا توجد منتجات مضافة بعد</div>
               ) : (
-                allParts.map((partName, idx) => {
-                  const isSelected = assignSelectedParts.includes(partName);
+                (lookups.products || []).map((prod, idx) => {
+                  const prodName = typeof prod === 'object' ? prod.name : prod;
+                  const parts = typeof prod === 'object' && Array.isArray(prod.parts) ? prod.parts : [];
+                  const isSelected = assignSelectedParts.includes(prodName);
                   return (
                     <label key={idx} style={{
                       display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer',
@@ -1085,16 +1279,19 @@ const AdminDashboard = () => {
                         checked={isSelected}
                         onChange={(e) => {
                           if (e.target.checked) {
-                            setAssignSelectedParts([...assignSelectedParts, partName]);
+                            setAssignSelectedParts([...assignSelectedParts, prodName]);
                           } else {
-                            setAssignSelectedParts(assignSelectedParts.filter(p => p !== partName));
+                            setAssignSelectedParts(assignSelectedParts.filter(p => p !== prodName));
                           }
                         }}
                         style={{ accentColor: 'var(--accent-color)', width: '16px', height: '16px', cursor: 'pointer' }}
                       />
-                      <span style={{ fontSize: '0.9rem', color: isSelected ? 'var(--accent-color)' : 'var(--text-main)', fontWeight: isSelected ? '600' : '400' }}>
-                        {partName}
-                      </span>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontSize: '0.9rem', color: isSelected ? 'var(--accent-color)' : 'var(--text-main)', fontWeight: isSelected ? '600' : '400' }}>
+                          {prodName}
+                        </span>
+                        {parts.length > 0 && <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{parts.join(' + ')}</span>}
+                      </div>
                     </label>
                   );
                 })

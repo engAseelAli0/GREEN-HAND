@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAppData } from '../context/AppDataContext';
-import { Filter, Download, FileText, ChevronDown, ChevronUp, Printer, Calendar, Factory, ArrowUpDown, Camera } from 'lucide-react';
+import { Filter, Download, FileText, ChevronDown, ChevronUp, Printer, Calendar, Factory, ArrowUpDown, Camera, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 
@@ -22,6 +22,45 @@ const ReportsPortal = () => {
     toDate: '',
     factory: '',
   });
+
+  // F9 Lookup States
+  const [showSerialsList, setShowSerialsList] = useState(false);
+  const [availableSerials, setAvailableSerials] = useState([]);
+  const [fetchingSerials, setFetchingSerials] = useState(false);
+  const [serialSearchQuery, setSerialSearchQuery] = useState('');
+  const [activeSerialField, setActiveSerialField] = useState(null); // 'fromSerial' or 'toSerial'
+  const serialSearchRef = useRef(null);
+
+  const handleF9Press = async (e, fieldName) => {
+    if (e.key === 'F9') {
+      e.preventDefault();
+      if (showSerialsList || fetchingSerials) return;
+      
+      setActiveSerialField(fieldName);
+      setFetchingSerials(true);
+      setShowSerialsList(true);
+      setSerialSearchQuery('');
+      
+      try {
+        const { data, error } = await supabase
+          .from('orders')
+          .select('serial_number')
+          .order('created_at', { ascending: false })
+          .limit(2000);
+        if (data && !error) {
+           setAvailableSerials(data.map(d => d.serial_number));
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+         setFetchingSerials(false);
+         setTimeout(() => serialSearchRef.current?.focus(), 100);
+      }
+    } else if (e.key === 'Escape') {
+      setShowSerialsList(false);
+      setSerialSearchQuery('');
+    }
+  };
 
   const updateFilter = (field, value) => {
     setFilters(prev => ({ ...prev, [field]: value }));
@@ -298,6 +337,93 @@ const ReportsPortal = () => {
       return total;
   };
 
+  const renderSerialsLookup = () => (
+    <div style={{
+      position: 'absolute', top: '100%', right: 0, marginTop: '4px',
+      width: '250px', maxHeight: '300px', overflowY: 'auto',
+      backgroundColor: 'var(--surface-color)',
+      border: '1px solid var(--accent-color)',
+      borderRadius: 'var(--radius-md)',
+      boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+      zIndex: 1000,
+      animation: 'fadeIn 0.2s ease'
+    }}>
+      <div style={{ padding: '0.75rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--surface-highlight)' }}>
+          <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: 'var(--accent-color)' }}>اختر موديلاً:</span>
+          <button onClick={() => { setShowSerialsList(false); setSerialSearchQuery(''); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-main)', padding: 0, display: 'flex', alignItems: 'center' }}>
+             <X size={18} />
+          </button>
+      </div>
+      
+      <div style={{ padding: '0.5rem', borderBottom: '1px solid var(--border-color)', backgroundColor: 'var(--bg-color)' }}>
+        <input
+          ref={serialSearchRef}
+          type="text"
+          placeholder="🔍 ابحث..."
+          value={serialSearchQuery}
+          onChange={(e) => setSerialSearchQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              setShowSerialsList(false);
+              setSerialSearchQuery('');
+            }
+            if (e.key === 'Enter') {
+              const filtered = availableSerials.filter(s => s.toString().includes(serialSearchQuery));
+              if (filtered.length > 0) {
+                updateFilter(activeSerialField, filtered[0]);
+                setShowSerialsList(false);
+                setSerialSearchQuery('');
+              }
+            }
+          }}
+          style={{
+            width: '100%',
+            padding: '0.6rem',
+            fontSize: '0.9rem',
+            border: '1px solid var(--border-color)',
+            borderRadius: '4px',
+            backgroundColor: 'var(--surface-color)',
+            color: 'var(--text-main)',
+            outline: 'none',
+            direction: 'rtl'
+          }}
+          autoComplete="off"
+        />
+      </div>
+      
+      {fetchingSerials ? (
+          <div style={{ padding: '1.5rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)' }}>جاري التحميل...</div>
+      ) : (
+         (() => {
+           const filteredSerials = serialSearchQuery.trim()
+             ? availableSerials.filter(s => s.toString().includes(serialSearchQuery.trim()))
+             : availableSerials;
+           return filteredSerials.length === 0 ? (
+             <div style={{ padding: '1.5rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)' }}>لا توجد نتائج</div>
+           ) : (
+            <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                {filteredSerials.map(serial => (
+                  <li 
+                      key={serial} 
+                      onClick={() => {
+                          updateFilter(activeSerialField, serial);
+                          setShowSerialsList(false);
+                          setSerialSearchQuery('');
+                      }}
+                      style={{ padding: '0.75rem 1rem', cursor: 'pointer', borderBottom: '1px solid var(--border-color)', transition: 'background 0.2s', fontSize: '0.95rem' }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--surface-highlight)'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                  >
+                      <strong>{serial}</strong>
+                  </li>
+                ))}
+            </ul>
+           );
+         })()
+      )}
+    </div>
+  );
+
   return (
     <div className="fade-in" style={{ padding: '0 1rem' }}>
       
@@ -326,15 +452,16 @@ const ReportsPortal = () => {
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.5rem' }}>
-          
-          <div className="form-group">
+          <div className="form-group" style={{ position: 'relative' }}>
             <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><FileText size={14}/> من رقم موديل (Serial)</label>
-            <input type="number" className="form-control" placeholder="مثال: 1000" value={filters.fromSerial} onChange={(e) => updateFilter('fromSerial', e.target.value)} />
+            <input type="number" className="form-control" placeholder="مثال: 1000 (F9)" value={filters.fromSerial} onChange={(e) => updateFilter('fromSerial', e.target.value)} onKeyDown={(e) => handleF9Press(e, 'fromSerial')} />
+            {showSerialsList && activeSerialField === 'fromSerial' && renderSerialsLookup()}
           </div>
           
-          <div className="form-group">
+          <div className="form-group" style={{ position: 'relative' }}>
             <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><FileText size={14}/> إلى رقم موديل</label>
-            <input type="number" className="form-control" placeholder="مثال: 1100" value={filters.toSerial} onChange={(e) => updateFilter('toSerial', e.target.value)} />
+            <input type="number" className="form-control" placeholder="مثال: 1100 (F9)" value={filters.toSerial} onChange={(e) => updateFilter('toSerial', e.target.value)} onKeyDown={(e) => handleF9Press(e, 'toSerial')} />
+            {showSerialsList && activeSerialField === 'toSerial' && renderSerialsLookup()}
           </div>
 
           <div className="form-group">

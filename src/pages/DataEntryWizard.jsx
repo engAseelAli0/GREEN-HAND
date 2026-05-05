@@ -127,15 +127,30 @@ const DataEntryWizard = () => {
   const [availableSerials, setAvailableSerials] = useState([]);
   const [fetchingSerials, setFetchingSerials] = useState(false);
   const [serialSearchQuery, setSerialSearchQuery] = useState('');
+  const [showColorPicker, setShowColorPicker] = useState(false);
   const serialSearchRef = useRef(null);
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
   const tabNavRef = useRef(null);
+  const colorPickerRef = useRef(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
   const [viewMode, setViewMode] = useState(() => {
     try { return localStorage.getItem('gh_viewMode') || 'tabs'; } catch { return 'tabs'; }
   });
+
+  // ─── Close color picker on outside click ───
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (colorPickerRef.current && !colorPickerRef.current.contains(e.target)) {
+        setShowColorPicker(false);
+      }
+    };
+    if (showColorPicker) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showColorPicker]);
 
   // ─── Tab Scroll Logic (RTL-safe, bulletproof) ───
   const checkTabScroll = useCallback(() => {
@@ -335,16 +350,13 @@ const DataEntryWizard = () => {
         nextArr = [...prev, colorName];
       }
       
-      const totalQty = parseInt(currentOrder.totalQuantity);
-      if (totalQty && !isNaN(totalQty) && nextArr.length > 0) {
-         setTimeout(() => distributeQuantity(nextArr, true), 0);
-      } else {
-         if (prev.includes(colorName)) {
-            const dist = { ...(currentOrder.colorDistribution || {}) };
-            delete dist[colorName];
-            updateOrder('colorDistribution', dist);
-         }
+      // If removing a color and no totalQty, just clean up that color from distribution
+      if (nextArr.length === 0) {
+        const dist = { ...(currentOrder.colorDistribution || {}) };
+        delete dist[colorName];
+        updateOrder('colorDistribution', dist);
       }
+      // The useEffect below will handle redistribution automatically
       return nextArr;
     });
   };
@@ -362,19 +374,17 @@ const DataEntryWizard = () => {
     }
   }, [currentOrder.productName, currentOrder.serialNumber, lookups.products]);
 
-  // Auto-calculate Carton Quantity
   useEffect(() => {
     const totalQty = parseInt(currentOrder.totalQuantity) || 0;
     const packageVal = currentOrder.cartonPackage || '';
     const packageQty = parseInt(packageVal.replace(/[^0-9]/g, '')) || 0;
     
     if (totalQty > 0 && packageQty > 0) {
-      // Prevent packageQty from being larger than totalQty
       if (packageQty > totalQty) {
-        toast.error(`عفواً، لا يمكن أن تكون تعبئة الكرتون (${packageQty}) أكبر من الكمية الإجمالية (${totalQty}).`, { id: 'carton-error' });
-        // Clear the invalid selections
-        updateOrder('cartonPackage', '');
-        updateOrder('cartonQty', '');
+        // If typing total quantity and it's temporarily less than package, just show warning in text field
+        if (currentOrder.cartonQty !== 'الكمية غير كافية') {
+          updateOrder('cartonQty', 'الكمية غير كافية');
+        }
         return;
       }
 
@@ -385,10 +395,7 @@ const DataEntryWizard = () => {
         updateOrder('cartonQty', resultText);
       }
     } else if ((!totalQty || !packageQty) && currentOrder.cartonQty) {
-      // Auto clear if prerequisites are missing
-      if (currentOrder.cartonQty.includes('كرتون')) {
-         updateOrder('cartonQty', '');
-      }
+      updateOrder('cartonQty', '');
     }
   }, [currentOrder.totalQuantity, currentOrder.cartonPackage, currentOrder.cartonQty, updateOrder]);
 
@@ -433,10 +440,14 @@ const DataEntryWizard = () => {
         return false;
       }
     }
-    if (isNaN(parseInt(currentOrder.totalQuantity))) {
-      toast.error('الكمية الإجمالية يجب أن تكون رقماً.');
+    const totalQty = parseInt(currentOrder.totalQuantity) || 0;
+    const packageVal = currentOrder.cartonPackage || '';
+    const packageQty = parseInt(packageVal.replace(/[^0-9]/g, '')) || 0;
+    if (packageQty > 0 && totalQty > 0 && packageQty > totalQty) {
+      toast.error(`خطأ في التعبئة: تعبئة الكرتون (${packageQty}) لا يمكن أن تكون أكبر من الكمية الإجمالية (${totalQty}).`);
       return false;
     }
+
     return true;
   };
 
@@ -762,8 +773,8 @@ const DataEntryWizard = () => {
     updateOrder('packagingConditions', pc);
   };
 
-  const distributeQuantity = (colorsArr, isSilent = false) => {
-    const totalQty = parseInt(currentOrder.totalQuantity);
+  const distributeQuantity = (colorsArr, isSilent = false, overrideTotalQty) => {
+    const totalQty = overrideTotalQty !== undefined ? overrideTotalQty : parseInt(currentOrder.totalQuantity);
     if (!totalQty || isNaN(totalQty)) {
       if (!isSilent) toast.error('الرجاء إدخال الكمية الإجمالية أولاً');
       return;
@@ -787,18 +798,11 @@ const DataEntryWizard = () => {
     const cellsCount = colorsArr.length * sizes.length;
     const qtyPerCell = Math.floor(totalQty / cellsCount);
     const remainder = totalQty % cellsCount;
-    const newDist = { ...(currentOrder.colorDistribution || {}) };
+    const newDist = {};
     let remainderAdded = 0;
     
-    // Clear out unselected colors completely
-    Object.keys(newDist).forEach(col => {
-       if (!colorsArr.includes(col)) {
-          delete newDist[col];
-       }
-    });
-    
     colorsArr.forEach(color => {
-      if (!newDist[color]) newDist[color] = {};
+      newDist[color] = {};
       sizes.forEach(size => {
          let val = qtyPerCell;
          if (remainderAdded < remainder) { val += 1; remainderAdded++; }
@@ -810,14 +814,29 @@ const DataEntryWizard = () => {
     if (!isSilent) toast.success('تم توزيع الكمية الإجمالية بالتساوي بين الألوان والمقاسات!');
   };
 
+  // Auto-redistribute when totalQuantity, selected colors, or size range changes
+  useEffect(() => {
+    const totalQty = parseInt(currentOrder.totalQuantity);
+    if (totalQty && !isNaN(totalQty) && selectedColorsArr.length > 0) {
+      distributeQuantity(selectedColorsArr, true, totalQty);
+    }
+  }, [currentOrder.totalQuantity, selectedColorsArr, currentOrder.sizeFrom, currentOrder.sizeTo, currentOrder.manualSizes]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const divideQuantityEqually = () => distributeQuantity(selectedColorsArr, false);
 
-  let targetSizes = lookups.sizes || [];
-  if (currentOrder.sizeFrom && currentOrder.sizeTo) {
-    const idx1 = targetSizes.indexOf(currentOrder.sizeFrom);
-    const idx2 = targetSizes.indexOf(currentOrder.sizeTo);
+  let targetSizes = [];
+  const hasManual = currentOrder.manualSizes && currentOrder.manualSizes.length > 0;
+
+  if (hasManual) {
+    // If manual sizes are provided, they take priority and the range is ignored
+    targetSizes = currentOrder.manualSizes.filter(s => s && s.trim() !== '');
+  } else if (currentOrder.sizeFrom && currentOrder.sizeTo) {
+    // Otherwise use the range if both bounds are selected
+    const allSizes = lookups.sizes || [];
+    const idx1 = allSizes.indexOf(currentOrder.sizeFrom);
+    const idx2 = allSizes.indexOf(currentOrder.sizeTo);
     if (idx1 !== -1 && idx2 !== -1) {
-      targetSizes = targetSizes.slice(Math.min(idx1, idx2), Math.max(idx1, idx2) + 1);
+      targetSizes = allSizes.slice(Math.min(idx1, idx2), Math.max(idx1, idx2) + 1);
     }
   }
 
@@ -1135,49 +1154,162 @@ const DataEntryWizard = () => {
                   <label className="form-label">الكمية الإجمالية (Product Quantity)</label>
                   <input type="number" className="form-control" value={currentOrder.totalQuantity} onChange={(e) => updateOrder('totalQuantity', e.target.value)} />
                 </div>
-                <div className="form-group">
-                  <label className="form-label">المقاس من (Size From)</label>
-                  <ClearableSelect className="form-control" value={currentOrder.sizeFrom || ''} onChange={(e) => {
-                    const newVal = e.target.value;
-                    const oldVal = currentOrder.sizeFrom;
-                    updateOrder('sizeFrom', newVal);
-                    
-                    // Logic to clear sizeTo if types are different (Num vs Text)
-                    if (newVal && oldVal) {
-                      const wasNumeric = !isNaN(parseFloat(oldVal)) && isFinite(oldVal);
-                      const isNumeric = !isNaN(parseFloat(newVal)) && isFinite(newVal);
-                      if (wasNumeric !== isNumeric) {
-                        updateOrder('sizeTo', '');
-                      }
-                    }
-                  }}>
-                    <option value="">اختر...</option>
-                    {lookups.sizes?.map((s, i) => <option key={i} value={s}>{s}</option>)}
-                  </ClearableSelect>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">المقاس إلى (Size To)</label>
-                  <ClearableSelect className="form-control" value={currentOrder.sizeTo || ''} onChange={(e) => updateOrder('sizeTo', e.target.value)}>
-                    <option value="">اختر...</option>
-                    {(() => {
-                      if (!currentOrder.sizeFrom) return lookups.sizes;
-                      const isNumeric = !isNaN(parseFloat(currentOrder.sizeFrom)) && isFinite(currentOrder.sizeFrom);
-                      const baseIdx = lookups.sizes?.indexOf(currentOrder.sizeFrom);
+                <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                    <label className="form-label" style={{ margin: 0 }}>
+                      {hasManual ? 'المقاسات المضافة يدوياً (تجاهل النطاق)' : 'نطاق المقاسات (Size Range)'}
+                    </label>
+                    {targetSizes.length > 0 && (
+                      <span style={{ 
+                        backgroundColor: 'rgba(212, 175, 55, 0.15)', 
+                        color: 'var(--accent-color)', 
+                        padding: '2px 10px', 
+                        borderRadius: '12px', 
+                        fontSize: '0.8rem', 
+                        fontWeight: 'bold',
+                        border: '1px solid rgba(212, 175, 55, 0.3)'
+                      }}>
+                        تم اختيار {targetSizes.length} مقاساً
+                      </span>
+                    )}
+                  </div>
 
-                      return lookups.sizes?.filter((s, idx) => {
-                        const sIsNumeric = !isNaN(parseFloat(s)) && isFinite(s);
-                        if (sIsNumeric !== isNumeric) return false;
-                        
-                        if (isNumeric) {
-                          return parseFloat(s) >= parseFloat(currentOrder.sizeFrom);
-                        } else {
-                          // For text sizes, we assume the sorting in lookups.sizes is the correct order
-                          return idx >= baseIdx;
-                        }
-                      });
-                    })()?.map((s, i) => <option key={i} value={s}>{s}</option>)}
-                  </ClearableSelect>
+                  {!hasManual ? (
+                    <div className="fade-in" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.75rem', opacity: 0.8 }}>من (From)</label>
+                        <ClearableSelect className="form-control" value={currentOrder.sizeFrom || ''} onChange={(e) => {
+                          const newVal = e.target.value;
+                          if (newVal === 'MANUAL_TRIGGER') {
+                             updateOrder('manualSizes', [...(currentOrder.manualSizes || []), '']);
+                             return;
+                          }
+                          const oldVal = currentOrder.sizeFrom;
+                          updateOrder('sizeFrom', newVal);
+                          if (newVal && oldVal) {
+                            const wasNumeric = !isNaN(parseFloat(oldVal)) && isFinite(oldVal);
+                            const isNumeric = !isNaN(parseFloat(newVal)) && isFinite(newVal);
+                            if (wasNumeric !== isNumeric) {
+                              updateOrder('sizeTo', '');
+                            }
+                          }
+                        }}>
+                          <option value="">اختر...</option>
+                          <option value="MANUAL_TRIGGER" style={{ color: 'var(--accent-color)', fontWeight: 'bold' }}>+ ادخال يدوي جديد...</option>
+                          {lookups.sizes?.map((s, i) => <option key={i} value={s}>{s}</option>)}
+                        </ClearableSelect>
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.75rem', opacity: 0.8 }}>إلى (To)</label>
+                        <ClearableSelect className="form-control" value={currentOrder.sizeTo || ''} onChange={(e) => {
+                          const newVal = e.target.value;
+                          if (newVal === 'MANUAL_TRIGGER') {
+                             updateOrder('manualSizes', [...(currentOrder.manualSizes || []), '']);
+                             return;
+                          }
+                          updateOrder('sizeTo', newVal);
+                        }}>
+                          <option value="">اختر...</option>
+                          <option value="MANUAL_TRIGGER" style={{ color: 'var(--accent-color)', fontWeight: 'bold' }}>+ ادخال يدوي جديد...</option>
+                          {(() => {
+                            if (!currentOrder.sizeFrom) return lookups.sizes;
+                            const isNumeric = !isNaN(parseFloat(currentOrder.sizeFrom)) && isFinite(currentOrder.sizeFrom);
+                            const baseIdx = lookups.sizes?.indexOf(currentOrder.sizeFrom);
+                            return lookups.sizes?.filter((s, idx) => {
+                              const sIsNumeric = !isNaN(parseFloat(s)) && isFinite(s);
+                              if (sIsNumeric !== isNumeric) return false;
+                              if (isNumeric) return parseFloat(s) >= parseFloat(currentOrder.sizeFrom);
+                              return idx >= baseIdx;
+                            });
+                          })()?.map((s, i) => <option key={i} value={s}>{s}</option>)}
+                        </ClearableSelect>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="fade-in" style={{ 
+                      padding: '1rem', 
+                      background: 'rgba(212, 175, 55, 0.05)', 
+                      borderRadius: '8px', 
+                      border: '1px dashed var(--accent-color)',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: 'var(--accent-color)' }}>
+                        <CheckSquare size={18} />
+                        <span style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>وضع الإدخال اليدوي مفعل حالياً</span>
+                      </div>
+                      <button 
+                        type="button" 
+                        className="btn btn-outline"
+                        style={{ padding: '4px 12px', fontSize: '0.8rem', borderColor: '#ef4444', color: '#ef4444' }}
+                        onClick={() => {
+                          updateOrder('manualSizes', []);
+                          toast('تم العودة لاختيار النطاق والمقاسات الجاهزة', { icon: '🔄' });
+                        }}
+                      >
+                        إلغاء اليدوي والعودة للنطاق
+                      </button>
+                    </div>
+                  )}
                 </div>
+
+                {/* ═══ Manual Sizes Section ═══ */}
+                {hasManual && (
+                  <div className="form-group fade-in" style={{ gridColumn: '1 / -1', marginTop: '0.5rem' }}>
+                    <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <Edit3 size={16} color="var(--accent-color)" />
+                      إدخال المقاسات المخصصة
+                    </label>
+                    
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
+                      {(currentOrder.manualSizes || []).map((s, idx) => (
+                        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <input 
+                            type="text" 
+                            className="form-control" 
+                            style={{ width: '100px', textAlign: 'center', border: '1px solid var(--accent-color)' }}
+                            value={s}
+                            autoFocus={idx === (currentOrder.manualSizes?.length - 1)}
+                            placeholder="المقاس..."
+                            onChange={(e) => {
+                              const newManual = [...(currentOrder.manualSizes || [])];
+                              newManual[idx] = e.target.value;
+                              updateOrder('manualSizes', newManual);
+                            }}
+                          />
+                          <button 
+                            type="button" 
+                            onClick={() => {
+                              const newManual = (currentOrder.manualSizes || []).filter((_, i) => i !== idx);
+                              updateOrder('manualSizes', newManual);
+                            }}
+                            style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}
+                          >
+                            <X size={16} />
+                          </button>
+                        </div>
+                      ))}
+                      
+                      <button 
+                        type="button"
+                        className="btn btn-outline"
+                        style={{ 
+                          padding: '0.4rem 1rem', 
+                          fontSize: '0.85rem', 
+                          borderColor: 'rgba(212, 175, 55, 0.4)',
+                          borderStyle: 'dashed',
+                          color: 'var(--accent-color)'
+                        }}
+                        onClick={() => {
+                          updateOrder('manualSizes', [...(currentOrder.manualSizes || []), '']);
+                        }}
+                      >
+                        + إضافة مقاس آخر
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -1324,7 +1456,16 @@ const DataEntryWizard = () => {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div className="form-group">
                   <label className="form-label">تعبئة الكرتون</label>
-                  <ClearableSelect className="form-control" value={currentOrder.cartonPackage || ''} onChange={(e) => updateOrder('cartonPackage', e.target.value)}>
+                  <ClearableSelect className="form-control" value={currentOrder.cartonPackage || ''} onChange={(e) => {
+                    const val = e.target.value;
+                    const pkgQty = parseInt(val.replace(/[^0-9]/g, '')) || 0;
+                    const totQty = parseInt(currentOrder.totalQuantity) || 0;
+                    if (val && pkgQty > totQty) {
+                      toast.error(`عفواً، لا يمكن أن تكون تعبئة الكرتون (${pkgQty}) أكبر من الكمية الإجمالية (${totQty}).`);
+                      return;
+                    }
+                    updateOrder('cartonPackage', val);
+                  }}>
                     <option value="">اختر...</option>
                     {lookups.cartonPackages?.map((cp, i) => <option key={i} value={cp}>{cp}</option>)}
                   </ClearableSelect>
@@ -1359,104 +1500,209 @@ const DataEntryWizard = () => {
           </div>
         );
 
-      case 'colors':
+      case 'colors': {
+        const sizesReady = (currentOrder.sizeFrom && currentOrder.sizeTo) || (currentOrder.manualSizes && currentOrder.manualSizes.some(s => s.trim() !== ''));
         return (
           <div className="tab-panel" key={tabKey}>
             <div className="card">
               <div className="tab-section-header" style={{ justifyContent: 'space-between' }}>
                 <h3><Palette size={22} /> توزيع الألوان والمقاسات</h3>
-                <button className="btn btn-primary" onClick={divideQuantityEqually} style={{ fontSize: '0.85rem', padding: '0.5rem 1rem' }}>
-                  <LayoutGrid size={16} /> تقسيم بالتساوي
-                </button>
-              </div>
-              <div style={{ marginBottom: '1.5rem', display: 'flex', flexWrap: 'wrap', gap: '0.8rem', padding: '1rem', backgroundColor: 'var(--surface-color)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
-                <div style={{ width: '100%', marginBottom: '0.5rem', fontWeight: 'bold', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
-                  الألوان المتاحة (اختر لإضافتها للجدول):
-                </div>
-                {lookups.colors?.map((colorObj, i) => {
-                  const colorName = colorObj.name || colorObj;
-                  const colorHex = colorObj.hex || '#cccccc';
-                  const isSelected = selectedColorsArr.includes(colorName);
-                  
-                  return (
-                    <button
-                      key={`chip-${i}`}
-                      type="button"
-                      onClick={() => toggleColor(colorName)}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: '0.5rem',
-                        padding: '0.5rem 1rem', borderRadius: '50px',
-                        border: isSelected ? '2px solid var(--accent-color)' : '1px solid var(--border-color)',
-                        backgroundColor: isSelected ? 'rgba(212, 175, 55, 0.1)' : 'var(--bg-color)',
-                        color: 'var(--text-color)', cursor: 'pointer',
-                        transition: 'all 0.2s', opacity: isSelected ? 1 : 0.7,
-                        fontWeight: isSelected ? 'bold' : 'normal'
-                      }}
-                    >
-                      {isSelected ? <CheckSquare size={16} color="var(--accent-color)" /> : <Square size={16} />}
-                      <span style={{ width: '14px', height: '14px', borderRadius: '50%', backgroundColor: colorHex, border: '1px solid rgba(0,0,0,0.2)' }}></span>
-                      {colorName}
-                    </button>
-                  );
-                })}
-                {(!lookups.colors || lookups.colors.length === 0) && (
-                  <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>لا توجد ألوان محفوظة في النظام.</div>
+                {selectedColorsArr.length > 0 && sizesReady && (
+                  <button className="btn btn-primary" onClick={divideQuantityEqually} style={{ fontSize: '0.85rem', padding: '0.5rem 1rem' }}>
+                    <LayoutGrid size={16} /> تقسيم بالتساوي
+                  </button>
                 )}
               </div>
 
-              <div style={{ overflowX: 'auto', backgroundColor: 'var(--surface-color)', borderRadius: 'var(--radius-md)', padding: '1rem', border: '1px solid var(--border-color)' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '600px' }}>
-                  <thead>
-                    <tr>
-                      <th style={{ padding: '0.75rem', textAlign: 'right', borderBottom: '2px solid var(--border-color)' }}>اللون (المختار)</th>
-                      {targetSizes.map((s, i) => (
-                        <th key={i} style={{ padding: '0.75rem', textAlign: 'center', borderBottom: '2px solid var(--border-color)' }}>{s}</th>
-                      ))}
-                      <th style={{ padding: '0.75rem', textAlign: 'center', borderBottom: '2px solid var(--border-color)', color: 'var(--accent-color)', fontWeight: 'bold' }}>الإجمالي</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {selectedColorsArr.length === 0 ? (
+              {/* ─── Custom Multi-Select Color Picker ─── */}
+              <div style={{ marginBottom: '1.5rem', padding: '1rem', backgroundColor: 'var(--surface-color)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap' }}>
+                  <label style={{ fontWeight: 'bold', fontSize: '0.9rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', paddingTop: '0.5rem' }}>
+                    <Palette size={16} style={{ verticalAlign: 'middle', marginLeft: '0.4rem' }} />
+                    اختيار الألوان:
+                  </label>
+                  <div ref={colorPickerRef} style={{ position: 'relative', flex: '1', minWidth: '220px', maxWidth: '400px' }}>
+                    {/* Trigger button */}
+                    <button
+                      type="button"
+                      onClick={() => setShowColorPicker(prev => !prev)}
+                      className="form-control"
+                      style={{
+                        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        textAlign: 'right', width: '100%', padding: '0.5rem 0.75rem',
+                        border: showColorPicker ? '2px solid var(--accent-color)' : '1px solid var(--border-color)',
+                        borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--bg-color)',
+                        color: selectedColorsArr.length > 0 ? 'var(--text-main)' : 'var(--text-muted)',
+                        transition: 'border-color 0.2s'
+                      }}
+                    >
+                      <span>{selectedColorsArr.length > 0 ? `${selectedColorsArr.length} لون محدد` : '— اختر الألوان —'}</span>
+                      <ChevronLeft size={16} style={{ transform: showColorPicker ? 'rotate(90deg)' : 'rotate(-90deg)', transition: 'transform 0.2s', opacity: 0.6 }} />
+                    </button>
+                    {/* Dropdown panel */}
+                    {showColorPicker && (
+                      <div style={{
+                        position: 'absolute', top: '100%', right: 0, left: 0, zIndex: 100,
+                        marginTop: '4px', padding: '0.5rem',
+                        backgroundColor: 'var(--surface-color)', border: '2px solid var(--accent-color)',
+                        borderRadius: 'var(--radius-md)', boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
+                        maxHeight: '260px', overflowY: 'auto'
+                      }}>
+                        {lookups.colors?.map((colorObj, i) => {
+                          const colorName = colorObj.name || colorObj;
+                          const colorHex = colorObj.hex || '#cccccc';
+                          const isChecked = selectedColorsArr.includes(colorName);
+                          return (
+                            <div
+                              key={i}
+                              onClick={() => toggleColor(colorName)}
+                              style={{
+                                display: 'flex', alignItems: 'center', gap: '0.6rem',
+                                padding: '0.5rem 0.6rem', cursor: 'pointer',
+                                borderRadius: '6px', transition: 'background-color 0.15s',
+                                backgroundColor: isChecked ? 'rgba(212, 175, 55, 0.12)' : 'transparent',
+                                marginBottom: '2px'
+                              }}
+                              onMouseEnter={(e) => { if (!isChecked) e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)'; }}
+                              onMouseLeave={(e) => { if (!isChecked) e.currentTarget.style.backgroundColor = 'transparent'; }}
+                            >
+                              <div style={{
+                                width: '18px', height: '18px', borderRadius: '4px', flexShrink: 0,
+                                border: isChecked ? '2px solid var(--accent-color)' : '2px solid var(--border-color)',
+                                backgroundColor: isChecked ? 'var(--accent-color)' : 'transparent',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                transition: 'all 0.15s'
+                              }}>
+                                {isChecked && <span style={{ color: '#000', fontSize: '12px', fontWeight: 'bold', lineHeight: 1 }}>✓</span>}
+                              </div>
+                              <span style={{
+                                width: '22px', height: '22px', borderRadius: '50%', flexShrink: 0,
+                                backgroundColor: colorHex, border: '2px solid rgba(128,128,128,0.3)',
+                                boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.2)'
+                              }}></span>
+                              <span style={{ fontWeight: isChecked ? 'bold' : 'normal', color: 'var(--text-main)', fontSize: '0.9rem' }}>
+                                {colorName}
+                              </span>
+                            </div>
+                          );
+                        })}
+                        {(!lookups.colors || lookups.colors.length === 0) && (
+                          <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>لا توجد ألوان محفوظة</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {/* Selected color badges */}
+                {selectedColorsArr.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border-color)' }}>
+                    {selectedColorsArr.map((colorName, i) => {
+                      const colorObj = lookups.colors?.find(c => (c.name || c) === colorName);
+                      const colorHex = colorObj?.hex || '#cccccc';
+                      return (
+                        <span key={i} style={{
+                          display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
+                          padding: '0.3rem 0.7rem', borderRadius: '50px',
+                          backgroundColor: 'rgba(212, 175, 55, 0.1)',
+                          border: '1px solid var(--accent-color)',
+                          fontSize: '0.85rem', fontWeight: 'bold',
+                          color: 'var(--text-main)',
+                          animation: 'fadeIn 0.2s ease'
+                        }}>
+                          <span style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: colorHex, border: '1px solid rgba(0,0,0,0.2)', flexShrink: 0 }}></span>
+                          {colorName}
+                          <button type="button" onClick={() => toggleColor(colorName)} style={{
+                            background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer',
+                            padding: '0', display: 'flex', alignItems: 'center', marginRight: '-0.2rem'
+                          }} title="إزالة">
+                            <X size={13} strokeWidth={3} />
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* ─── Distribution Table ─── */}
+              {selectedColorsArr.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-muted)', fontSize: '0.95rem', backgroundColor: 'var(--surface-color)', borderRadius: 'var(--radius-md)', border: '1px dashed var(--border-color)' }}>
+                  <Palette size={40} style={{ opacity: 0.25, display: 'block', margin: '0 auto 0.75rem' }} />
+                  اختر لوناً واحداً على الأقل من القائمة أعلاه لعرض جدول التوزيع.
+                </div>
+              ) : !sizesReady ? (
+                <div style={{ textAlign: 'center', padding: '2.5rem 1rem', color: 'var(--text-muted)', fontSize: '0.95rem', backgroundColor: 'var(--surface-color)', borderRadius: 'var(--radius-md)', border: '1px dashed var(--border-color)' }}>
+                  <Ruler size={36} style={{ opacity: 0.25, display: 'block', margin: '0 auto 0.75rem' }} />
+                  يرجى تحديد نطاق المقاسات (المقاس من — المقاس إلى) من تبويب <strong>"المواعيد والكمية"</strong> لعرض جدول التوزيع.
+                </div>
+              ) : (
+                <div style={{ overflowX: 'auto', backgroundColor: 'var(--surface-color)', borderRadius: 'var(--radius-md)', padding: '1rem', border: '1px solid var(--border-color)' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: Math.max(400, selectedColorsArr.length * 100 + 200) + 'px' }}>
+                    <thead>
                       <tr>
-                        <td colSpan={targetSizes.length + 2} style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                          <Palette size={32} style={{ opacity: 0.3, marginBottom: '0.5rem', display: 'block', margin: '0 auto' }} />
-                          يرجى اختيار الألوان من القائمة أعلاه لإضافتها هنا.
+                        <th style={{ padding: '0.75rem', textAlign: 'right', borderBottom: '2px solid var(--accent-color)', backgroundColor: 'var(--surface-highlight)', minWidth: '100px' }}>
+                          المقاس
+                        </th>
+                        {selectedColorsArr.map((colorName, i) => {
+                          const colorObj = lookups.colors?.find(c => (c.name || c) === colorName);
+                          const colorHex = colorObj?.hex || '#cccccc';
+                          return (
+                            <th key={i} style={{ padding: '0.75rem', textAlign: 'center', borderBottom: '2px solid var(--accent-color)', backgroundColor: 'var(--surface-highlight)' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
+                                <span style={{ width: '14px', height: '14px', borderRadius: '50%', backgroundColor: colorHex, border: '1px solid rgba(0,0,0,0.2)', flexShrink: 0 }}></span>
+                                <span>{colorName}</span>
+                              </div>
+                            </th>
+                          );
+                        })}
+                        <th style={{ padding: '0.75rem', textAlign: 'center', borderBottom: '2px solid var(--accent-color)', backgroundColor: 'var(--surface-highlight)', color: 'var(--accent-color)', fontWeight: 'bold' }}>
+                          إجمالي المقاس
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {targetSizes.map((size, sIdx) => (
+                        <tr key={`size-${sIdx}`} style={{ borderBottom: '1px solid var(--border-color)', backgroundColor: sIdx % 2 === 0 ? 'transparent' : 'rgba(212, 175, 55, 0.03)' }}>
+                          <td style={{ padding: '0.75rem', fontWeight: '600', color: 'var(--text-main)', backgroundColor: 'rgba(212, 175, 55, 0.05)' }}>
+                            {size}
+                          </td>
+                          {selectedColorsArr.map((colorName, cIdx) => (
+                            <td key={cIdx} style={{ padding: '0.5rem' }}>
+                              <input
+                                type="number"
+                                className="form-control"
+                                style={{ width: '75px', margin: 'auto', display: 'block', textAlign: 'center' }}
+                                placeholder="0"
+                                value={currentOrder.colorDistribution?.[colorName]?.[size] || ''}
+                                onChange={(e) => handleColorChange(colorName, size, e.target.value)}
+                              />
+                            </td>
+                          ))}
+                          <td style={{ padding: '0.5rem', textAlign: 'center', verticalAlign: 'middle', fontWeight: 'bold', color: 'var(--accent-color)', fontSize: '1.05rem', backgroundColor: 'rgba(212, 175, 55, 0.05)' }}>
+                            {selectedColorsArr.reduce((sum, cn) => sum + (parseInt(currentOrder.colorDistribution?.[cn]?.[size]) || 0), 0)}
+                          </td>
+                        </tr>
+                      ))}
+                      {/* ─── Totals Row (per color) ─── */}
+                      <tr style={{ borderTop: '2px solid var(--accent-color)', backgroundColor: 'var(--surface-highlight)' }}>
+                        <td style={{ padding: '0.75rem', fontWeight: 'bold', color: 'var(--accent-color)' }}>إجمالي اللون</td>
+                        {selectedColorsArr.map((colorName, cIdx) => (
+                          <td key={cIdx} style={{ padding: '0.75rem', textAlign: 'center', fontWeight: 'bold', color: 'var(--accent-color)', fontSize: '1.05rem' }}>
+                            {targetSizes.reduce((sum, size) => sum + (parseInt(currentOrder.colorDistribution?.[colorName]?.[size]) || 0), 0)}
+                          </td>
+                        ))}
+                        <td style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '900', color: 'var(--primary-color)', fontSize: '1.15rem', backgroundColor: 'rgba(212, 175, 55, 0.1)' }}>
+                          {selectedColorsArr.reduce((total, cn) => total + targetSizes.reduce((sum, s) => sum + (parseInt(currentOrder.colorDistribution?.[cn]?.[s]) || 0), 0), 0)}
                         </td>
                       </tr>
-                    ) : (
-                      selectedColorsArr.map((colorName, i) => {
-                        const colorObj = lookups.colors?.find(c => (c.name || c) === colorName);
-                        const colorHex = colorObj?.hex || '#cccccc';
-                        
-                        return (
-                          <tr key={`row-${i}`} style={{ borderBottom: '1px solid var(--border-color)', backgroundColor: 'rgba(212, 175, 55, 0.05)' }}>
-                            <td style={{ padding: '0.75rem', fontWeight: '500' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                <button type="button" onClick={() => toggleColor(colorName)} style={{ background: 'var(--bg-color)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '4px', color: '#ef4444', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="إزالة من الجدول">
-                                  <X size={14} />
-                                </button>
-                                <span style={{ width: '18px', height: '18px', borderRadius: '50%', backgroundColor: colorHex, border: '1px solid var(--border-color)', display: 'inline-block' }}></span>
-                                {colorName}
-                              </div>
-                            </td>
-                            {targetSizes.map((size, j) => (
-                              <td key={j} style={{ padding: '0.5rem' }}>
-                                <input type="number" className="form-control" style={{ width: '70px', margin: 'auto', display: 'block', textAlign: 'center' }} placeholder="0" value={currentOrder.colorDistribution?.[colorName]?.[size] || ''} onChange={(e) => handleColorChange(colorName, size, e.target.value)} />
-                              </td>
-                            ))}
-                            <td style={{ padding: '0.5rem', textAlign: 'center', verticalAlign: 'middle', fontWeight: 'bold', color: 'var(--accent-color)', fontSize: '1.1rem', backgroundColor: 'rgba(212, 175, 55, 0.05)' }}>
-                              {targetSizes.reduce((sum, size) => sum + (parseInt(currentOrder.colorDistribution?.[colorName]?.[size]) || 0), 0)}
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         );
+      }
 
       case 'packaging':
         return (
@@ -1597,6 +1843,41 @@ const DataEntryWizard = () => {
                 autoComplete="off"
               />
               <button className="btn btn-primary" onClick={handleFetch} style={{ padding: '0.5rem 1rem' }}>جلب (Fetch)</button>
+              <button
+                className="btn"
+                onClick={() => {
+                  if (window.confirm('⚠️ هل أنت متأكد من تفريغ جميع البيانات وبدء طلبية جديدة؟\n\nسيتم مسح كل الحقول المدخلة وإعادة تعيين النموذج بالكامل.')) {
+                    handleClear();
+                  }
+                }}
+                style={{
+                  padding: '0.5rem 1rem',
+                  background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+                  border: 'none',
+                  color: '#fff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  fontSize: '0.85rem',
+                  fontWeight: 'bold',
+                  borderRadius: 'var(--radius-sm, 8px)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  boxShadow: '0 2px 8px rgba(239, 68, 68, 0.3)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'linear-gradient(135deg, #dc2626, #b91c1c)';
+                  e.currentTarget.style.boxShadow = '0 4px 16px rgba(239, 68, 68, 0.4)';
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'linear-gradient(135deg, #ef4444, #dc2626)';
+                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(239, 68, 68, 0.3)';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                }}
+              >
+                <RefreshCw size={15} /> تفريغ وبدء جديد
+              </button>
               
               {showSerialsList && (
                 <div style={{
@@ -1961,7 +2242,31 @@ const DataEntryWizard = () => {
 
       {/* ═══ Bottom Actions Bar ═══ */}
       <div className="wizard-bottom-bar">
-        <button className="btn btn-outline" style={{ flex: 1, maxWidth: '180px', fontSize: '1rem', padding: '0.9rem' }} onClick={handleClear}>
+        <button
+          className="btn"
+          style={{
+            flex: 1, maxWidth: '200px', fontSize: '0.95rem', padding: '0.9rem',
+            background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+            border: 'none', color: '#fff', fontWeight: 'bold',
+            boxShadow: '0 2px 8px rgba(239, 68, 68, 0.3)',
+            transition: 'all 0.2s'
+          }}
+          onClick={() => {
+            if (window.confirm('⚠️ هل أنت متأكد من تفريغ جميع البيانات وبدء طلبية جديدة؟\n\nسيتم مسح كل الحقول المدخلة وإعادة تعيين النموذج بالكامل.')) {
+              handleClear();
+            }
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'linear-gradient(135deg, #dc2626, #b91c1c)';
+            e.currentTarget.style.boxShadow = '0 4px 16px rgba(239, 68, 68, 0.4)';
+            e.currentTarget.style.transform = 'translateY(-1px)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'linear-gradient(135deg, #ef4444, #dc2626)';
+            e.currentTarget.style.boxShadow = '0 2px 8px rgba(239, 68, 68, 0.3)';
+            e.currentTarget.style.transform = 'translateY(0)';
+          }}
+        >
           <RefreshCw size={18} /> تفريغ وبدء جديد
         </button>
 

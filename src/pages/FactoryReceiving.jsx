@@ -40,7 +40,8 @@ const FactoryReceiving = () => {
     status: '',
     fromCtn: '',
     toCtn: '',
-    pcsPerCtn: ''
+    pcsPerCtn: '',
+    active: i === 0 // Only the first package is active by default
   })));
 
   // Colors Table State
@@ -73,6 +74,7 @@ const FactoryReceiving = () => {
   };
 
   const totals = packages.reduce((acc, pkg) => {
+    if (!pkg.active) return acc;
     const calc = getPackageCalculations(pkg);
     return {
       totalCtn: acc.totalCtn + calc.totalCtnQty,
@@ -126,20 +128,33 @@ const FactoryReceiving = () => {
       });
       
       if (recData && recData.receive_data && recData.receive_data.packages) {
-        setPackages(recData.receive_data.packages);
+        // Ensure fetched packages have an 'active' status if they contain data
+        const fetchedPkgs = recData.receive_data.packages.map((p, idx) => ({
+           ...p,
+           active: p.active !== undefined ? p.active : (p.fromCtn || p.toCtn || p.pcsPerCtn || idx === 0)
+        }));
+        setPackages(fetchedPkgs);
       } else {
         const newPkgs = Array.from({ length: 4 }).map((_, i) => ({
-          id: `Package_${i + 1}`, kind: '', status: '', fromCtn: '', toCtn: '', pcsPerCtn: ''
+          id: `Package_${i + 1}`, kind: '', status: '', fromCtn: '', toCtn: '', pcsPerCtn: '', active: i === 0
         }));
         setPackages(newPkgs);
       }
       
       const newCols = Array.from({ length: 9 }).map((_, i) => ({
-        id: `Colors_${i + 1}`, colorName: '', quantity: '0', expected: 0
+        id: `Colors_${i + 1}`, colorName: '', quantity: '0', expected: 0, factoryActual: 0
       }));
 
       if (recData && recData.receive_data && recData.receive_data.colors) {
-         setColors(recData.receive_data.colors);
+         // Merge with latest factoryActual from oData
+         const mergedCols = recData.receive_data.colors.map(col => {
+            let factAct = 0;
+            if (col.colorName && oData.factoryProduction && oData.factoryProduction[col.colorName]) {
+                factAct = oData.factoryProduction[col.colorName];
+            }
+            return { ...col, factoryActual: factAct };
+         });
+         setColors(mergedCols);
       } else {
         if (oData.colorDistribution) {
            let idx = 0;
@@ -152,6 +167,7 @@ const FactoryReceiving = () => {
               newCols[idx].colorName = colorStr;
               newCols[idx].quantity = sum.toString();
               newCols[idx].expected = sum;
+              newCols[idx].factoryActual = (oData.factoryProduction && oData.factoryProduction[colorStr]) ? oData.factoryProduction[colorStr] : 0;
               idx++;
            }
         }
@@ -269,7 +285,7 @@ const FactoryReceiving = () => {
         factoryId: '', factoryName: ''
       });
       setPackages(Array.from({ length: 4 }).map((_, i) => ({
-        id: `Package_${i + 1}`, kind: '', status: '', fromCtn: '', toCtn: '', pcsPerCtn: ''
+        id: `Package_${i + 1}`, kind: '', status: '', fromCtn: '', toCtn: '', pcsPerCtn: '', active: i === 0
       })));
       setColors(Array.from({ length: 9 }).map((_, i) => ({
         id: `Colors_${i + 1}`, colorName: '', quantity: '', expected: 0
@@ -601,63 +617,93 @@ const FactoryReceiving = () => {
                 const calc = getPackageCalculations(pkg);
                 return (
                   <div key={idx} style={{ 
-                    display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center', 
-                    background: 'var(--surface-highlight)', padding: '1rem', 
-                    borderRadius: '12px', border: '1px solid var(--border-color)' 
+                    display: 'flex', flexDirection: 'column', gap: '0.75rem', 
+                    background: pkg.active ? 'var(--surface-highlight)' : 'rgba(255, 255, 255, 0.02)', 
+                    padding: '1rem', borderRadius: '12px', 
+                    border: pkg.active ? '1px solid var(--border-color)' : '1px dashed var(--border-color)',
+                    transition: 'all 0.3s ease',
+                    opacity: pkg.active ? 1 : 0.8
                   }}>
-                    <div style={{ background: 'var(--accent-color)', color: '#000', padding: '6px 12px', borderRadius: '8px', fontWeight: 'bold', fontSize: '0.9rem' }}>
-                      {pkg.id}
+                    {/* Package Header with Checkbox */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                          <div style={{ 
+                             background: pkg.active ? 'var(--accent-color)' : 'var(--border-color)', 
+                             color: pkg.active ? '#000' : 'var(--text-muted)', 
+                             padding: '4px 12px', borderRadius: '8px', fontWeight: 'bold', fontSize: '0.85rem',
+                             transition: 'all 0.3s'
+                          }}>
+                            {pkg.id}
+                          </div>
+                          {idx > 0 && (
+                             <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', userSelect: 'none', fontSize: '0.9rem', color: pkg.active ? 'var(--accent-color)' : 'var(--text-muted)' }}>
+                                <input 
+                                  type="checkbox" 
+                                  checked={pkg.active} 
+                                  onChange={(e) => handlePackageChange(idx, 'active', e.target.checked)}
+                                  style={{ width: '18px', height: '18px', accentColor: 'var(--accent-color)', cursor: 'pointer' }}
+                                />
+                                {pkg.active ? 'مفعل (Active)' : 'إضافة بكج (Add Package)'}
+                             </label>
+                          )}
+                       </div>
+                       
                     </div>
-
-                    <div style={{ display: 'flex', gap: '1rem', flex: '1 1 500px' }}>
-                      <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
-                        <label className="form-label" style={{ fontSize: '0.75rem' }}>النوع (Kind)</label>
-                        <select className="form-control" value={pkg.kind} onChange={e => handlePackageChange(idx, 'kind', e.target.value)}>
-                          <option value=""></option>
-                          <option value="Pcs">قطع (Pcs)</option>
-                          <option value="Doz">درزن (Doz)</option>
-                        </select>
-                      </div>
-                      <div className="form-group" style={{ flex: 1.5, marginBottom: 0 }}>
-                        <label className="form-label" style={{ fontSize: '0.75rem' }}>حالة الكرتون</label>
-                        <select className="form-control" value={pkg.status} onChange={e => handlePackageChange(idx, 'status', e.target.value)}>
-                          <option value=""></option>
-                          <option value="Full">Full (ممتلئ)</option>
-                          <option value="Not Full">Not Full (ناقص)</option>
-                        </select>
-                      </div>
-                      <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
-                        <label className="form-label" style={{ fontSize: '0.75rem' }}>من (From CTN)</label>
-                        <input type="number" className="form-control" value={pkg.fromCtn} onChange={e => handlePackageChange(idx, 'fromCtn', e.target.value)} />
-                      </div>
-                      <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
-                        <label className="form-label" style={{ fontSize: '0.75rem' }}>إلى (To CTN)</label>
-                        <input type="number" className="form-control" value={pkg.toCtn} onChange={e => handlePackageChange(idx, 'toCtn', e.target.value)} />
-                      </div>
-                      <div className="form-group" style={{ flex: 1.5, marginBottom: 0 }}>
-                        <label className="form-label" style={{ fontSize: '0.75rem' }}>الكمية بالكرتون</label>
-                        <input type="number" className="form-control" value={pkg.pcsPerCtn} onChange={e => handlePackageChange(idx, 'pcsPerCtn', e.target.value)} />
-                      </div>
-                    </div>
-
-                    {/* Result Segment */}
-                    {calc.totalProdQty > 0 && (
-                      <div className="fade-in" style={{ 
-                        flexShrink: 0, 
-                        display: 'flex', gap: '1.5rem', 
-                        background: 'var(--surface-color)', 
-                        padding: '10px 20px', borderRadius: '8px', 
-                        border: '1px solid rgba(74, 222, 128, 0.4)'
-                      }}>
-                        <div style={{ textAlign: 'center' }}>
-                          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>إجمالي الكراتين</span>
-                          <strong style={{ fontSize: '1.2rem', color: '#4ade80' }}>{calc.totalCtnQty}</strong>
+                    
+                    {/* Fields - only if active */}
+                    {pkg.active && (
+                      <div className="fade-in" style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'flex-end', paddingTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                        <div className="form-group" style={{ flex: 1, minWidth: '120px', marginBottom: 0 }}>
+                          <label className="form-label" style={{ fontSize: '0.75rem' }}>النوع (Kind)</label>
+                          <select className="form-control" value={pkg.kind} onChange={e => handlePackageChange(idx, 'kind', e.target.value)}>
+                            <option value=""></option>
+                            <option value="Pcs">قطع (Pcs)</option>
+                            <option value="Doz">درزن (Doz)</option>
+                          </select>
                         </div>
-                        <div style={{ width: '1px', background: 'var(--border-color)' }}></div>
-                        <div style={{ textAlign: 'center' }}>
-                          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>القطع المستلمة</span>
-                          <strong style={{ fontSize: '1.2rem', color: '#4ade80' }}>{calc.totalProdQty}</strong>
+                        <div className="form-group" style={{ flex: 1.5, minWidth: '150px', marginBottom: 0 }}>
+                          <label className="form-label" style={{ fontSize: '0.75rem' }}>حالة الكرتون</label>
+                          <select className="form-control" value={pkg.status} onChange={e => handlePackageChange(idx, 'status', e.target.value)}>
+                            <option value=""></option>
+                            <option value="Full">Full (ممتلئ)</option>
+                            <option value="Not Full">Not Full (ناقص)</option>
+                          </select>
                         </div>
+                        <div className="form-group" style={{ flex: 1, minWidth: '80px', marginBottom: 0 }}>
+                          <label className="form-label" style={{ fontSize: '0.75rem' }}>من (From)</label>
+                          <input type="number" className="form-control" value={pkg.fromCtn} onChange={e => handlePackageChange(idx, 'fromCtn', e.target.value)} />
+                        </div>
+                        <div className="form-group" style={{ flex: 1, minWidth: '80px', marginBottom: 0 }}>
+                          <label className="form-label" style={{ fontSize: '0.75rem' }}>إلى (To)</label>
+                          <input type="number" className="form-control" value={pkg.toCtn} onChange={e => handlePackageChange(idx, 'toCtn', e.target.value)} />
+                        </div>
+                        <div className="form-group" style={{ flex: 1.5, minWidth: '120px', marginBottom: 0 }}>
+                          <label className="form-label" style={{ fontSize: '0.75rem' }}>الكمية بالكرتون</label>
+                          <input type="number" className="form-control" value={pkg.pcsPerCtn} onChange={e => handlePackageChange(idx, 'pcsPerCtn', e.target.value)} />
+                        </div>
+
+                        {/* Result Segment Restored */}
+                        {calc.totalProdQty > 0 && (
+                          <div className="fade-in" style={{ 
+                            flexShrink: 0, 
+                            display: 'flex', gap: '1.5rem', 
+                            background: 'var(--surface-color)', 
+                            padding: '10px 20px', borderRadius: '8px', 
+                            border: '1px solid rgba(74, 222, 128, 0.4)',
+                            alignSelf: 'flex-end',
+                            marginBottom: '2px'
+                          }}>
+                            <div style={{ textAlign: 'center' }}>
+                              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>إجمالي الكراتين</span>
+                              <strong style={{ fontSize: '1.2rem', color: '#4ade80' }}>{calc.totalCtnQty}</strong>
+                            </div>
+                            <div style={{ width: '1px', background: 'var(--border-color)' }}></div>
+                            <div style={{ textAlign: 'center' }}>
+                              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>القطع المستلمة</span>
+                              <strong style={{ fontSize: '1.2rem', color: '#4ade80' }}>{calc.totalProdQty}</strong>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -682,6 +728,11 @@ const FactoryReceiving = () => {
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between' }}>
                       <span>مطلوب:</span> <strong>{c.expected}</strong>
                     </div>
+                    {c.factoryActual > 0 && (
+                        <div style={{ fontSize: '0.8rem', color: '#d4af37', display: 'flex', justifyContent: 'space-between' }}>
+                          <span>صنع فعليا:</span> <strong>{c.factoryActual}</strong>
+                        </div>
+                    )}
                     <input
                       type="number"
                       className="form-control"

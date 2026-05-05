@@ -17,7 +17,8 @@ const initialLookups = {
   cartonSizes: [],
   plasticBagSizes: [],
   measurements: [],
-  packagingConditionsList: []
+  packagingConditionsList: [],
+  componentParts: []
 };
 
 export const defaultOrderState = {
@@ -45,7 +46,8 @@ export const defaultOrderState = {
   plasticBagSize: '',
   remarks: '',
   colorDistribution: {},
-  groupedMeasurements: {}
+  groupedMeasurements: {},
+  manualSizes: []
 };
 
 export const AppDataProvider = ({ children }) => {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
-import { Search, Save, Factory, AlertCircle, Info, Palette, CheckCircle2, X } from 'lucide-react';
+import { Search, Save, Factory, AlertCircle, Info, Palette, CheckCircle2, X, Box } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const FactoryOwnerPortal = () => {
@@ -30,6 +30,17 @@ const FactoryOwnerPortal = () => {
   // Colors Table State
   const [colors, setColors] = useState([]);
 
+  // Package Table State
+  const [packages, setPackages] = useState(Array.from({ length: 4 }).map((_, i) => ({
+    id: `Package_${i + 1}`,
+    kind: '',
+    status: '',
+    fromCtn: '',
+    toCtn: '',
+    pcsPerCtn: '',
+    active: i === 0
+  })));
+
   // Original Order Data (so we don't overwrite other fields)
   const [originalOrderData, setOriginalOrderData] = useState(null);
 
@@ -55,6 +66,19 @@ const FactoryOwnerPortal = () => {
       
       const oData = oDataResp.order_data;
       setOriginalOrderData(oData);
+
+      // Helper for Package Calculations
+      const getPackageCalculationsLocal = (pkg) => {
+        const from = parseInt(pkg.fromCtn);
+        const to = parseInt(pkg.toCtn);
+        const units = parseInt(pkg.pcsPerCtn);
+        const hasRange = !isNaN(from) && !isNaN(to) && to >= from;
+        const hasUnits = !isNaN(units) && units > 0;
+        const totalCtnQty = hasRange ? (to - from + 1) : 0;
+        const multiplier = pkg.kind === 'Doz' ? 12 : 1;
+        const totalProdQty = (hasRange && hasUnits) ? (totalCtnQty * units * multiplier) : 0;
+        return { totalCtnQty, totalProdQty };
+      };
 
       setProductInfo({
         mainBarcode: oData.barcode || `1000${oData.serialNumber}`,
@@ -88,6 +112,14 @@ const FactoryOwnerPortal = () => {
          }
       }
       setColors(newCols);
+      
+      if (oData.factoryPackages) {
+        setPackages(oData.factoryPackages);
+      } else {
+        setPackages(Array.from({ length: 4 }).map((_, i) => ({
+          id: `Package_${i + 1}`, kind: '', status: '', fromCtn: '', toCtn: '', pcsPerCtn: '', active: i === 0
+        })));
+      }
       
       setIsFetched(true);
       toast.success(`تم استرداد بيانات الموديل: ${termToSearch} بنجاح`);
@@ -137,6 +169,33 @@ const FactoryOwnerPortal = () => {
     setColors(updated);
   };
 
+  const handlePackageChange = (index, field, value) => {
+    const updated = [...packages];
+    updated[index][field] = value;
+    setPackages(updated);
+  };
+
+  const getPackageCalculations = (pkg) => {
+    const from = parseInt(pkg.fromCtn);
+    const to = parseInt(pkg.toCtn);
+    const units = parseInt(pkg.pcsPerCtn);
+    const hasRange = !isNaN(from) && !isNaN(to) && to >= from;
+    const hasUnits = !isNaN(units) && units > 0;
+    const totalCtnQty = hasRange ? (to - from + 1) : 0;
+    const multiplier = pkg.kind === 'Doz' ? 12 : 1;
+    const totalProdQty = (hasRange && hasUnits) ? (totalCtnQty * units * multiplier) : 0;
+    return { totalCtnQty, totalProdQty };
+  };
+
+  const totals = packages.reduce((acc, pkg) => {
+    if (!pkg.active) return acc;
+    const calc = getPackageCalculations(pkg);
+    return {
+      totalCtn: acc.totalCtn + calc.totalCtnQty,
+      totalProd: acc.totalProd + calc.totalProdQty
+    };
+  }, { totalCtn: 0, totalProd: 0 });
+
   const handleSave = async () => {
     if (!isFetched || !originalOrderData) {
       toast.error('أدخل رقم الموديل أولاً');
@@ -147,10 +206,6 @@ const FactoryOwnerPortal = () => {
     const actualSum = colors.reduce((acc, c) => acc + (parseInt(c.actualQuantity) || 0), 0);
     
     if (hasActualQuantities) {
-        if (actualSum !== productInfo.reqTotalQuantity) {
-            toast.error(`عذراً! إجمالي الكميات المدخلة (${actualSum}) لا يطابق إجمالي الكمية المطلوبة (${productInfo.reqTotalQuantity}).`);
-            return;
-        }
         if (productInfo.factoryStatus !== 'تم التسليم') {
             toast.error('عذراً! عند إدخال كميات فعلية، يجب تغيير حالة المنتج إلى "تم التسليم" أولاً.');
             return;
@@ -167,7 +222,8 @@ const FactoryOwnerPortal = () => {
     const updatedOrderData = {
         ...originalOrderData,
         factoryStatus: productInfo.factoryStatus,
-        factoryProduction: factoryProductionData
+        factoryProduction: factoryProductionData,
+        factoryPackages: packages
     };
     
     const toastId = toast.loading('جاري حفظ البيانات في قاعدة البيانات...');
@@ -188,6 +244,9 @@ const FactoryOwnerPortal = () => {
         reqTotalQuantity: 0, factoryId: '', factoryName: '', factoryStatus: 'لم يتم التسليم'
       });
       setColors([]);
+      setPackages(Array.from({ length: 4 }).map((_, i) => ({
+        id: `Package_${i + 1}`, kind: '', status: '', fromCtn: '', toCtn: '', pcsPerCtn: '', active: i === 0
+      })));
       setOriginalOrderData(null);
       
     } catch (err) {
@@ -381,6 +440,131 @@ const FactoryOwnerPortal = () => {
             </div>
           </div>
 
+          {/* ─── PACKAGES ENTRY CARD (Optional) ─── */}
+          <div className="card">
+            <div className="tab-section-header">
+              <h3><Box size={22} /> الكراتين والتعبئة الفعلية (Actual Packages - Optional)</h3>
+            </div>
+            
+            <p style={{ color: 'var(--text-muted)', marginBottom: '1rem', fontSize: '0.9rem' }}>
+              اختياري: يمكنك إدخال بيانات الكراتين لتوضيح التعبئة الفعلية التي قمت بها للمطابقة عند الاستلام.
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {packages.map((pkg, idx) => {
+                const calc = getPackageCalculations(pkg);
+                return (
+                  <div key={idx} style={{ 
+                    display: 'flex', flexDirection: 'column', gap: '0.75rem', 
+                    background: pkg.active ? 'var(--surface-highlight)' : 'rgba(255, 255, 255, 0.02)', 
+                    padding: '1rem', borderRadius: '12px', 
+                    border: pkg.active ? '1px solid var(--border-color)' : '1px dashed var(--border-color)',
+                    transition: 'all 0.3s ease',
+                    opacity: pkg.active ? 1 : 0.8
+                  }}>
+                    {/* Package Header with Checkbox */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                          <div style={{ 
+                             background: pkg.active ? 'var(--accent-color)' : 'var(--border-color)', 
+                             color: pkg.active ? '#000' : 'var(--text-muted)', 
+                             padding: '4px 12px', borderRadius: '8px', fontWeight: 'bold', fontSize: '0.85rem',
+                             transition: 'all 0.3s'
+                          }}>
+                            {pkg.id}
+                          </div>
+                          {idx > 0 && (
+                             <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', userSelect: 'none', fontSize: '0.9rem', color: pkg.active ? 'var(--accent-color)' : 'var(--text-muted)' }}>
+                                <input 
+                                  type="checkbox" 
+                                  checked={pkg.active} 
+                                  onChange={(e) => handlePackageChange(idx, 'active', e.target.checked)}
+                                  style={{ width: '18px', height: '18px', accentColor: 'var(--accent-color)', cursor: 'pointer' }}
+                                />
+                                {pkg.active ? 'مفعل (Active)' : 'إضافة بكج (Add Package)'}
+                             </label>
+                          )}
+                       </div>
+                    </div>
+                    
+                    {/* Fields - only if active */}
+                    {pkg.active && (
+                      <div className="fade-in" style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'flex-end', paddingTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                        <div className="form-group" style={{ flex: 1, minWidth: '120px', marginBottom: 0 }}>
+                          <label className="form-label" style={{ fontSize: '0.75rem' }}>النوع (Kind)</label>
+                          <select className="form-control" value={pkg.kind} onChange={e => handlePackageChange(idx, 'kind', e.target.value)}>
+                            <option value=""></option>
+                            <option value="Pcs">قطع (Pcs)</option>
+                            <option value="Doz">درزن (Doz)</option>
+                          </select>
+                        </div>
+                        <div className="form-group" style={{ flex: 1.5, minWidth: '150px', marginBottom: 0 }}>
+                          <label className="form-label" style={{ fontSize: '0.75rem' }}>حالة الكرتون</label>
+                          <select className="form-control" value={pkg.status} onChange={e => handlePackageChange(idx, 'status', e.target.value)}>
+                            <option value=""></option>
+                            <option value="Full">Full (ممتلئ)</option>
+                            <option value="Not Full">Not Full (ناقص)</option>
+                          </select>
+                        </div>
+                        <div className="form-group" style={{ flex: 1, minWidth: '80px', marginBottom: 0 }}>
+                          <label className="form-label" style={{ fontSize: '0.75rem' }}>من (From)</label>
+                          <input type="number" className="form-control" value={pkg.fromCtn} onChange={e => handlePackageChange(idx, 'fromCtn', e.target.value)} />
+                        </div>
+                        <div className="form-group" style={{ flex: 1, minWidth: '80px', marginBottom: 0 }}>
+                          <label className="form-label" style={{ fontSize: '0.75rem' }}>إلى (To)</label>
+                          <input type="number" className="form-control" value={pkg.toCtn} onChange={e => handlePackageChange(idx, 'toCtn', e.target.value)} />
+                        </div>
+                        <div className="form-group" style={{ flex: 1.5, minWidth: '120px', marginBottom: 0 }}>
+                          <label className="form-label" style={{ fontSize: '0.75rem' }}>الكمية بالكرتون</label>
+                          <input type="number" className="form-control" value={pkg.pcsPerCtn} onChange={e => handlePackageChange(idx, 'pcsPerCtn', e.target.value)} />
+                        </div>
+
+                        {/* Result Segment */}
+                        {calc.totalProdQty > 0 && (
+                          <div className="fade-in" style={{ 
+                            flexShrink: 0, 
+                            display: 'flex', gap: '1.5rem', 
+                            background: 'var(--surface-color)', 
+                            padding: '10px 20px', borderRadius: '8px', 
+                            border: '1px solid rgba(74, 222, 128, 0.4)',
+                            alignSelf: 'flex-end',
+                            marginBottom: '2px'
+                          }}>
+                            <div style={{ textAlign: 'center' }}>
+                              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>إجمالي الكراتين</span>
+                              <strong style={{ fontSize: '1.2rem', color: '#4ade80' }}>{calc.totalCtnQty}</strong>
+                            </div>
+                            <div style={{ width: '1px', background: 'var(--border-color)' }}></div>
+                            <div style={{ textAlign: 'center' }}>
+                              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>القطع المنتجة</span>
+                              <strong style={{ fontSize: '1.2rem', color: '#4ade80' }}>{calc.totalProdQty}</strong>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            
+            {/* Total Packages Summary */}
+            {totals.totalProd > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem', padding: '1rem', background: 'rgba(212,175,55,0.05)', borderRadius: '10px', border: '1px solid rgba(212,175,55,0.2)' }}>
+                   <div style={{ display: 'flex', gap: '2rem' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                         <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>إجمالي كراتين المصنع</span>
+                         <strong style={{ fontSize: '1.4rem', color: 'var(--accent-color)' }}>{totals.totalCtn}</strong>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                         <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>إجمالي القطع المعبأة</span>
+                         <strong style={{ fontSize: '1.4rem', color: 'var(--accent-color)' }}>{totals.totalProd}</strong>
+                      </div>
+                   </div>
+                </div>
+            )}
+          </div>
+
           {/* ─── COLORS DISTRIBUTION CARD (Actual Manufactured) ─── */}
           <div className="card">
             <div className="tab-section-header">
@@ -445,13 +629,18 @@ const FactoryOwnerPortal = () => {
              {colors.some(c => c.actualQuantity !== '' && parseInt(c.actualQuantity) > 0) && (
                  <>
                    {colors.reduce((acc, c) => acc + (parseInt(c.actualQuantity) || 0), 0) !== productInfo.reqTotalQuantity && (
-                     <div style={{ color: '#f87171', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold' }}>
-                        <AlertCircle size={14} /> إجمالي المدخل لا يطابق الأصلي المطلوب ({productInfo.reqTotalQuantity})
+                     <div style={{ color: '#eab308', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold' }}>
+                        <AlertCircle size={14} /> ملاحظة: إجمالي المدخل لا يطابق الأصلي المطلوب ({productInfo.reqTotalQuantity})
                      </div>
                    )}
                    {productInfo.factoryStatus !== 'تم التسليم' && (
                      <div style={{ color: '#f87171', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold' }}>
                         <AlertCircle size={14} /> يجب تغيير الحالة إلى "تم التسليم" لحفظ الكميات
+                     </div>
+                   )}
+                   {totals.totalProd > 0 && totals.totalProd !== colors.reduce((acc, c) => acc + (parseInt(c.actualQuantity) || 0), 0) && (
+                     <div style={{ color: '#eab308', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold' }}>
+                        <AlertCircle size={14} /> ملاحظة: إجمالي قطع التعبئة ({totals.totalProd}) لا يطابق قطع الألوان
                      </div>
                    )}
                  </>
@@ -463,9 +652,8 @@ const FactoryOwnerPortal = () => {
                  padding: '16px 40px', fontSize: '1.2rem', 
                  background: 'linear-gradient(to right, #d4af37, #b48c1e)',
                  color: '#000',
-                 border: 'none',
-                 opacity: (colors.some(c => c.actualQuantity !== '' && parseInt(c.actualQuantity) > 0) && (productInfo.factoryStatus !== 'تم التسليم' || colors.reduce((acc, c) => acc + (parseInt(c.actualQuantity) || 0), 0) !== productInfo.reqTotalQuantity)) ? 0.5 : 1,
-                 cursor: (colors.some(c => c.actualQuantity !== '' && parseInt(c.actualQuantity) > 0) && (productInfo.factoryStatus !== 'تم التسليم' || colors.reduce((acc, c) => acc + (parseInt(c.actualQuantity) || 0), 0) !== productInfo.reqTotalQuantity)) ? 'not-allowed' : 'pointer'
+                 opacity: (colors.some(c => c.actualQuantity !== '' && parseInt(c.actualQuantity) > 0) && productInfo.factoryStatus !== 'تم التسليم') ? 0.5 : 1,
+                 cursor: (colors.some(c => c.actualQuantity !== '' && parseInt(c.actualQuantity) > 0) && productInfo.factoryStatus !== 'تم التسليم') ? 'not-allowed' : 'pointer'
                }}
              >
                <Save size={24} />

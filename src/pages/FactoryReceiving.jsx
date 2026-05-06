@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAppData } from '../context/AppDataContext';
 import { supabase } from '../supabaseClient';
-import { Search, Save, PackageCheck, AlertCircle, Info, Box, Palette, Calculator, CheckCircle2, XCircle, Download, Printer, X } from 'lucide-react';
+import { Search, Save, PackageCheck, AlertCircle, Info, Box, Palette, Calculator, CheckCircle2, XCircle, Download, Printer, X, Factory } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 
@@ -43,6 +43,9 @@ const FactoryReceiving = () => {
     pcsPerCtn: '',
     active: i === 0 // Only the first package is active by default
   })));
+
+  // Factory Packages State (Read-only)
+  const [factoryPackages, setFactoryPackages] = useState([]);
 
   // Colors Table State
   const [colors, setColors] = useState(Array.from({ length: 9 }).map((_, i) => ({
@@ -139,6 +142,12 @@ const FactoryReceiving = () => {
           id: `Package_${i + 1}`, kind: '', status: '', fromCtn: '', toCtn: '', pcsPerCtn: '', active: i === 0
         }));
         setPackages(newPkgs);
+      }
+      
+      if (oData.factoryPackages && Array.isArray(oData.factoryPackages)) {
+        setFactoryPackages(oData.factoryPackages.filter(p => p.active && (p.fromCtn || p.toCtn || p.pcsPerCtn)));
+      } else {
+        setFactoryPackages([]);
       }
       
       const newCols = Array.from({ length: 9 }).map((_, i) => ({
@@ -240,7 +249,7 @@ const FactoryReceiving = () => {
   const totalColorsQty = colors.reduce((acc, col) => acc + (parseInt(col.quantity) || 0), 0);
   const isColorsQtyMatching = isFetched && totalColorsQty === totals.totalProd && totals.totalProd > 0;
 
-  const canSave = isQtyMatching && isColorsQtyMatching && isStatusReceived && totals.totalProd > 0;
+  const canSave = isStatusReceived && totals.totalProd > 0;
 
   const handleSave = async () => {
     if (!isFetched) {
@@ -251,14 +260,7 @@ const FactoryReceiving = () => {
       toast.error('لا يمكن الحفظ إلا إذا تم تغيير حالة المنتج إلى "مستلمة"');
       return;
     }
-    if (!isQtyMatching) {
-      toast.error(`إجمالي القطع المستلمة (${totals.totalProd}) لا يطابق الكمية المطلوبة في الطلبية (${expectedTotalQty})!`);
-      return;
-    }
-    if (!isColorsQtyMatching) {
-      toast.error(`إجمالي مقادير الألوان المستلمة (${totalColorsQty}) لا يطابق إجمالي القطع الموزعة في الكراتين (${totals.totalProd})!`);
-      return;
-    }
+
 
     const payload = {
       serial_number: modelNo.trim(),
@@ -287,6 +289,7 @@ const FactoryReceiving = () => {
       setPackages(Array.from({ length: 4 }).map((_, i) => ({
         id: `Package_${i + 1}`, kind: '', status: '', fromCtn: '', toCtn: '', pcsPerCtn: '', active: i === 0
       })));
+      setFactoryPackages([]);
       setColors(Array.from({ length: 9 }).map((_, i) => ({
         id: `Colors_${i + 1}`, colorName: '', quantity: '', expected: 0
       })));
@@ -612,6 +615,41 @@ const FactoryReceiving = () => {
               <h3><Box size={22} /> تفاصيل وتوزيع الكراتين المستلمة (Received Cartons Packages)</h3>
             </div>
             
+            {factoryPackages.length > 0 && (
+              <div style={{ marginBottom: '1.5rem', padding: '1rem', background: 'rgba(212,175,55,0.05)', borderRadius: '10px', border: '1px solid rgba(212,175,55,0.2)' }}>
+                <h4 style={{ fontSize: '1rem', color: 'var(--accent-color)', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <Factory size={18} /> مدخلات المصنع للكراتين (Factory Entries)
+                </h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.75rem' }}>
+                  {factoryPackages.map((pkg, idx) => {
+                    const from = parseInt(pkg.fromCtn) || 0;
+                    const to = parseInt(pkg.toCtn) || 0;
+                    const totalCtn = (to >= from && from > 0) ? (to - from + 1) : 0;
+                    const units = parseInt(pkg.pcsPerCtn) || 0;
+                    const multiplier = pkg.kind === 'Doz' ? 12 : 1;
+                    const totalProd = totalCtn * units * multiplier;
+                    return (
+                      <div key={idx} style={{ background: 'var(--surface-color)', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '0.85rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                          <span style={{ fontWeight: 'bold' }}>{pkg.id}</span>
+                          <span style={{ color: 'var(--text-muted)' }}>{pkg.kind} • {pkg.status}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-main)' }}>
+                          <span>الكراتين: {from} - {to} ({totalCtn})</span>
+                          <span>الكمية: {units} / {pkg.kind}</span>
+                        </div>
+                        {totalProd > 0 && (
+                          <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px solid rgba(255,255,255,0.05)', color: 'var(--accent-color)', fontWeight: 'bold' }}>
+                            إجمالي القطع: {totalProd}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               {packages.map((pkg, idx) => {
                 const calc = getPackageCalculations(pkg);
@@ -794,13 +832,13 @@ const FactoryReceiving = () => {
                 </div>
              )}
              {!isQtyMatching && isFetched && totals.totalProd > 0 && (
-                <div style={{ color: '#f87171', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold' }}>
-                   <AlertCircle size={14} /> الكمية مستلمة ({totals.totalProd}) لا تطابق الأصلية ({expectedTotalQty})
+                <div style={{ color: '#eab308', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold' }}>
+                   <AlertCircle size={14} /> ملاحظة: الكمية مستلمة ({totals.totalProd}) لا تطابق الأصلية ({expectedTotalQty})
                 </div>
              )}
              {!isColorsQtyMatching && isFetched && totals.totalProd > 0 && (
-                <div style={{ color: '#f87171', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold' }}>
-                   <AlertCircle size={14} /> كميات الألوان ({totalColorsQty}) لا تطابق إجمالي الكراتين ({totals.totalProd})
+                <div style={{ color: '#eab308', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold' }}>
+                   <AlertCircle size={14} /> ملاحظة: كميات الألوان ({totalColorsQty}) لا تطابق إجمالي الكراتين ({totals.totalProd})
                 </div>
              )}
              <button 

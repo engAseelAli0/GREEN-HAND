@@ -196,8 +196,8 @@ const ExportOrder = () => {
         }
 
         /* ---- Compact Invoice Table Cells ---- */
-        .inv-table { width:100%; border-collapse:collapse; border:1.5px solid #333; }
-        .inv-table th, .inv-table td { border:1px solid #999; padding:2px 4px; vertical-align:middle; }
+        .inv-table { width:100%; border-collapse:collapse; border:1.5px solid #333; table-layout:auto; }
+        .inv-table th, .inv-table td { border:1px solid #999; padding:2px 4px; vertical-align:middle; word-wrap:break-word; overflow-wrap:break-word; white-space:normal; }
         .inv-table th { font-size:8px; font-weight:700; }
         .inv-table td { font-size:8.5px; }
 

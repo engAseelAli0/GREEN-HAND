@@ -97,7 +97,7 @@ const ShippingInvoice = () => {
 
     for (let i = 0; i < updatedRows.length; i++) {
         let r = updatedRows[i];
-        if (r.serial.trim() && !r.desc) { // Only fetch if desc is empty to avoid overwriting manually edited
+        if (r.serial.trim()) { // Always fetch fresh data
             try {
                 const { data, error } = await supabase
                     .from('orders')
@@ -118,7 +118,7 @@ const ShippingInvoice = () => {
                     updatedRows[i] = {
                         ...r,
                         desc: englishOnly(d.productName) || '',
-                        arabicName: d.productName || '',
+                        arabicName: englishOnly(d.productName) || '',
                         qty: totalPieces.toString(),
                         currency: d.currency || '¥ RMB',
                         unitPrice: d.productPrice || '',
@@ -241,20 +241,27 @@ const ShippingInvoice = () => {
               }
               .inv-title-h2 { font-size: 14px !important; margin: 4px 0 !important; }
               /* Table compact */
-              .inv-main-table { font-size: 9px !important; }
+              .inv-main-table { font-size: 9px !important; table-layout: auto !important; }
               .inv-main-table th {
                 padding: 3px 2px !important; font-size: 8px !important;
                 background: #e8e8e8 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
                 border: 1px solid #000 !important; color: #000 !important;
+                white-space: normal !important;
               }
               .inv-main-table td {
                 padding: 2px 3px !important; border: 1px solid #000 !important;
-                color: #000 !important;
+                color: #000 !important; white-space: normal !important;
+                word-wrap: break-word !important; overflow-wrap: break-word !important;
               }
               .inv-main-table input {
                 font-size: 9px !important; color: #000 !important;
                 padding: 0 !important; height: auto !important;
                 min-height: unset !important;
+                display: none !important;
+              }
+              .inv-main-table .print-val {
+                display: inline !important; font-size: 9px !important;
+                color: #000 !important; font-weight: bold !important;
               }
               .inv-main-table img { width: 35px !important; height: 45px !important; }
               /* Footer table */
@@ -363,26 +370,32 @@ const ShippingInvoice = () => {
                           placeholder="الموديل"
                           style={{ width: '100%', background: 'transparent', border: 'none', color: 'var(--text-main)', textAlign: 'center', fontWeight: 'bold' }}
                         />
+                        <span className="print-val" style={{ display: 'none' }}>{row.serial}</span>
                      </td>
                      
                      <td style={{ border: '1px solid var(--border-color)', padding: '5px' }}>
                         <input type="text" value={row.desc} onChange={e => handleRowChange(row.id, 'desc', e.target.value)} style={{ width: '100%', background: 'transparent', border: 'none', color: 'var(--text-main)', textAlign: 'center' }} />
+                        <span className="print-val" style={{ display: 'none' }}>{row.desc}</span>
                      </td>
                      
                      <td style={{ border: '1px solid var(--border-color)', padding: '5px' }}>
                         <input type="text" value={row.arabicName} onChange={e => handleRowChange(row.id, 'arabicName', e.target.value)} style={{ width: '100%', background: 'transparent', border: 'none', color: 'var(--text-main)', textAlign: 'center', direction: 'rtl' }} />
+                        <span className="print-val" style={{ display: 'none' }}>{row.arabicName}</span>
                      </td>
                      
                      <td style={{ border: '1px solid var(--border-color)', padding: '5px' }}>
                         <input type="number" value={row.qty} onChange={e => handleRowChange(row.id, 'qty', e.target.value)} style={{ width: '100%', background: 'transparent', border: 'none', color: 'var(--text-main)', textAlign: 'center', fontWeight: 'bold' }} />
+                        <span className="print-val" style={{ display: 'none' }}>{row.qty}</span>
                      </td>
                      
                      <td style={{ border: '1px solid var(--border-color)', padding: '5px' }}>
                         <input type="text" value={row.currency} onChange={e => handleRowChange(row.id, 'currency', e.target.value)} style={{ width: '100%', background: 'transparent', border: 'none', color: 'var(--text-main)', textAlign: 'center' }} />
+                        <span className="print-val" style={{ display: 'none' }}>{row.currency}</span>
                      </td>
                      
                      <td style={{ border: '1px solid var(--border-color)', padding: '5px' }}>
                         <input type="number" value={row.unitPrice} onChange={e => handleRowChange(row.id, 'unitPrice', e.target.value)} style={{ width: '100%', background: 'transparent', border: 'none', color: 'var(--text-main)', textAlign: 'center' }} />
+                        <span className="print-val" style={{ display: 'none' }}>{row.unitPrice}</span>
                      </td>
                      
                      <td style={{ border: '1px solid var(--border-color)', padding: '5px', fontWeight: 'bold', color: 'var(--accent-color)' }}>

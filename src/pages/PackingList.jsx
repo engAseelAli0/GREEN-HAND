@@ -318,18 +318,21 @@ const PackingList = () => {
                 background: #fff !important; min-height: unset !important; height: auto !important;
               }
               .pl-title { font-size: 14px !important; margin: 4px 0 !important; }
-              .pl-table { font-size: 9px !important; }
+              .pl-table { font-size: 9px !important; table-layout: auto !important; }
               .pl-table th {
                 padding: 3px 2px !important; font-size: 7.5px !important;
                 background: #d9e6f0 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
                 border: 1px solid #000 !important; color: #000 !important;
+                white-space: normal !important;
               }
               .pl-table td {
                 padding: 2px 3px !important; border: 1px solid #000 !important; color: #000 !important;
+                white-space: normal !important; word-wrap: break-word !important; overflow-wrap: break-word !important;
               }
               .pl-table input {
                 font-size: 9px !important; color: #000 !important;
                 padding: 0 !important; height: auto !important; min-height: unset !important;
+                white-space: normal !important; overflow: visible !important;
               }
               .pl-table img { width: 35px !important; height: 45px !important; }
               .pl-table .pl-total-row td {

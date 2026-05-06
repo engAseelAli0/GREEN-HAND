@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAppData } from '../context/AppDataContext';
+import { englishOnly } from '../utils/textUtils';
 import { Printer, Plus, Trash2, Search, FileText, Settings, LayoutGrid } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -116,7 +117,7 @@ const ShippingInvoice = () => {
 
                     updatedRows[i] = {
                         ...r,
-                        desc: d.productName || '',
+                        desc: englishOnly(d.productName) || '',
                         arabicName: d.productName || '',
                         qty: totalPieces.toString(),
                         currency: d.currency || '¥ RMB',
@@ -198,39 +199,96 @@ const ShippingInvoice = () => {
         <style>
           {`
             @media print {
+              @page { size: portrait; margin: 6mm 8mm; }
+              *, *::before, *::after { box-sizing: border-box; }
               body, html {
                 background: #fff !important;
                 color: #000 !important;
-                --surface-color: #fff !important;
-                --bg-color: #fff !important;
-                --text-main: #000 !important;
-                --text-muted: #333 !important;
-                --border-color: #000 !important;
-                --surface-highlight: #f8f9fa !important;
-                --primary-color: #000 !important;
-                --accent-color: #000 !important;
+                margin: 0 !important; padding: 0 !important;
+                font-size: 10px !important;
               }
+              body * { visibility: hidden; }
+              #invoice-print-area, #invoice-print-area * { visibility: visible; }
               #invoice-print-area {
-                border: none !important;
-                box-shadow: none !important;
-                width: 100% !important;
+                position: absolute; left: 0; top: 0; width: 100% !important;
+                border: none !important; box-shadow: none !important;
+                border-radius: 0 !important; overflow: visible !important;
+                background: #fff !important; color: #000 !important;
+                padding: 0 !important;
               }
-              .no-print {
-                display: none !important;
+              .no-print { display: none !important; }
+              .inv-header-section {
+                border-bottom: 2px solid #000 !important;
+                padding: 6px 10px !important;
+                background: #fff !important;
               }
-              input {
+              .inv-header-section input {
+                font-size: 13px !important; color: #000 !important;
+              }
+              .inv-header-section .company-tel input {
+                font-size: 10px !important;
+              }
+              .inv-meta-grid {
+                padding: 4px 10px !important; gap: 6px !important;
+                background: #fff !important; border: none !important;
+              }
+              .inv-meta-grid label { font-size: 8px !important; color: #000 !important; margin-bottom: 1px !important; }
+              .inv-meta-grid input, .inv-meta-grid .form-control {
+                font-size: 10px !important; padding: 2px 4px !important;
+                border: 1px solid #000 !important; color: #000 !important;
+                background: #fff !important; min-height: unset !important;
+                height: auto !important;
+              }
+              .inv-title-h2 { font-size: 14px !important; margin: 4px 0 !important; }
+              /* Table compact */
+              .inv-main-table { font-size: 9px !important; }
+              .inv-main-table th {
+                padding: 3px 2px !important; font-size: 8px !important;
+                background: #e8e8e8 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+                border: 1px solid #000 !important; color: #000 !important;
+              }
+              .inv-main-table td {
+                padding: 2px 3px !important; border: 1px solid #000 !important;
                 color: #000 !important;
               }
-              table th, table td {
-                border: 1px solid #000 !important;
+              .inv-main-table input {
+                font-size: 9px !important; color: #000 !important;
+                padding: 0 !important; height: auto !important;
+                min-height: unset !important;
+              }
+              .inv-main-table img { width: 35px !important; height: 45px !important; }
+              /* Footer table */
+              .inv-footer-table { font-size: 10px !important; }
+              .inv-footer-table td {
+                padding: 3px 6px !important; border: 1px solid #000 !important;
                 color: #000 !important;
+              }
+              .inv-footer-table input {
+                font-size: 10px !important; color: #000 !important;
+                padding: 0 !important;
+              }
+              .inv-footer-table .highlight-cell {
+                background: #e8e8e8 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+              }
+              .inv-footer-table .total-cell {
+                background: #d0d0d0 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+                font-weight: 900 !important;
+              }
+              /* Bottom details */
+              .inv-bottom-details { font-size: 10px !important; gap: 2px !important; margin-top: 6px !important; }
+              .inv-bottom-details > div {
+                padding: 3px 8px !important; border-radius: 0 !important;
+                background: #fff !important; border: 1px solid #000 !important;
+              }
+              .inv-bottom-details input {
+                font-size: 10px !important; color: #000 !important;
               }
             }
           `}
         </style>
         
         {/* ─── INVOICE HEADER ─── */}
-        <div style={{ 
+        <div className="inv-header-section" style={{ 
             background: 'var(--surface-highlight)', 
             borderBottom: '2px solid var(--accent-color)',
             padding: '1.5rem',
@@ -242,7 +300,7 @@ const ShippingInvoice = () => {
              onChange={e => setHeaderInfo({...headerInfo, companyName: e.target.value})}
              style={{ width: '100%', textAlign: 'center', background: 'transparent', border: 'none', fontSize: '1.6rem', fontWeight: '900', color: 'var(--text-main)', marginBottom: '0.5rem' }}
            />
-           <div style={{ display: 'flex', justifyContent: 'center', gap: '2rem' }}>
+           <div className="company-tel" style={{ display: 'flex', justifyContent: 'center', gap: '2rem' }}>
              <input type="text" value={headerInfo.tel} onChange={e => setHeaderInfo({...headerInfo, tel: e.target.value})} style={{ textAlign: 'center', background: 'transparent', border: 'none', color: 'var(--text-muted)', fontWeight: 'bold', direction: 'ltr' }} />
              <input type="text" value={headerInfo.fax} onChange={e => setHeaderInfo({...headerInfo, fax: e.target.value})} style={{ textAlign: 'center', background: 'transparent', border: 'none', color: 'var(--text-muted)', fontWeight: 'bold', direction: 'ltr' }} />
            </div>
@@ -250,7 +308,7 @@ const ShippingInvoice = () => {
 
         <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
            
-           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', background: 'rgba(212, 175, 55, 0.05)', padding: '1rem', borderRadius: '8px', border: '1px solid rgba(212, 175, 55, 0.2)' }}>
+           <div className="inv-meta-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', background: 'rgba(212, 175, 55, 0.05)', padding: '1rem', borderRadius: '8px', border: '1px solid rgba(212, 175, 55, 0.2)' }}>
               <div>
                  <label style={{ fontSize: '0.85rem', color: 'var(--accent-color)', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>Buyer (المشتري):</label>
                  <input type="text" className="form-control" value={headerInfo.buyer} onChange={e => setHeaderInfo({...headerInfo, buyer: e.target.value})} style={{ background: 'var(--bg-color)' }} />
@@ -269,11 +327,11 @@ const ShippingInvoice = () => {
               </div>
            </div>
 
-           <h2 style={{ textAlign: 'center', margin: '1rem 0', fontSize: '1.8rem', color: 'var(--primary-color)' }}>Invoice List</h2>
+           <h2 className="inv-title-h2" style={{ textAlign: 'center', margin: '1rem 0', fontSize: '1.8rem', color: 'var(--primary-color)' }}>Invoice List</h2>
 
            {/* ─── INVOICE TABLE ─── */}
            <div style={{ overflowX: 'auto' }}>
-             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center', fontSize: '0.9rem' }}>
+             <table className="inv-main-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center', fontSize: '0.9rem' }}>
                <thead>
                  <tr style={{ background: 'var(--surface-highlight)', borderBottom: '2px solid var(--accent-color)' }}>
                    <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '40px' }}>No</th>
@@ -373,17 +431,17 @@ const ShippingInvoice = () => {
              </div>
            )}
 
-           {/* ─── FOOTER CALCULATIONS (MATCHING IMAGE LAYOUT RTL) ─── */}
+           {/* ─── FOOTER CALCULATIONS (LTR LAYOUT) ─── */}
            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '2rem' }}>
-              <table style={{ width: '60%', minWidth: '600px', borderCollapse: 'collapse', textAlign: 'center', fontWeight: 'bold' }} dir="rtl">
+              <table className="inv-footer-table" style={{ width: '60%', minWidth: '600px', borderCollapse: 'collapse', textAlign: 'center', fontWeight: 'bold' }} dir="ltr">
                  <tbody>
                     {/* Row 1: Totals */}
                     <tr>
-                       <td style={{ padding: '12px', background: 'rgba(212, 175, 55, 0.1)', border: '1px solid var(--border-color)', color: 'var(--primary-color)', fontSize: '1.2rem' }}>Total</td>
-                       <td style={{ padding: '12px', border: '1px solid var(--border-color)' }}>Items {totalItemsCount}</td>
-                       <td style={{ padding: '12px', border: '1px solid var(--border-color)' }}>PCS {totalPcs}</td>
-                       <td style={{ padding: '12px', background: 'rgba(212, 175, 55, 0.1)', border: '1px solid var(--border-color)', fontSize: '1.2rem', color: 'var(--accent-color)', direction: 'ltr' }}>
-                          {primaryCurrency} {subTotalAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                       <td style={{ padding: '12px', background: 'rgba(212, 175, 55, 0.1)', border: '1px solid var(--border-color)', color: 'var(--primary-color)', fontSize: '1.2rem' }} className="highlight-cell">Total</td>
+                       <td style={{ padding: '12px', border: '1px solid var(--border-color)' }}>{totalItemsCount} Items</td>
+                       <td style={{ padding: '12px', border: '1px solid var(--border-color)' }}>{totalPcs} PCS</td>
+                       <td style={{ padding: '12px', background: 'rgba(212, 175, 55, 0.1)', border: '1px solid var(--border-color)', fontSize: '1.2rem', color: 'var(--accent-color)' }} className="highlight-cell">
+                          {subTotalAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })} {primaryCurrency}
                        </td>
                     </tr>
                     
@@ -395,8 +453,8 @@ const ShippingInvoice = () => {
                              Commission <input type="number" value={footerInfo.commissionPercent} onChange={e => setFooterInfo({...footerInfo, commissionPercent: e.target.value})} style={{ width: '40px', background: 'var(--bg-color)', border: '1px solid var(--border-color)', color: 'var(--text-main)', textAlign: 'center', borderRadius: '4px' }} /> %
                           </div>
                        </td>
-                       <td style={{ padding: '12px', border: '1px solid var(--border-color)', direction: 'ltr' }}>
-                          {commissionAmount > 0 ? primaryCurrency + ' ' + commissionAmount.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '0.00'}
+                       <td style={{ padding: '12px', border: '1px solid var(--border-color)' }}>
+                          {commissionAmount > 0 ? commissionAmount.toLocaleString('en-US', { minimumFractionDigits: 2 }) + ' ' + primaryCurrency : '0.00'}
                        </td>
                     </tr>
 
@@ -430,9 +488,9 @@ const ShippingInvoice = () => {
                     {/* Row 6: Final Total */}
                     <tr>
                        <td colSpan={2} style={{ border: 'none' }}></td>
-                       <td style={{ padding: '12px', background: 'var(--accent-color)', color: '#000', border: '1px solid var(--border-color)' }}>Invoice Total</td>
-                       <td style={{ padding: '12px', background: 'rgba(212, 175, 55, 0.5)', border: '1px solid var(--border-color)', color: 'var(--accent-color)', fontSize: '1.4rem', direction: 'ltr' }}>
-                          {primaryCurrency} {invoiceTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                       <td style={{ padding: '12px', background: 'var(--accent-color)', color: '#000', border: '1px solid var(--border-color)' }} className="total-cell">Invoice Total</td>
+                       <td style={{ padding: '12px', background: 'rgba(212, 175, 55, 0.5)', border: '1px solid var(--border-color)', color: 'var(--accent-color)', fontSize: '1.4rem' }} className="total-cell">
+                          {invoiceTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })} {primaryCurrency}
                        </td>
                     </tr>
                  </tbody>
@@ -440,7 +498,7 @@ const ShippingInvoice = () => {
            </div>
 
            {/* ─── BOTTOM DETAILS ─── */}
-           <div style={{ marginTop: '2rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', fontWeight: 'bold', fontSize: '1.1rem' }} dir="ltr">
+           <div className="inv-bottom-details" style={{ marginTop: '2rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', fontWeight: 'bold', fontSize: '1.1rem' }} dir="ltr">
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: 'var(--surface-highlight)', padding: '10px 15px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
                  <span style={{ width: '200px' }}>SAY TOTAL AMOUNT IS</span>
                  <span style={{ color: 'var(--accent-color)' }}>{invoiceTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })} {primaryCurrency}</span>

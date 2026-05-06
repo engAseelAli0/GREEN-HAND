@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { supabase } from '../supabaseClient';
 import { Printer, Plus, Trash2, Search, Package, Layers } from 'lucide-react';
+import { englishOnly } from '../utils/textUtils';
 import toast from 'react-hot-toast';
 
 const toEnglishNumbers = (str) => {
@@ -99,7 +100,7 @@ const PackingList = () => {
                     imageUrl = typeof firstImage === 'object' ? firstImage.url : firstImage;
                 }
                 if (!newBuyer && d.buyerCompany) newBuyer = d.buyerCompany;
-                if (!desc) desc = d.productName || '';
+                if (!desc) desc = englishOnly(d.productName) || '';
             }
 
             if (recData && recData.receive_data) {
@@ -282,33 +283,69 @@ const PackingList = () => {
         <style>
           {`
             @media print {
+              @page { size: portrait; margin: 6mm 8mm; }
+              *, *::before, *::after { box-sizing: border-box; }
               body, html {
-                background: #fff !important;
-                color: #000 !important;
-                --surface-color: #fff !important;
-                --bg-color: #fff !important;
-                --text-main: #000 !important;
-                --text-muted: #333 !important;
-                --border-color: #000 !important;
-                --surface-highlight: #f8f9fa !important;
-                --primary-color: #000 !important;
-                --accent-color: #000 !important;
+                background: #fff !important; color: #000 !important;
+                margin: 0 !important; padding: 0 !important;
+                font-size: 10px !important;
               }
+              body * { visibility: hidden; }
+              #invoice-print-area, #invoice-print-area * { visibility: visible; }
               #invoice-print-area {
-                border: none !important;
-                box-shadow: none !important;
-                width: 100% !important;
+                position: absolute; left: 0; top: 0; width: 100% !important;
+                border: none !important; box-shadow: none !important;
+                border-radius: 0 !important; overflow: visible !important;
+                background: #fff !important; color: #000 !important;
+                padding: 0 !important;
               }
-              .no-print {
-                display: none !important;
+              .no-print { display: none !important; }
+              .pl-header {
+                border-bottom: 2px solid #000 !important;
+                padding: 6px 10px !important;
+                background: #fff !important;
               }
-              input {
-                color: #000 !important;
+              .pl-header input { font-size: 13px !important; color: #000 !important; }
+              .pl-header .pl-tel input { font-size: 10px !important; }
+              .pl-meta {
+                padding: 4px 10px !important; gap: 6px !important;
+                background: #fff !important; border: none !important;
               }
-              table th, table td {
-                border: 1px solid #000 !important;
-                color: #000 !important;
+              .pl-meta label { font-size: 8px !important; color: #000 !important; margin-bottom: 1px !important; }
+              .pl-meta input, .pl-meta .form-control {
+                font-size: 10px !important; padding: 2px 4px !important;
+                border: 1px solid #000 !important; color: #000 !important;
+                background: #fff !important; min-height: unset !important; height: auto !important;
               }
+              .pl-title { font-size: 14px !important; margin: 4px 0 !important; }
+              .pl-table { font-size: 9px !important; }
+              .pl-table th {
+                padding: 3px 2px !important; font-size: 7.5px !important;
+                background: #d9e6f0 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+                border: 1px solid #000 !important; color: #000 !important;
+              }
+              .pl-table td {
+                padding: 2px 3px !important; border: 1px solid #000 !important; color: #000 !important;
+              }
+              .pl-table input {
+                font-size: 9px !important; color: #000 !important;
+                padding: 0 !important; height: auto !important; min-height: unset !important;
+              }
+              .pl-table img { width: 35px !important; height: 45px !important; }
+              .pl-table .pl-total-row td {
+                padding: 4px 6px !important; font-size: 10px !important;
+                background: #d9e6f0 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+              }
+              .pl-table .pl-mixed-hdr td {
+                background: #a8d5f2 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+                font-size: 8px !important; padding: 3px !important;
+              }
+              .pl-bottom { font-size: 10px !important; gap: 2px !important; margin-top: 6px !important; }
+              .pl-bottom > div {
+                padding: 3px 8px !important; border-radius: 0 !important;
+                background: #fff !important; border: 1px solid #000 !important;
+              }
+              .pl-bottom input { font-size: 10px !important; color: #000 !important; }
             }
           `}
         </style>
@@ -323,7 +360,7 @@ const PackingList = () => {
       }}>
            
            {/* ─── HEADER ─── */}
-           <div style={{ 
+           <div className="pl-header" style={{ 
                background: 'var(--surface-highlight)', 
                borderBottom: '2px solid var(--accent-color)',
                padding: '1.5rem',
@@ -335,14 +372,14 @@ const PackingList = () => {
                 onChange={e => setHeaderInfo({...headerInfo, companyName: e.target.value})}
                 style={{ width: '100%', textAlign: 'center', background: 'transparent', border: 'none', fontSize: '1.6rem', fontWeight: '900', color: 'var(--text-main)', marginBottom: '0.5rem' }}
               />
-              <div style={{ display: 'flex', justifyContent: 'center', gap: '2rem' }}>
+              <div className="pl-tel" style={{ display: 'flex', justifyContent: 'center', gap: '2rem' }}>
                  <input type="text" value={headerInfo.tel} onChange={e => setHeaderInfo({...headerInfo, tel: e.target.value})} style={{ textAlign: 'center', background: 'transparent', border: 'none', color: 'var(--text-muted)', fontWeight: 'bold', direction: 'ltr', outline: 'none' }} />
                  <input type="text" value={headerInfo.fax} onChange={e => setHeaderInfo({...headerInfo, fax: e.target.value})} style={{ textAlign: 'center', background: 'transparent', border: 'none', color: 'var(--text-muted)', fontWeight: 'bold', direction: 'ltr', outline: 'none' }} />
               </div>
            </div>
 
            <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', background: 'rgba(212, 175, 55, 0.05)', padding: '1rem', borderRadius: '8px', border: '1px solid rgba(212, 175, 55, 0.2)' }}>
+              <div className="pl-meta" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', background: 'rgba(212, 175, 55, 0.05)', padding: '1rem', borderRadius: '8px', border: '1px solid rgba(212, 175, 55, 0.2)' }}>
                  <div>
                     <label style={{ fontSize: '0.85rem', color: 'var(--accent-color)', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>Buyer (المشتري):</label>
                     <input type="text" className="form-control" value={headerInfo.buyer} onChange={e => setHeaderInfo({...headerInfo, buyer: e.target.value})} style={{ background: 'var(--bg-color)' }} />
@@ -361,11 +398,11 @@ const PackingList = () => {
                  </div>
               </div>
 
-              <h2 style={{ textAlign: 'center', margin: '1rem 0', fontSize: '1.8rem', color: 'var(--primary-color)' }}>Packing List</h2>
+              <h2 className="pl-title" style={{ textAlign: 'center', margin: '1rem 0', fontSize: '1.8rem', color: 'var(--primary-color)' }}>Packing List</h2>
 
            {/* ─── INVOICE TABLE ─── */}
            <div style={{ overflowX: 'auto' }}>
-             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center', fontSize: '0.9rem' }}>
+             <table className="pl-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center', fontSize: '0.9rem' }}>
                <thead>
                  <tr style={{ background: 'var(--surface-highlight)', borderBottom: '2px solid var(--accent-color)' }}>
                    <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '40px' }}>No</th>
@@ -460,7 +497,7 @@ const PackingList = () => {
                  
                  {/* ─── MIXED CARTONS GROUPS ─── */}
                  {mixedGroups.length > 0 && (
-                     <tr>
+                     <tr className="pl-mixed-hdr">
                          <td colSpan={showImageColumn ? 11 : 11} style={{ border: '2px solid var(--border-color)', background: 'rgba(239, 68, 68, 0.1)', padding: '5px', textAlign: 'center', color: '#ef4444', fontWeight: 'bold' }}>
                             **Mixed Items in Cartons أصناف مختلطة بكرتون**
                          </td>
@@ -545,7 +582,7 @@ const PackingList = () => {
                  })}
 
                  {/* ─── TOTALS ROW ─── */}
-                 <tr style={{ background: 'var(--surface-highlight)', border: '2px solid var(--accent-color)', fontWeight: 'bold', fontSize: '1.2rem', color: 'var(--primary-color)' }}>
+                 <tr className="pl-total-row" style={{ background: 'var(--surface-highlight)', border: '2px solid var(--accent-color)', fontWeight: 'bold', fontSize: '1.2rem', color: 'var(--primary-color)' }}>
                     <td colSpan={3} style={{ padding: '12px', border: '1px solid var(--border-color)', background: 'rgba(212, 175, 55, 0.1)', color: 'var(--primary-color)' }}>Total</td>
                     <td style={{ padding: '12px', border: '1px solid var(--border-color)' }}>{uniqueSerials.size} Items</td>
                     <td colSpan={3} style={{ padding: '12px', border: '1px solid var(--border-color)' }}>{totalCtn} CTN</td>
@@ -568,7 +605,7 @@ const PackingList = () => {
            )}
 
            {/* ─── BOTTOM DETAILS ─── */}
-           <div style={{ marginTop: '2rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', fontWeight: 'bold', fontSize: '1.1rem' }} dir="ltr">
+           <div className="pl-bottom" style={{ marginTop: '2rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', fontWeight: 'bold', fontSize: '1.1rem' }} dir="ltr">
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: 'var(--surface-highlight)', padding: '10px 15px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
                  <span style={{ width: '300px', color: 'var(--text-main)' }}>TOTAL OF PACKING LIST DETAILS</span>
                  <span style={{ padding: '0 15px', color: 'var(--accent-color)' }}>{totalCtn} CTN</span>

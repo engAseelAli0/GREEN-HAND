@@ -3,6 +3,7 @@ import { useAppData } from '../context/AppDataContext';
 import { supabase } from '../supabaseClient';
 import toast from 'react-hot-toast';
 import { Search, Printer, ArrowRight, Barcode as BarcodeIcon, Hash, Package, Layers, Palette, Ruler, BarChart3, Sparkles, X } from 'lucide-react';
+import { englishOnly } from '../utils/textUtils';
 import { Link } from 'react-router-dom';
 import ReactBarcode from 'react-barcode';
 
@@ -110,7 +111,7 @@ const PrintBarcodes = () => {
            if (qty > 0) {
              newRows.push({
                itemNumber: serial,
-               itemName: orderData.productName || 'Unknown',
+               itemName: englishOnly(orderData.productName) || 'Unknown',
                batchBarcode: batchBarcode,
                size: sizeName,
                quantity: qty,

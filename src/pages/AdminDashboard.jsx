@@ -816,10 +816,10 @@ const AdminDashboard = () => {
                 </>
               )}
 
-              {/* Measurements: product assignment dropdown */}
+              {/* Measurements: parts assignment dropdown */}
               {activeTab === 'measurements' && (
                 <div style={{ ...styles.formField, gridColumn: '1 / -1' }}>
-                  <label style={styles.formLabel}>ربط بالمنتجات (اختياري)</label>
+                  <label style={styles.formLabel}>الربط بالقطع المكونة (اختياري)</label>
                   <div style={{ position: 'relative' }}>
                     <button
                       type="button"
@@ -834,7 +834,7 @@ const AdminDashboard = () => {
                         transition: 'border-color 0.2s'
                       }}
                     >
-                      <span>{selectedProductsArr.length > 0 ? `${selectedProductsArr.length} منتج مرتبط` : '— اربط بمنتجات —'}</span>
+                      <span>{selectedProductsArr.length > 0 ? `${selectedProductsArr.length} قطعة مرتبطة` : '— اربط بقطع مكونة —'}</span>
                       <ChevronDown size={15} style={{ transform: showProductsDropdown ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s', opacity: 0.6 }} />
                     </button>
                     {showProductsDropdown && (
@@ -845,20 +845,18 @@ const AdminDashboard = () => {
                         borderRadius: 'var(--radius-md)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
                         maxHeight: '200px', overflowY: 'auto'
                       }}>
-                        {(lookups.products || []).length === 0 ? (
-                          <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>لا توجد منتجات مضافة بعد</div>
-                        ) : (lookups.products || []).map((prod, idx) => {
-                          const prodName = typeof prod === 'object' ? prod.name : prod;
-                          const parts = typeof prod === 'object' && Array.isArray(prod.parts) ? prod.parts : [];
-                          const isChecked = selectedProductsArr.includes(prodName);
+                        {allParts.length === 0 ? (
+                          <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>لا توجد قطع مكونة مضافة بعد</div>
+                        ) : allParts.map((partName, idx) => {
+                          const isChecked = selectedProductsArr.includes(partName);
                           return (
                             <div
                               key={idx}
                               onClick={() => {
                                 if (isChecked) {
-                                  setSelectedProductsArr(selectedProductsArr.filter(p => p !== prodName));
+                                  setSelectedProductsArr(selectedProductsArr.filter(p => p !== partName));
                                 } else {
-                                  setSelectedProductsArr([...selectedProductsArr, prodName]);
+                                  setSelectedProductsArr([...selectedProductsArr, partName]);
                                 }
                               }}
                               style={{
@@ -880,10 +878,9 @@ const AdminDashboard = () => {
                               }}>
                                 {isChecked && <span style={{ color: '#000', fontSize: '11px', fontWeight: 'bold', lineHeight: 1 }}>✓</span>}
                               </div>
-                              <ShoppingBag size={14} style={{ color: isChecked ? 'var(--accent-color)' : 'var(--text-muted)', flexShrink: 0 }} />
+                              <Puzzle size={14} style={{ color: isChecked ? 'var(--accent-color)' : 'var(--text-muted)', flexShrink: 0 }} />
                               <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                <span style={{ fontWeight: isChecked ? 'bold' : 'normal', color: 'var(--text-main)', fontSize: '0.88rem' }}>{prodName}</span>
-                                {parts.length > 0 && <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{parts.join(' + ')}</span>}
+                                <span style={{ fontWeight: isChecked ? 'bold' : 'normal', color: 'var(--text-main)', fontSize: '0.88rem' }}>{partName}</span>
                               </div>
                             </div>
                           );
@@ -1174,7 +1171,7 @@ const AdminDashboard = () => {
                           setAssignSelectedParts(currentParts);
                           setAssignModalOpen(true);
                         }}
-                        title="تحديد المنتجات"
+                        title="تحديد القطع المكونة"
                         style={styles.actionBtn}
                         onMouseEnter={e => { e.currentTarget.style.background = 'rgba(139, 92, 246, 0.1)'; e.currentTarget.style.color = '#a78bfa'; }}
                         onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text-muted)'; }}
@@ -1246,23 +1243,21 @@ const AdminDashboard = () => {
           }}>
             <h3 style={{ fontSize: '1.15rem', color: 'var(--primary-color)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <Tag size={20} color="var(--accent-color)" />
-              تحديد المنتجات التابعة
+              تحديد القطع المكونة التابعة
             </h3>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-              اختر منتجاً أو أكثر لربط المقاس ({assignMeasurementIndex !== null ? (typeof currentItems[assignMeasurementIndex] === 'object' ? currentItems[assignMeasurementIndex].name : currentItems[assignMeasurementIndex]) : ''}) بها.
+              اختر قطعة أو أكثر لربط المقاس ({assignMeasurementIndex !== null ? (typeof currentItems[assignMeasurementIndex] === 'object' ? currentItems[assignMeasurementIndex].name : currentItems[assignMeasurementIndex]) : ''}) بها.
             </p>
             
             <div style={{
               display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '300px', overflowY: 'auto',
               background: 'rgba(0,0,0,0.2)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)'
             }}>
-              {(lookups.products || []).length === 0 ? (
-                <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textAlign: 'center' }}>لا توجد منتجات مضافة بعد</div>
+              {allParts.length === 0 ? (
+                <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textAlign: 'center' }}>لا توجد قطع مكونة مضافة بعد</div>
               ) : (
-                (lookups.products || []).map((prod, idx) => {
-                  const prodName = typeof prod === 'object' ? prod.name : prod;
-                  const parts = typeof prod === 'object' && Array.isArray(prod.parts) ? prod.parts : [];
-                  const isSelected = assignSelectedParts.includes(prodName);
+                allParts.map((partName, idx) => {
+                  const isSelected = assignSelectedParts.includes(partName);
                   return (
                     <label key={idx} style={{
                       display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer',
@@ -1279,18 +1274,17 @@ const AdminDashboard = () => {
                         checked={isSelected}
                         onChange={(e) => {
                           if (e.target.checked) {
-                            setAssignSelectedParts([...assignSelectedParts, prodName]);
+                            setAssignSelectedParts([...assignSelectedParts, partName]);
                           } else {
-                            setAssignSelectedParts(assignSelectedParts.filter(p => p !== prodName));
+                            setAssignSelectedParts(assignSelectedParts.filter(p => p !== partName));
                           }
                         }}
                         style={{ accentColor: 'var(--accent-color)', width: '16px', height: '16px', cursor: 'pointer' }}
                       />
                       <div style={{ display: 'flex', flexDirection: 'column' }}>
                         <span style={{ fontSize: '0.9rem', color: isSelected ? 'var(--accent-color)' : 'var(--text-main)', fontWeight: isSelected ? '600' : '400' }}>
-                          {prodName}
+                          {partName}
                         </span>
-                        {parts.length > 0 && <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{parts.join(' + ')}</span>}
                       </div>
                     </label>
                   );
@@ -1318,7 +1312,7 @@ const AdminDashboard = () => {
                   updateLookup('measurements', currentList);
                   setAssignModalOpen(false);
                   setAssignMeasurementIndex(null);
-                  toast.success('تم ربط المقاس بالمنتجات بنجاح ✨');
+                  toast.success('تم ربط المقاس بالقطع المكونة بنجاح ✨');
                 }}
               >
                 حفظ التحديد

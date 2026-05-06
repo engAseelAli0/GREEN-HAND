@@ -4,6 +4,7 @@ import { useAppData } from '../context/AppDataContext';
 import { Filter, Download, FileText, ChevronDown, ChevronUp, Printer, Calendar, Factory, ArrowUpDown, Camera, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
+import { englishOnly } from '../utils/textUtils';
 
 const ReportsPortal = () => {
   const { lookups } = useAppData();
@@ -238,7 +239,7 @@ const ReportsPortal = () => {
       return {
         "رقم الموديل (Serial)": o.serial_number || '-',
         "العميل / المشتري": d.buyerCompany || '-',
-        "المنتج": d.productName || '-',
+        "المنتج": englishOnly(d.productName) || '-',
         "المصنع": d.factoryId || '-',
         "العلامة التجارية": d.tradeMark || '-',
         "المقاسات": `${d.sizeFrom || '-'} ⟵ ${d.sizeTo || '-'}`,
@@ -549,7 +550,7 @@ const ReportsPortal = () => {
                     <React.Fragment key={idx}>
                       <tr style={{ borderBottom: '1px solid var(--border-color)', backgroundColor: idx % 2 === 0 ? 'transparent' : 'var(--surface-highlight)', transition: 'background-color 0.2s' }}>
                         <td style={{ padding: '1rem', fontWeight: 'bold', color: 'var(--primary-color)', fontSize: '1.2rem' }}>{order.serial_number || '-'}</td>
-                        <td style={{ padding: '1rem' }}>{d.productName || '-'}</td>
+                        <td style={{ padding: '1rem' }}>{englishOnly(d.productName) || '-'}</td>
                         <td style={{ padding: '1rem' }}>{d.buyerCompany || '-'}</td>
                         <td style={{ padding: '1rem' }}>{d.factoryId || '-'}</td>
                         <td style={{ padding: '1rem', textAlign: 'center' }}>

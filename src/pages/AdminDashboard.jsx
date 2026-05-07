@@ -15,6 +15,7 @@ const AdminDashboard = () => {
   const [newValueHex, setNewValueHex] = useState('#000000');
   const [newValueMobile, setNewValueMobile] = useState('');
   const [newValueAddress, setNewValueAddress] = useState('');
+  const [newValueFactoryCode, setNewValueFactoryCode] = useState('');
   const [newValueAbbr, setNewValueAbbr] = useState('');
   const [editIndex, setEditIndex] = useState(null);
   const [tradeMarkImage, setTradeMarkImage] = useState(null);
@@ -50,7 +51,8 @@ const AdminDashboard = () => {
     { id: 'plasticBagSizes', name: 'أحجام الأكياس', icon: ShoppingCart },
     { id: 'tradeMarks', name: 'العلامات التجارية', icon: Stamp },
     { id: 'measurements', name: 'قائمة المقاسات', icon: SlidersHorizontal },
-    { id: 'packagingConditionsList', name: 'شروط التعبئة الإضافية', icon: ListChecks }
+    { id: 'packagingConditionsList', name: 'شروط التعبئة الإضافية', icon: ListChecks },
+    { id: 'buyerCodes', name: 'رموز المشترين', icon: Tag }
   ];
 
   const handleAddOrEdit = () => {
@@ -81,7 +83,8 @@ const AdminDashboard = () => {
       newItem = { 
         name: newValue.trim(), 
         mobile: newValueMobile.trim(), 
-        address: newValueAddress.trim() 
+        address: newValueAddress.trim(),
+        code: newValueFactoryCode.trim()
       };
     } else if (activeTab === 'tradeMarks') {
       newItem = { 
@@ -108,6 +111,7 @@ const AdminDashboard = () => {
     setNewValueHex('#000000');
     setNewValueMobile('');
     setNewValueAddress('');
+    setNewValueFactoryCode('');
     setNewValueAbbr('');
     setTradeMarkImage(null);
     setTradeMarkImageUrl('');
@@ -136,6 +140,7 @@ const AdminDashboard = () => {
       setNewValue(item.name || item);
       setNewValueMobile(item.mobile || '');
       setNewValueAddress(item.address || '');
+      setNewValueFactoryCode(item.code || '');
     } else if (activeTab === 'tradeMarks' && typeof item === 'object') {
       setNewValue(item.name || '');
       setTradeMarkImageUrl(item.imageUrl || '');
@@ -158,6 +163,7 @@ const AdminDashboard = () => {
     setNewValueHex('#000000');
     setNewValueMobile('');
     setNewValueAddress('');
+    setNewValueFactoryCode('');
     setNewValueAbbr('');
     setTradeMarkImage(null);
     setTradeMarkImageUrl('');
@@ -913,6 +919,17 @@ const AdminDashboard = () => {
               {activeTab === 'factories' && (
                 <>
                   <div style={styles.formField}>
+                    <label style={styles.formLabel}>كود المصنع</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      placeholder="الكود الخاص بالمصنع..."
+                      value={newValueFactoryCode}
+                      onChange={(e) => setNewValueFactoryCode(e.target.value)}
+                      style={{ backgroundColor: 'var(--bg-color)' }}
+                    />
+                  </div>
+                  <div style={styles.formField}>
                     <label style={styles.formLabel}>رقم التواصل</label>
                     <input
                       type="text"
@@ -1154,10 +1171,11 @@ const AdminDashboard = () => {
                         )}
                       </div>
 
-                      {activeTab === 'factories' && item.mobile && (
-                        <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>
-                          {item.mobile} • {item.address}
-                        </span>
+                      {activeTab === 'factories' && (
+                        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.1rem', display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
+                          {item.mobile && <span>{item.mobile} • {item.address}</span>}
+                          {item.code && <span style={{ color: 'var(--accent-color)' }}>كود المصنع: {item.code}</span>}
+                        </div>
                       )}
                     </div>
                   </div>

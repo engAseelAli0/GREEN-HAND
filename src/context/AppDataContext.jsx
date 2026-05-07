@@ -18,7 +18,8 @@ const initialLookups = {
   plasticBagSizes: [],
   measurements: [],
   packagingConditionsList: [],
-  componentParts: []
+  componentParts: [],
+  buyerCodes: []
 };
 
 export const defaultOrderState = {

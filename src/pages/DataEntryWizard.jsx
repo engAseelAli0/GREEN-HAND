@@ -128,29 +128,34 @@ const DataEntryWizard = () => {
   const [fetchingSerials, setFetchingSerials] = useState(false);
   const [serialSearchQuery, setSerialSearchQuery] = useState('');
   const [showColorPicker, setShowColorPicker] = useState(false);
+  const [showPackagingPicker, setShowPackagingPicker] = useState(false);
   const serialSearchRef = useRef(null);
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
   const tabNavRef = useRef(null);
   const colorPickerRef = useRef(null);
+  const packagingPickerRef = useRef(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
   const [viewMode, setViewMode] = useState(() => {
     try { return localStorage.getItem('gh_viewMode') || 'tabs'; } catch { return 'tabs'; }
   });
 
-  // ─── Close color picker on outside click ───
+  // ─── Close pickers on outside click ───
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (colorPickerRef.current && !colorPickerRef.current.contains(e.target)) {
         setShowColorPicker(false);
       }
+      if (packagingPickerRef.current && !packagingPickerRef.current.contains(e.target)) {
+        setShowPackagingPicker(false);
+      }
     };
-    if (showColorPicker) {
+    if (showColorPicker || showPackagingPicker) {
       document.addEventListener('mousedown', handleClickOutside);
     }
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showColorPicker]);
+  }, [showColorPicker, showPackagingPicker]);
 
   // ─── Tab Scroll Logic (RTL-safe, bulletproof) ───
   const checkTabScroll = useCallback(() => {
@@ -880,8 +885,14 @@ const DataEntryWizard = () => {
                   )}
                 </div>
                 <div className="form-group">
-                  <label className="form-label">جوال المشتري و رقم العميل</label>
-                  <input type="text" className="form-control" placeholder="أدخل رقم الجوال..." value={currentOrder.buyerMobile || ''} onChange={(e) => updateOrder('buyerMobile', e.target.value)} />
+                  <label className="form-label">رقم أو رمز المشتري</label>
+                  <ClearableSelect className="form-control" value={currentOrder.buyerMobile || ''} onChange={(e) => updateOrder('buyerMobile', e.target.value)}>
+                    <option value="">اختر رقم أو رمز المشتري...</option>
+                    {lookups.buyerCodes?.map((code, i) => {
+                      const val = typeof code === 'object' ? code.name : code;
+                      return <option key={i} value={val}>{val}</option>;
+                    })}
+                  </ClearableSelect>
                 </div>
                 <div className="form-group">
                   <label className="form-label">رقم الموديل (Product Number)</label>
@@ -1437,17 +1448,27 @@ const DataEntryWizard = () => {
               </div>
               {currentOrder.factoryId && (() => {
                 const selectedFactoryObj = Array.isArray(lookups.factories) ? lookups.factories.find(f => (f.name === currentOrder.factoryId || f === currentOrder.factoryId)) : null;
-                if (selectedFactoryObj && selectedFactoryObj.mobile) {
+                if (selectedFactoryObj && (selectedFactoryObj.mobile || selectedFactoryObj.code)) {
                   return (
-                    <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
-                      <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
-                        <label className="form-label" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>جوال المصنع</label>
-                        <input type="text" className="form-control" value={selectedFactoryObj.mobile} readOnly style={{ backgroundColor: 'var(--bg-color)', opacity: 0.8, borderStyle: 'dashed' }} />
-                      </div>
-                      <div className="form-group" style={{ flex: 2, marginBottom: 0 }}>
-                        <label className="form-label" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>عنوان المصنع</label>
-                        <input type="text" className="form-control" value={selectedFactoryObj.address} readOnly style={{ backgroundColor: 'var(--bg-color)', opacity: 0.8, borderStyle: 'dashed' }} />
-                      </div>
+                    <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+                      {selectedFactoryObj.code && (
+                        <div className="form-group" style={{ flex: 1, minWidth: '120px', marginBottom: 0 }}>
+                          <label className="form-label" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>كود المصنع</label>
+                          <input type="text" className="form-control" value={selectedFactoryObj.code} readOnly style={{ backgroundColor: 'var(--bg-color)', opacity: 0.8, borderStyle: 'dashed', color: 'var(--accent-color)', fontWeight: 'bold' }} />
+                        </div>
+                      )}
+                      {selectedFactoryObj.mobile && (
+                        <div className="form-group" style={{ flex: 1, minWidth: '150px', marginBottom: 0 }}>
+                          <label className="form-label" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>جوال المصنع</label>
+                          <input type="text" className="form-control" value={selectedFactoryObj.mobile} readOnly style={{ backgroundColor: 'var(--bg-color)', opacity: 0.8, borderStyle: 'dashed' }} />
+                        </div>
+                      )}
+                      {selectedFactoryObj.address && (
+                        <div className="form-group" style={{ flex: 2, minWidth: '200px', marginBottom: 0 }}>
+                          <label className="form-label" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>عنوان المصنع</label>
+                          <input type="text" className="form-control" value={selectedFactoryObj.address} readOnly style={{ backgroundColor: 'var(--bg-color)', opacity: 0.8, borderStyle: 'dashed' }} />
+                        </div>
+                      )}
                     </div>
                   );
                 }
@@ -1704,25 +1725,125 @@ const DataEntryWizard = () => {
         );
       }
 
-      case 'packaging':
+      case 'packaging': {
+        const selectedConditions = lookups.packagingConditionsList?.filter(cond => !!currentOrder.packagingConditions?.[cond]) || [];
+        
         return (
           <div className="tab-panel" key={tabKey}>
             <div className="card">
               <div className="tab-section-header">
                 <h3><CheckSquare size={22} /> شروط وتفاصيل التعبئة الخاصة</h3>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-
-                {lookups.packagingConditionsList?.map((cond, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <input type="checkbox" id={`cond_dyn_${i}`} checked={!!currentOrder.packagingConditions?.[cond]} onChange={(e) => handlePackagingConditionChange(cond, e.target.checked)} style={{ width: '20px', height: '20px', accentColor: 'var(--accent-color)', cursor: 'pointer' }} />
-                    <label htmlFor={`cond_dyn_${i}`} style={{ cursor: 'pointer', fontWeight: '500' }}>{cond}</label>
+              
+              <div style={{ marginBottom: '1.5rem', padding: '1rem', backgroundColor: 'var(--surface-color)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap' }}>
+                  <label style={{ fontWeight: 'bold', fontSize: '0.9rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', paddingTop: '0.5rem' }}>
+                    <CheckSquare size={16} style={{ verticalAlign: 'middle', marginLeft: '0.4rem' }} />
+                    اختيار الشروط:
+                  </label>
+                  <div ref={packagingPickerRef} style={{ position: 'relative', flex: '1', minWidth: '220px', maxWidth: '400px' }}>
+                    {/* Trigger button */}
+                    <button
+                      type="button"
+                      onClick={() => setShowPackagingPicker(prev => !prev)}
+                      className="form-control"
+                      style={{
+                        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        textAlign: 'right', width: '100%', padding: '0.5rem 0.75rem',
+                        border: showPackagingPicker ? '2px solid var(--accent-color)' : '1px solid var(--border-color)',
+                        borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--bg-color)',
+                        color: selectedConditions.length > 0 ? 'var(--text-main)' : 'var(--text-muted)',
+                        transition: 'border-color 0.2s'
+                      }}
+                    >
+                      <span>{selectedConditions.length > 0 ? `${selectedConditions.length} شرط محدد` : '— اختر الشروط —'}</span>
+                      <ChevronLeft size={16} style={{ transform: showPackagingPicker ? 'rotate(90deg)' : 'rotate(-90deg)', transition: 'transform 0.2s', opacity: 0.6 }} />
+                    </button>
+                    {/* Dropdown panel */}
+                    {showPackagingPicker && (
+                      <div style={{
+                        position: 'absolute', top: '100%', right: 0, left: 0, zIndex: 100,
+                        marginTop: '4px', padding: '0.5rem',
+                        backgroundColor: 'var(--surface-color)', border: '2px solid var(--accent-color)',
+                        borderRadius: 'var(--radius-md)', boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
+                        maxHeight: '260px', overflowY: 'auto'
+                      }}>
+                        {lookups.packagingConditionsList?.map((cond, i) => {
+                          const isChecked = !!currentOrder.packagingConditions?.[cond];
+                          return (
+                            <div
+                              key={i}
+                              onClick={() => handlePackagingConditionChange(cond, !isChecked)}
+                              style={{
+                                display: 'flex', alignItems: 'center', gap: '0.6rem',
+                                padding: '0.5rem 0.6rem', cursor: 'pointer',
+                                borderRadius: '6px', transition: 'background-color 0.15s',
+                                backgroundColor: isChecked ? 'rgba(212, 175, 55, 0.12)' : 'transparent',
+                                marginBottom: '2px'
+                              }}
+                              onMouseEnter={(e) => { if (!isChecked) e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)'; }}
+                              onMouseLeave={(e) => { if (!isChecked) e.currentTarget.style.backgroundColor = 'transparent'; }}
+                            >
+                              <div style={{
+                                width: '18px', height: '18px', borderRadius: '4px', flexShrink: 0,
+                                border: isChecked ? '2px solid var(--accent-color)' : '2px solid var(--border-color)',
+                                backgroundColor: isChecked ? 'var(--accent-color)' : 'transparent',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                transition: 'all 0.15s'
+                              }}>
+                                {isChecked && <span style={{ color: '#000', fontSize: '12px', fontWeight: 'bold', lineHeight: 1 }}>✓</span>}
+                              </div>
+                              <span style={{ fontWeight: isChecked ? 'bold' : 'normal', color: 'var(--text-main)', fontSize: '0.9rem' }}>
+                                {cond}
+                              </span>
+                            </div>
+                          );
+                        })}
+                        {(!lookups.packagingConditionsList || lookups.packagingConditionsList.length === 0) && (
+                          <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>لا توجد شروط تعبئة محفوظة</div>
+                        )}
+                      </div>
+                    )}
                   </div>
-                ))}
+                </div>
+
+                {/* Selected condition badges */}
+                {selectedConditions.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border-color)' }}>
+                    {selectedConditions.map((cond, i) => (
+                      <span key={i} style={{
+                        display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
+                        padding: '0.3rem 0.7rem', borderRadius: '50px',
+                        backgroundColor: 'rgba(212, 175, 55, 0.1)',
+                        border: '1px solid var(--accent-color)',
+                        fontSize: '0.85rem', fontWeight: 'bold',
+                        color: 'var(--text-main)',
+                        animation: 'fadeIn 0.2s ease'
+                      }}>
+                        {cond}
+                        <button type="button" onClick={() => handlePackagingConditionChange(cond, false)} style={{
+                          background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer',
+                          padding: '0', display: 'flex', alignItems: 'center', marginRight: '-0.2rem'
+                        }} title="إزالة">
+                          <X size={13} strokeWidth={3} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
+              
+              {selectedConditions.length === 0 && (
+                <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-muted)', fontSize: '0.95rem', backgroundColor: 'var(--surface-color)', borderRadius: 'var(--radius-md)', border: '1px dashed var(--border-color)' }}>
+                  <CheckSquare size={40} style={{ opacity: 0.25, display: 'block', margin: '0 auto 0.75rem' }} />
+                  اختر شرطاً واحداً على الأقل من القائمة أعلاه.
+                </div>
+              )}
+              
             </div>
           </div>
         );
+      }
 
       case 'measurements': {
         if (!currentOrder.productName) {

@@ -230,6 +230,12 @@ const ReportsPortal = () => {
   };
 
   // ─── Export Handlers ───
+  const getFactoryCode = (factoryId) => {
+    if (!factoryId) return '';
+    const factory = Array.isArray(lookups.factories) ? lookups.factories.find(f => (f.name === factoryId || f === factoryId)) : null;
+    return (factory && factory.code) ? factory.code : '';
+  };
+
   const exportToExcel = () => {
     if (filteredOrders.length === 0) return toast.error('لا توجد بيانات لتصديرها');
     
@@ -241,6 +247,7 @@ const ReportsPortal = () => {
         "العميل / المشتري": d.buyerCompany || '-',
         "المنتج": englishOnly(d.productName) || '-',
         "المصنع": d.factoryId || '-',
+        "كود المصنع": getFactoryCode(d.factoryId) || '-',
         "العلامة التجارية": d.tradeMark || '-',
         "المقاسات": `${d.sizeFrom || '-'} ⟵ ${d.sizeTo || '-'}`,
         "الكمية الإجمالية": computedTotal > 0 ? computedTotal : (d.totalQuantity || 0),
@@ -552,7 +559,14 @@ const ReportsPortal = () => {
                         <td style={{ padding: '1rem', fontWeight: 'bold', color: 'var(--primary-color)', fontSize: '1.2rem' }}>{order.serial_number || '-'}</td>
                         <td style={{ padding: '1rem' }}>{englishOnly(d.productName) || '-'}</td>
                         <td style={{ padding: '1rem' }}>{d.buyerCompany || '-'}</td>
-                        <td style={{ padding: '1rem' }}>{d.factoryId || '-'}</td>
+                        <td style={{ padding: '1rem' }}>
+                           {d.factoryId || '-'}
+                           {getFactoryCode(d.factoryId) && (
+                              <span style={{ display: 'block', fontSize: '0.85rem', color: 'var(--accent-color)', fontWeight: 'bold' }}>
+                                 {getFactoryCode(d.factoryId)}
+                              </span>
+                           )}
+                        </td>
                         <td style={{ padding: '1rem', textAlign: 'center' }}>
                             <span style={{ backgroundColor: 'var(--accent-color)', color: '#fff', padding: '0.2rem 0.8rem', borderRadius: '50px', fontWeight: 'bold' }}>
                                 {computedTotal > 0 ? computedTotal : (d.totalQuantity || '-')}

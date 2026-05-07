@@ -1,11 +1,47 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAppData } from '../context/AppDataContext';
 import { supabase } from '../supabaseClient';
 import toast from 'react-hot-toast';
-import { Search, Printer, ArrowRight, Barcode as BarcodeIcon, Hash, Package, Layers, Palette, Ruler, BarChart3, Sparkles, X } from 'lucide-react';
+import { Search, Printer, ArrowRight, Barcode as BarcodeIcon, Hash, Package, Layers, Palette, Ruler, BarChart3, Sparkles, X, Settings, Save, RotateCcw } from 'lucide-react';
 import { englishOnly } from '../utils/textUtils';
 import { Link } from 'react-router-dom';
 import ReactBarcode from 'react-barcode';
+
+const LS_KEY = 'barcode_print_settings';
+const DEFAULT_PRINT_SETTINGS = {
+  paperWidth: 9.401, paperHeight: 2.601, orientation: 'portrait',
+  marginTop: 0.051, marginBottom: 0.051, marginLeft: 0.036, marginRight: 0.036,
+  labelWidth: 3.0, labelHeight: 2.499,
+  columns: 3, rows: 1, columnGap: 0, rowGap: 0,
+};
+
+const loadSettings = () => {
+  try { const s = localStorage.getItem(LS_KEY); return s ? { ...DEFAULT_PRINT_SETTINGS, ...JSON.parse(s) } : { ...DEFAULT_PRINT_SETTINGS }; }
+  catch { return { ...DEFAULT_PRINT_SETTINGS }; }
+};
+
+const inputStyle = { width: 90, padding: '0.5rem 0.6rem', background: 'var(--bg-color)', border: '1px solid var(--border-color)', borderRadius: 10, color: '#fff', fontSize: '0.95rem', fontWeight: 700, fontFamily: "'Outfit', sans-serif", textAlign: 'center', direction: 'ltr' };
+const rowStyle = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.7rem 0', borderBottom: '1px solid rgba(255,255,255,0.04)' };
+
+const FieldRow = ({ label, fieldKey, unit = 'cm', settings, onUpdate }) => (
+  <div style={rowStyle}>
+    <label style={{ fontSize: '0.9rem', fontWeight: 500, color: 'var(--text-main)' }}>{label}</label>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+      <input type="number" step="0.001" min="0" value={settings[fieldKey] ?? ''} onChange={e => onUpdate(fieldKey, e.target.value)} style={inputStyle} />
+      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600 }}>{unit}</span>
+    </div>
+  </div>
+);
+
+const IntField = ({ label, fieldKey, unit = '', settings, onUpdate }) => (
+  <div style={rowStyle}>
+    <label style={{ fontSize: '0.9rem', fontWeight: 500, color: 'var(--text-main)' }}>{label}</label>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+      <input type="number" step="1" min="1" value={settings[fieldKey] ?? ''} onChange={e => onUpdate(fieldKey, e.target.value)} style={{ ...inputStyle, width: 70 }} />
+      {unit && <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600 }}>{unit}</span>}
+    </div>
+  </div>
+);
 
 const PrintBarcodes = () => {
   const { lookups } = useAppData();
@@ -13,6 +49,10 @@ const PrintBarcodes = () => {
   const [order, setOrder] = useState(null);
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [printSettings, setPrintSettings] = useState(loadSettings);
+  const [tempSettings, setTempSettings] = useState(loadSettings);
+  const [showPageSetup, setShowPageSetup] = useState(false);
+  const [setupTab, setSetupTab] = useState('paper');
   
   // F9 Search States
   const [showSerialsList, setShowSerialsList] = useState(false);
@@ -126,6 +166,36 @@ const PrintBarcodes = () => {
     setRows(newRows);
   };
 
+  const handleSaveSettings = () => {
+    const parsed = { ...tempSettings };
+    ['paperWidth','paperHeight','marginTop','marginBottom','marginLeft','marginRight','labelWidth','labelHeight','columnGap','rowGap'].forEach(k => {
+      parsed[k] = parseFloat(parsed[k]) || 0;
+    });
+    ['columns','rows'].forEach(k => {
+      parsed[k] = parseInt(parsed[k]) || 1;
+    });
+    setPrintSettings(parsed);
+    setTempSettings(parsed);
+    localStorage.setItem(LS_KEY, JSON.stringify(parsed));
+    setShowPageSetup(false);
+    toast.success('تم حفظ إعدادات الطباعة بنجاح!');
+  };
+
+  const handleOpenSetup = () => {
+    setTempSettings({ ...printSettings });
+    setSetupTab('paper');
+    setShowPageSetup(true);
+  };
+
+  const handleResetSettings = () => {
+    setTempSettings({ ...DEFAULT_PRINT_SETTINGS });
+    toast('تم إعادة التعيين للقيم الافتراضية', { icon: '🔄' });
+  };
+
+  const updateTemp = (key, val) => {
+    setTempSettings(prev => ({ ...prev, [key]: val }));
+  };
+
   const handlePrint = () => window.print();
 
   const totalQty = rows.reduce((sum, r) => sum + r.quantity, 0);
@@ -151,7 +221,7 @@ const PrintBarcodes = () => {
 
   return (
     <div className="fade-in" style={{ minHeight: '100vh', padding: '1.5rem' }}>
-      <style>{`
+      <style key={JSON.stringify(printSettings)}>{`
         /* ═══════════════════════════════════════════════════
            BARCODE PAGE — PREMIUM DESIGN SYSTEM
            ═══════════════════════════════════════════════════ */
@@ -650,59 +720,71 @@ const PrintBarcodes = () => {
            display: none;
         }
 
+        .page-setup-modal-overlay { display: none; }
+
         @media print {
+          @page {
+            size: ${printSettings.paperWidth || 9.401}cm ${printSettings.paperHeight || 2.601}cm;
+            margin: ${printSettings.marginTop || 0}cm ${printSettings.marginRight || 0}cm ${printSettings.marginBottom || 0}cm ${printSettings.marginLeft || 0}cm;
+          }
           body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; background: #fff !important; margin: 0 !important; padding: 0 !important; }
-          .hide-on-print { display: none !important; }
+          .hide-on-print, .page-setup-modal-overlay { display: none !important; }
           .printable-section { display: none !important; }
           .bc-stats-row { display: none !important; }
           .bc-page-wrapper { max-width: 100% !important; padding: 0 !important; }
 
           .print-only-stickers {
-             display: grid !important;
-             grid-template-columns: repeat(auto-fill, minmax(5.5cm, 1fr)) !important;
-             gap: 0.4cm;
+             display: flex !important;
+             flex-wrap: wrap !important;
+             gap: ${printSettings.rowGap || 0}cm ${printSettings.columnGap || 0}cm;
              width: 100%;
-             padding: 0.3cm;
+             padding: 0;
              direction: ltr !important;
              text-align: left !important;
           }
 
           .sticker-label {
-             border: 1.5px solid #000;
-             padding: 0.35cm 0.4cm;
+             width: ${printSettings.labelWidth || 3}cm;
+             height: ${printSettings.labelHeight || 2.499}cm;
+             border: 1px solid #000;
+             padding: 4% 5%;
              background: #fff;
              box-sizing: border-box;
              page-break-inside: avoid;
+             break-inside: avoid;
              display: flex;
              flex-direction: column;
              align-items: center;
-             justify-content: flex-start;
-             height: auto;
-             gap: 1px;
+             justify-content: space-between;
+             overflow: hidden;
+             gap: 0;
              direction: ltr !important;
              text-align: left !important;
+             container-type: size;
+             container-name: sticker;
           }
 
           /* Row 1: Model No */
           .sticker-row-model {
              display: flex;
              align-items: baseline;
-             gap: 6px;
+             gap: 3cqi;
              width: 100%;
              font-family: Arial, Helvetica, sans-serif;
              color: #000;
-             margin-bottom: 2px;
+             margin-bottom: 0;
+             line-height: 1.1;
           }
 
           .sticker-row-model .sticker-lbl {
-             font-size: 11px;
+             font-size: 9cqi;
              font-weight: 700;
           }
 
           .sticker-row-model .sticker-val {
-             font-size: 14px;
+             font-size: 12cqi;
              font-weight: 900;
-             letter-spacing: 0.5px;
+             letter-spacing: 0.3px;
           }
 
           /* Row 2: Size + Range */
@@ -713,27 +795,28 @@ const PrintBarcodes = () => {
              width: 100%;
              font-family: Arial, Helvetica, sans-serif;
              color: #000;
-             margin-bottom: 3px;
+             margin-bottom: 0;
+             line-height: 1.1;
           }
 
           .sticker-row-size .sticker-size-left {
              display: flex;
              align-items: baseline;
-             gap: 5px;
+             gap: 2cqi;
           }
 
           .sticker-row-size .sticker-lbl {
-             font-size: 11px;
+             font-size: 9cqi;
              font-weight: 700;
           }
 
           .sticker-row-size .sticker-val {
-             font-size: 13px;
+             font-size: 11cqi;
              font-weight: 900;
           }
 
           .sticker-row-size .sticker-range {
-             font-size: 12px;
+             font-size: 10cqi;
              font-weight: 700;
           }
 
@@ -742,23 +825,28 @@ const PrintBarcodes = () => {
              width: 100%;
              display: flex;
              justify-content: center;
-             margin: 2px 0;
+             flex: 1;
+             align-items: center;
+             min-height: 0;
           }
 
           .sticker-barcode-wrap svg {
              width: 100% !important;
              max-width: 100% !important;
+             height: auto !important;
+             max-height: 100% !important;
           }
 
           /* Product name at bottom */
           .sticker-product-name {
              font-family: Arial, Helvetica, sans-serif;
-             font-size: 13px;
+             font-size: 10cqi;
              font-weight: 900;
              color: #000;
              text-align: center;
-             margin-top: 3px;
-             letter-spacing: 0.3px;
+             margin-top: 0;
+             letter-spacing: 0.2px;
+             line-height: 1.1;
           }
 
           .bc-table-card { box-shadow: none !important; border: none !important; border-radius: 0 !important; }
@@ -918,10 +1006,16 @@ const PrintBarcodes = () => {
             </button>
 
             {rows.length > 0 && (
-              <button className="bc-print-btn" onClick={handlePrint}>
-                <Printer size={18} />
-                التوجه للطباعة
-              </button>
+              <>
+                <button className="bc-print-btn" onClick={handleOpenSetup} style={{ background: 'linear-gradient(135deg, #6366f1, #4f46e5)', boxShadow: '0 4px 16px rgba(99,102,241,0.25)' }}>
+                  <Settings size={18} />
+                  إعدادات الصفحة
+                </button>
+                <button className="bc-print-btn" onClick={handlePrint}>
+                  <Printer size={18} />
+                  التوجه للطباعة
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -1078,14 +1172,14 @@ const PrintBarcodes = () => {
                       <ReactBarcode 
                           value={row.batchBarcode} 
                           format="CODE128"
-                          width={1.2} 
-                          height={45} 
-                          fontSize={11}
-                          margin={3}
+                          width={1} 
+                          height={30} 
+                          fontSize={8}
+                          margin={1}
                           displayValue={true}
                           font="Arial"
                           fontOptions="bold"
-                          textMargin={3}
+                          textMargin={1}
                       />
                     </div>
 
@@ -1097,6 +1191,173 @@ const PrintBarcodes = () => {
           </div>
         )}
       </div>
+
+      {/* ═══════ PAGE SETUP MODAL ═══════ */}
+      {showPageSetup && (
+        <div className="page-setup-modal-overlay" onClick={() => setShowPageSetup(false)} style={{
+          position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)', animation: 'fadeIn 0.25s ease'
+        }}>
+          <div onClick={e => e.stopPropagation()} style={{
+            width: '680px', maxWidth: '95vw', maxHeight: '90vh', overflowY: 'auto',
+            background: 'linear-gradient(180deg, #1a1f2e 0%, #0f1219 100%)',
+            borderRadius: '20px', border: '1px solid rgba(212,175,55,0.2)',
+            boxShadow: '0 24px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.05) inset'
+          }}>
+            {/* Modal Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1.25rem 1.75rem', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <div style={{ width: 42, height: 42, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #6366f1, #4f46e5)', borderRadius: 12, boxShadow: '0 4px 14px rgba(99,102,241,0.35)' }}>
+                  <Settings size={20} color="#fff" />
+                </div>
+                <div>
+                  <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#fff' }}>Page Setup</h2>
+                  <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-muted)' }}>إعدادات صفحة الطباعة — مثل BarTender</p>
+                </div>
+              </div>
+              <button onClick={() => setShowPageSetup(false)} style={{ background: 'rgba(255,255,255,0.06)', border: 'none', borderRadius: 10, width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#fff', transition: 'all 0.2s' }}>
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Live Preview */}
+            <div style={{ padding: '1rem 1.75rem 0.5rem' }}>
+              <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, border: '1px solid rgba(255,255,255,0.06)', padding: '1rem', textAlign: 'center' }}>
+                {(() => {
+                  const s = tempSettings;
+                  const scale = 28;
+                  const pw = (s.paperWidth || 9.4) * scale;
+                  const ph = (s.paperHeight || 2.6) * scale;
+                  const mt = (s.marginTop || 0) * scale;
+                  const ml = (s.marginLeft || 0) * scale;
+                  const lw = (s.labelWidth || 3) * scale;
+                  const lh = (s.labelHeight || 2.5) * scale;
+                  const cols = s.columns || 3;
+                  const rowsN = s.rows || 1;
+                  const cg = (s.columnGap || 0) * scale;
+                  const rg = (s.rowGap || 0) * scale;
+                  const labels = [];
+                  for (let r = 0; r < rowsN; r++) {
+                    for (let c = 0; c < cols; c++) {
+                      labels.push(
+                        <rect key={`${r}-${c}`} x={ml + c * (lw + cg)} y={mt + r * (lh + rg)} width={lw} height={lh}
+                          rx={4} fill="none" stroke="#d4af37" strokeWidth={1.5} strokeDasharray="4 2" />
+                      );
+                    }
+                  }
+                  return (
+                    <svg width={Math.min(pw + 20, 600)} height={Math.min(ph + 20, 200)} viewBox={`-10 -10 ${pw + 20} ${ph + 20}`} style={{ maxWidth: '100%' }}>
+                      <rect x={0} y={0} width={pw} height={ph} rx={4} fill="#1e2330" stroke="rgba(255,255,255,0.2)" strokeWidth={1} />
+                      {labels}
+                    </svg>
+                  );
+                })()}
+                <div style={{ display: 'flex', justifyContent: 'center', gap: '2rem', marginTop: '0.5rem', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                  <span>Paper: <strong style={{ color: '#fff' }}>{tempSettings.paperWidth} × {tempSettings.paperHeight} cm</strong></span>
+                  <span>Label: <strong style={{ color: '#d4af37' }}>{tempSettings.labelWidth} × {tempSettings.labelHeight} cm</strong></span>
+                </div>
+              </div>
+            </div>
+
+            {/* Tabs */}
+            <div style={{ padding: '0.75rem 1.75rem 0' }}>
+              <div style={{ display: 'flex', gap: '0.25rem', background: 'rgba(255,255,255,0.03)', borderRadius: 12, padding: '0.3rem', border: '1px solid rgba(255,255,255,0.05)' }}>
+                {[
+                  { id: 'paper', label: '📄 Paper', labelAr: 'الورقة' },
+                  { id: 'margins', label: '📐 Margins', labelAr: 'الهوامش' },
+                  { id: 'label', label: '🏷️ Label', labelAr: 'الملصق' },
+                  { id: 'layout', label: '📊 Layout', labelAr: 'التخطيط' },
+                ].map(t => (
+                  <button key={t.id} onClick={() => setSetupTab(t.id)} style={{
+                    flex: 1, padding: '0.6rem 0.5rem', border: 'none', borderRadius: 10, cursor: 'pointer',
+                    fontFamily: "'Tajawal', sans-serif", fontSize: '0.82rem', fontWeight: 600, transition: 'all 0.25s',
+                    background: setupTab === t.id ? 'linear-gradient(135deg, rgba(212,175,55,0.2), rgba(212,175,55,0.08))' : 'transparent',
+                    color: setupTab === t.id ? '#fff' : 'var(--text-muted)',
+                    boxShadow: setupTab === t.id ? '0 2px 10px rgba(212,175,55,0.15)' : 'none'
+                  }}>
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Tab Content */}
+            <div style={{ padding: '1.25rem 1.75rem' }}>
+              {setupTab === 'paper' && (
+                <div>
+                  <FieldRow label="Width — العرض" fieldKey="paperWidth" settings={tempSettings} onUpdate={updateTemp} />
+                  <FieldRow label="Height — الارتفاع" fieldKey="paperHeight" settings={tempSettings} onUpdate={updateTemp} />
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.85rem 0' }}>
+                    <label style={{ fontSize: '0.9rem', fontWeight: 500, color: 'var(--text-main)' }}>Orientation — الاتجاه</label>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      {['portrait', 'landscape'].map(o => (
+                        <button key={o} onClick={() => updateTemp('orientation', o)} style={{
+                          padding: '0.45rem 1rem', borderRadius: 10, border: '1px solid', cursor: 'pointer',
+                          fontFamily: "'Tajawal', sans-serif", fontWeight: 600, fontSize: '0.85rem', transition: 'all 0.2s',
+                          background: tempSettings.orientation === o ? 'rgba(212,175,55,0.15)' : 'transparent',
+                          borderColor: tempSettings.orientation === o ? 'var(--accent-color)' : 'var(--border-color)',
+                          color: tempSettings.orientation === o ? '#fff' : 'var(--text-muted)',
+                        }}>
+                          {o === 'portrait' ? '📄 Portrait' : '📃 Landscape'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+              {setupTab === 'margins' && (
+                <div>
+                  <FieldRow label="Top — أعلى" fieldKey="marginTop" settings={tempSettings} onUpdate={updateTemp} />
+                  <FieldRow label="Bottom — أسفل" fieldKey="marginBottom" settings={tempSettings} onUpdate={updateTemp} />
+                  <FieldRow label="Left — يسار" fieldKey="marginLeft" settings={tempSettings} onUpdate={updateTemp} />
+                  <FieldRow label="Right — يمين" fieldKey="marginRight" settings={tempSettings} onUpdate={updateTemp} />
+                </div>
+              )}
+              {setupTab === 'label' && (
+                <div>
+                  <FieldRow label="Width — عرض الملصق" fieldKey="labelWidth" settings={tempSettings} onUpdate={updateTemp} />
+                  <FieldRow label="Height — ارتفاع الملصق" fieldKey="labelHeight" settings={tempSettings} onUpdate={updateTemp} />
+                </div>
+              )}
+              {setupTab === 'layout' && (
+                <div>
+                  <IntField label="Columns — عدد الأعمدة" fieldKey="columns" unit="across" settings={tempSettings} onUpdate={updateTemp} />
+                  <IntField label="Rows — عدد الصفوف" fieldKey="rows" unit="down" settings={tempSettings} onUpdate={updateTemp} />
+                  <FieldRow label="Column Gap — فراغ الأعمدة" fieldKey="columnGap" settings={tempSettings} onUpdate={updateTemp} />
+                  <FieldRow label="Row Gap — فراغ الصفوف" fieldKey="rowGap" settings={tempSettings} onUpdate={updateTemp} />
+                </div>
+              )}
+            </div>
+
+            {/* Footer Buttons */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.75rem 1.25rem', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+              <button onClick={handleResetSettings} style={{
+                display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.6rem 1.1rem',
+                background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-color)', borderRadius: 12,
+                color: 'var(--text-muted)', cursor: 'pointer', fontFamily: "'Tajawal', sans-serif", fontWeight: 600, fontSize: '0.85rem', transition: 'all 0.2s'
+              }}>
+                <RotateCcw size={15} /> إعادة تعيين
+              </button>
+              <div style={{ display: 'flex', gap: '0.6rem' }}>
+                <button onClick={() => setShowPageSetup(false)} style={{
+                  padding: '0.6rem 1.25rem', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-color)',
+                  borderRadius: 12, color: 'var(--text-muted)', cursor: 'pointer', fontFamily: "'Tajawal', sans-serif", fontWeight: 600, fontSize: '0.85rem', transition: 'all 0.2s'
+                }}>
+                  إلغاء
+                </button>
+                <button onClick={handleSaveSettings} style={{
+                  display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.6rem 1.5rem',
+                  background: 'linear-gradient(135deg, var(--accent-color), #b58d27)', border: 'none', borderRadius: 12,
+                  color: '#000', cursor: 'pointer', fontFamily: "'Tajawal', sans-serif", fontWeight: 700, fontSize: '0.9rem',
+                  boxShadow: '0 4px 16px rgba(212,175,55,0.3)', transition: 'all 0.2s'
+                }}>
+                  <Save size={16} /> حفظ الإعدادات
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

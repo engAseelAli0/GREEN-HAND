@@ -152,9 +152,9 @@ const ExportOrder = () => {
   const getFactoryDetails = (factoryId) => {
     const factory = Array.isArray(lookups.factories) ? lookups.factories.find(f => (f.name === factoryId || f === factoryId)) : null;
     if (factory && typeof factory === 'object') {
-      return { name: factory.name || '', mobile: factory.mobile || '', address: factory.address || '' };
+      return { name: factory.name || '', mobile: factory.mobile || '', address: factory.address || '', code: factory.code || '' };
     }
-    return { name: factoryId || '', mobile: '', address: '' };
+    return { name: factoryId || '', mobile: '', address: '', code: '' };
   };
 
   const factoryInfo = order ? getFactoryDetails(order.factoryId) : {};
@@ -401,8 +401,11 @@ const ExportOrder = () => {
                 </td>
                 <td style={{ fontSize: 7.5 }}>Buyer Co. Name <span className="label-cn">买方公司名称</span></td>
                 <td colSpan={2} className="val-bold">{order.buyerCompany || '-'}</td>
-                <td style={{ fontSize: 7.5 }}>Fact. Name <span className="label-cn">工厂 名字</span></td>
-                <td className="val-bold">{factoryInfo.name || '-'}</td>
+                <td style={{ fontSize: 7.5 }}>Fact. Name / Code <span className="label-cn">工厂 名字 / 代码</span></td>
+                <td className="val-bold">
+                  {factoryInfo.name || '-'} 
+                  {factoryInfo.code ? <span style={{ color: '#1a5276', marginLeft: '4px' }}>[{factoryInfo.code}]</span> : null}
+                </td>
               </tr>
               <tr>
                 <td style={{ fontSize: 7.5 }}>Buyer Co. Mobile <span className="label-cn">买方手机</span></td>

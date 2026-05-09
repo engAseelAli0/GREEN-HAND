@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAppData } from '../context/AppDataContext';
 import { englishOnly } from '../utils/textUtils';
-import { Printer, Plus, Trash2, Search, FileText, Settings, LayoutGrid } from 'lucide-react';
+import { Printer, Plus, Trash2, Search, FileText, Settings, LayoutGrid, AlertCircle, X } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { CustomDateInput } from '../components/CustomDateInput';
 
 const toEnglishNumbers = (str) => {
   if (str === null || str === undefined) return '';
@@ -11,6 +12,9 @@ const toEnglishNumbers = (str) => {
 };
 
 const ShippingInvoice = () => {
+  const today = new Date();
+  const localDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
   const [headerInfo, setHeaderInfo] = useState({
     companyName: 'ARABIAN FRIENDSHIP TRADING CO.,LIMITED',
     tel: 'Tel:(8620)-83265754',
@@ -18,7 +22,7 @@ const ShippingInvoice = () => {
     buyer: '',
     invoiceNo: '',
     branch: '',
-    date: new Date().toISOString().split('T')[0]
+    date: localDate
   });
 
   const [rows, setRows] = useState([
@@ -37,6 +41,31 @@ const ShippingInvoice = () => {
   const [isExporting, setIsExporting] = useState(false);
   const [showFetchDialog, setShowFetchDialog] = useState(false);
   const [showImageColumn, setShowImageColumn] = useState(false);
+
+  // F9 States
+  const [showSerialsList, setShowSerialsList] = useState(false);
+  const [availableSerials, setAvailableSerials] = useState([]);
+  const [serialSearchQuery, setSerialSearchQuery] = useState('');
+  const [fetchingSerials, setFetchingSerials] = useState(false);
+  const [activeF9RowId, setActiveF9RowId] = useState(null);
+  const [f9Position, setF9Position] = useState({ top: 0, left: 0 });
+  const serialSearchRef = useRef(null);
+
+  // Validation States
+  const [showValidationModal, setShowValidationModal] = useState(false);
+  const [invalidSerials, setInvalidSerials] = useState([]);
+  const [pendingFetchOptions, setPendingFetchOptions] = useState(null);
+  const [highlightedSerials, setHighlightedSerials] = useState([]);
+
+  // Clear Confirm State
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+
+  const clearAllData = () => {
+    setRows([{ id: Date.now(), serial: '', desc: '', arabicName: '', qty: '', currency: '¥ RMB', unitPrice: '', totalAmount: 0, details: '', image: '' }]);
+    setHeaderInfo(prev => ({ ...prev, buyer: '', invoiceNo: '', branch: '' }));
+    setShowClearConfirm(false);
+    toast.success('تم تفريغ الجدول بنجاح');
+  };
 
   // Auto-calculate Total Amount for each row when Qty or Unit Price changes
   useEffect(() => {
@@ -85,19 +114,115 @@ const ShippingInvoice = () => {
       return total;
   };
 
-  const fetchAllData = async (withImage) => {
-    setShowFetchDialog(false);
+  const handleSerialKeyDown = async (e, rowId) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addRow();
+      setTimeout(() => {
+        const inputs = document.querySelectorAll('.serial-input');
+        if (inputs.length) inputs[inputs.length - 1].focus();
+      }, 50);
+    } else if (e.key === 'F9') {
+      e.preventDefault();
+      if (showSerialsList || fetchingSerials) return;
+      
+      const rect = e.target.getBoundingClientRect();
+      let popupLeft = rect.left + (rect.width / 2);
+      if (popupLeft < 125) popupLeft = 125;
+      if (popupLeft > window.innerWidth - 125) popupLeft = window.innerWidth - 125;
+      setF9Position({ top: rect.bottom + 4, left: popupLeft });
+      
+      setActiveF9RowId(rowId);
+      setFetchingSerials(true);
+      setShowSerialsList(true);
+      setSerialSearchQuery('');
+      try {
+        const { data, error } = await supabase
+          .from('orders')
+          .select('serial_number')
+          .order('created_at', { ascending: false })
+          .limit(2000);
+        if (data && !error) {
+           setAvailableSerials(data.map(d => d.serial_number));
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+         setFetchingSerials(false);
+         setTimeout(() => serialSearchRef.current?.focus(), 100);
+      }
+    } else if (e.key === 'Escape') {
+      setShowSerialsList(false);
+      setSerialSearchQuery('');
+      setActiveF9RowId(null);
+    }
+  };
+
+  const validateBeforeFetch = async (withImage) => {
+      setShowFetchDialog(false);
+      const serialsToCheck = rows.map(r => r.serial.trim()).filter(Boolean);
+      
+      if (serialsToCheck.length === 0) {
+          return toast.error('الرجاء إدخال أرقام موديلات أولاً');
+      }
+
+      const toastId = toast.loading('جاري التحقق من حالة الموديلات في قاعدة البيانات...');
+      let invalidItems = [];
+
+      try {
+          const { data: ordersData } = await supabase.from('orders').select('serial_number').in('serial_number', serialsToCheck);
+          const existingOrders = new Set(ordersData?.map(o => o.serial_number) || []);
+          
+          const { data: recData } = await supabase.from('receivings').select('serial_number, receive_data').in('serial_number', serialsToCheck);
+          const receivedMap = new Map();
+          recData?.forEach(r => {
+              if (r.receive_data && r.receive_data.status === 'مستلمة') {
+                  receivedMap.set(r.serial_number, true);
+              }
+          });
+
+          rows.forEach(r => {
+              const s = r.serial.trim();
+              if (s) {
+                  if (!existingOrders.has(s)) {
+                      invalidItems.push({ id: r.id, serial: s, reason: 'غير موجود في قاعدة البيانات' });
+                  } else if (!receivedMap.has(s)) {
+                      invalidItems.push({ id: r.id, serial: s, reason: 'غير مستلم من المصنع' });
+                  }
+              }
+          });
+
+          toast.dismiss(toastId);
+
+          if (invalidItems.length > 0) {
+              setInvalidSerials(invalidItems);
+              setPendingFetchOptions(withImage);
+              setShowValidationModal(true);
+          } else {
+              setHighlightedSerials([]);
+              fetchAllData(withImage, [], false);
+          }
+      } catch (err) {
+          toast.dismiss(toastId);
+          toast.error('حدث خطأ أثناء التحقق من الموديلات');
+      }
+  };
+
+  const fetchAllData = async (withImage, badSerialsToSkip = [], removeBadRows = false) => {
     setShowImageColumn(withImage);
     const toastId = toast.loading('جاري التحقق من الموديلات وجلب البيانات...');
     let successCount = 0;
     
     // Create a copy of rows
     let updatedRows = [...rows];
+    if (removeBadRows) {
+        updatedRows = updatedRows.filter(r => !badSerialsToSkip.includes(r.serial.trim()));
+    }
     let newBuyer = headerInfo.buyer;
 
     for (let i = 0; i < updatedRows.length; i++) {
         let r = updatedRows[i];
-        if (r.serial.trim()) { // Always fetch fresh data
+        if (r.serial.trim() && !badSerialsToSkip.includes(r.serial.trim())) { // Always fetch fresh data
             try {
                 const { data, error } = await supabase
                     .from('orders')
@@ -328,10 +453,13 @@ const ShippingInvoice = () => {
                  <label style={{ fontSize: '0.85rem', color: 'var(--accent-color)', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>Branch (الفرع):</label>
                  <input type="text" className="form-control" value={headerInfo.branch} onChange={e => setHeaderInfo({...headerInfo, branch: e.target.value})} style={{ background: 'var(--bg-color)' }} />
               </div>
-              <div>
-                 <label style={{ fontSize: '0.85rem', color: 'var(--accent-color)', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>Date (التاريخ):</label>
-                 <input type="date" className="form-control" value={headerInfo.date} onChange={e => setHeaderInfo({...headerInfo, date: e.target.value})} style={{ background: 'var(--bg-color)' }} />
-              </div>
+                 <div style={{ position: 'relative' }}>
+                    <label style={{ fontSize: '0.85rem', color: 'var(--accent-color)', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>Date (التاريخ):</label>
+                    <CustomDateInput 
+                      value={headerInfo.date} 
+                      onChange={val => setHeaderInfo({...headerInfo, date: val})}
+                    />
+                 </div>
            </div>
 
            <h2 className="inv-title-h2" style={{ textAlign: 'center', margin: '1rem 0', fontSize: '1.8rem', color: 'var(--primary-color)' }}>Invoice List</h2>
@@ -362,14 +490,106 @@ const ShippingInvoice = () => {
                    <tr key={row.id} style={{ background: index % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)', transition: 'background-color 0.2s' }}>
                      <td style={{ border: '1px solid var(--border-color)', padding: '5px', fontWeight: 'bold' }}>{index + 1}</td>
                      
-                     <td style={{ border: '1px solid var(--border-color)', padding: '5px' }}>
+                     <td style={{ border: '1px solid var(--border-color)', padding: '5px', position: 'relative' }}>
                         <input 
+                          className="serial-input"
                           type="text" 
                           value={row.serial} 
                           onChange={e => handleRowChange(row.id, 'serial', e.target.value)}
-                          placeholder="الموديل"
-                          style={{ width: '100%', background: 'transparent', border: 'none', color: 'var(--text-main)', textAlign: 'center', fontWeight: 'bold' }}
+                          onKeyDown={e => handleSerialKeyDown(e, row.id)}
+                          placeholder="أدخل الموديلF9"
+                          style={{ width: '100%', background: 'transparent', border: 'none', color: highlightedSerials.includes(row.serial.trim()) ? '#ef4444' : 'var(--text-main)', textAlign: 'center', fontWeight: 'bold' }}
                         />
+                        {activeF9RowId === row.id && showSerialsList && (
+                          <div style={{
+                            position: 'fixed', top: f9Position.top, left: f9Position.left, transform: 'translateX(-50%)',
+                            width: '250px', maxHeight: '250px', overflowY: 'auto',
+                            backgroundColor: 'var(--surface-color)',
+                            border: '1px solid var(--border-color)',
+                            borderRadius: 'var(--radius-md)',
+                            boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+                            zIndex: 99999,
+                            textAlign: 'right'
+                          }}>
+                            <div style={{ padding: '0.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--surface-highlight)' }}>
+                                <span style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>اختر موديلاً:</span>
+                                <button onClick={() => { setShowSerialsList(false); setSerialSearchQuery(''); setActiveF9RowId(null); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-color)', padding: 0, display: 'flex', alignItems: 'center' }}>
+                                   <X size={16} />
+                                </button>
+                            </div>
+                            <div style={{ padding: '0.5rem', borderBottom: '1px solid var(--border-color)', backgroundColor: 'var(--bg-color)' }}>
+                              <input
+                                ref={serialSearchRef}
+                                type="text"
+                                placeholder="🔍 ابحث..."
+                                value={serialSearchQuery}
+                                onChange={(e) => setSerialSearchQuery(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Escape') {
+                                    setShowSerialsList(false);
+                                    setSerialSearchQuery('');
+                                    setActiveF9RowId(null);
+                                  }
+                                  if (e.key === 'Enter') {
+                                    const filtered = availableSerials.filter(s => s.toString().includes(serialSearchQuery));
+                                    if (filtered.length > 0) {
+                                      setShowSerialsList(false);
+                                      setSerialSearchQuery('');
+                                      setActiveF9RowId(null);
+                                      handleRowChange(row.id, 'serial', filtered[0]);
+                                    }
+                                  }
+                                }}
+                                style={{ width: '100%', padding: '0.5rem', fontSize: '0.9rem', border: '1px solid var(--border-color)', borderRadius: '6px', backgroundColor: 'var(--surface-color)', color: 'var(--text-color)', outline: 'none' }}
+                                autoComplete="off"
+                              />
+                            </div>
+                            {fetchingSerials ? (
+                                <div style={{ padding: '1rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)' }}>جاري التحميل...</div>
+                            ) : (
+                               (() => {
+                                 const filteredSerials = serialSearchQuery.trim()
+                                   ? availableSerials.filter(s => s.toString().includes(serialSearchQuery.trim()))
+                                   : availableSerials;
+                                 return filteredSerials.length === 0 ? (
+                                   <div style={{ padding: '1rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)' }}>لا توجد نتائج</div>
+                                 ) : (
+                                  <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                                      {filteredSerials.map(serial => {
+                                          const query = serialSearchQuery.trim();
+                                          const serialStr = serial.toString();
+                                          const matchIdx = query ? serialStr.indexOf(query) : -1;
+                                          return (
+                                          <li 
+                                              key={serial} 
+                                              onClick={() => {
+                                                  setShowSerialsList(false);
+                                                  setSerialSearchQuery('');
+                                                  setActiveF9RowId(null);
+                                                  handleRowChange(row.id, 'serial', serial);
+                                              }}
+                                              style={{ padding: '0.6rem 1rem', cursor: 'pointer', borderBottom: '1px solid var(--border-color)', fontSize: '0.9rem', color: 'var(--text-color)' }}
+                                              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--surface-highlight)'}
+                                              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                          >
+                                              {matchIdx !== -1 ? (
+                                                <strong>
+                                                  {serialStr.substring(0, matchIdx)}
+                                                  <span style={{ color: 'var(--accent-color)', textDecoration: 'underline' }}>{serialStr.substring(matchIdx, matchIdx + query.length)}</span>
+                                                  {serialStr.substring(matchIdx + query.length)}
+                                                </strong>
+                                              ) : (
+                                                <strong>{serialStr}</strong>
+                                              )}
+                                          </li>
+                                          );
+                                      })}
+                                  </ul>
+                                 );
+                               })()
+                            )}
+                          </div>
+                        )}
                         <span className="print-val" style={{ display: 'none' }}>{row.serial}</span>
                      </td>
                      
@@ -440,6 +660,9 @@ const ShippingInvoice = () => {
                 </button>
                 <button onClick={() => setShowFetchDialog(true)} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'linear-gradient(to right, #10b981, #059669)', border: 'none', padding: '10px 24px' }}>
                    <Search size={18} /> جلب بيانات كل الأصناف المدخلة
+                </button>
+                <button onClick={() => setShowClearConfirm(true)} className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#ef4444', borderColor: '#ef4444' }}>
+                   <Trash2 size={18} /> تفريغ كافة البيانات
                 </button>
              </div>
            )}
@@ -538,16 +761,86 @@ const ShippingInvoice = () => {
                <h3 style={{ marginBottom: '1rem', color: 'var(--accent-color)' }}>جلب بيانات المنتجات</h3>
                <p style={{ marginBottom: '2rem', fontSize: '1.2rem' }}>هل تريد جلب البيانات مع صور المنتجات؟</p>
                <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
-                  <button onClick={() => fetchAllData(true)} className="btn btn-primary" style={{ flex: 1, background: 'linear-gradient(135deg, var(--accent-color), #b58d27)', color: '#000', padding: '12px', fontSize: '1.1rem' }}>
+                  <button onClick={() => validateBeforeFetch(true)} className="btn btn-primary" style={{ flex: 1, background: 'linear-gradient(135deg, var(--accent-color), #b58d27)', color: '#000', padding: '12px', fontSize: '1.1rem' }}>
                      مع الصور
                   </button>
-                  <button onClick={() => fetchAllData(false)} className="btn btn-outline" style={{ flex: 1, padding: '12px', fontSize: '1.1rem', color: 'var(--text-main)', borderColor: 'var(--border-color)' }}>
+                  <button onClick={() => validateBeforeFetch(false)} className="btn btn-outline" style={{ flex: 1, padding: '12px', fontSize: '1.1rem', color: 'var(--text-main)', borderColor: 'var(--border-color)' }}>
                      بدون الصور
                   </button>
                </div>
                <button onClick={() => setShowFetchDialog(false)} style={{ marginTop: '1.5rem', background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', textDecoration: 'underline', fontSize: '1rem' }}>
                   إلغاء
                </button>
+            </div>
+         </div>
+      )}
+
+      {/* ─── F9 OVERLAY ─── */}
+      {showSerialsList && (
+          <div 
+            style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 99998 }} 
+            onClick={() => { setShowSerialsList(false); setActiveF9RowId(null); setSerialSearchQuery(''); }}
+          />
+      )}
+
+      {/* ─── VALIDATION MODAL ─── */}
+      {showValidationModal && (
+         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', zIndex: 9999, display: 'flex', justifyContent: 'center', alignItems: 'center', backdropFilter: 'blur(5px)' }}>
+            <div className="card fade-in" style={{ width: '550px', border: '2px solid #ef4444', boxShadow: '0 10px 40px rgba(239, 68, 68, 0.2)' }}>
+               <h3 style={{ marginBottom: '1rem', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <AlertCircle size={24} /> تنبيه: موديلات غير صالحة!
+               </h3>
+               <p style={{ marginBottom: '1rem', fontSize: '1.1rem', color: 'var(--text-main)' }}>
+                 اكتشف النظام أن الموديلات التالية غير موجودة أو غير مستلمة من المصنع. هل تريد حذفها من حقول الإدخال؟
+               </p>
+               <ul style={{ background: 'var(--surface-color)', padding: '1rem', borderRadius: '8px', maxHeight: '150px', overflowY: 'auto', marginBottom: '1.5rem', listStyle: 'none' }}>
+                  {invalidSerials.map((inv, idx) => (
+                      <li key={idx} style={{ padding: '6px 0', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', color: '#ef4444' }}>
+                          <span style={{ fontWeight: 'bold' }}>{inv.serial}</span>
+                          <span style={{ fontSize: '0.85rem' }}>{inv.reason}</span>
+                      </li>
+                  ))}
+               </ul>
+               <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+                  <button onClick={() => {
+                      const badSerials = invalidSerials.map(inv => inv.serial);
+                      setHighlightedSerials([]);
+                      setShowValidationModal(false);
+                      setTimeout(() => fetchAllData(pendingFetchOptions, badSerials, true), 0);
+                  }} className="btn btn-primary" style={{ flex: 1, background: '#ef4444', color: '#fff', border: 'none', padding: '12px', fontSize: '1.1rem' }}>
+                     نعم، احذف الأرقام الغلط
+                  </button>
+                  <button onClick={() => {
+                      const badSerials = invalidSerials.map(inv => inv.serial);
+                      setHighlightedSerials(badSerials);
+                      setShowValidationModal(false);
+                      setTimeout(() => fetchAllData(pendingFetchOptions, badSerials, false), 0);
+                  }} className="btn btn-outline" style={{ flex: 1, padding: '12px', fontSize: '1.1rem', color: 'var(--text-main)', borderColor: 'var(--border-color)' }}>
+                     لا، أبقهم في الجدول
+                  </button>
+               </div>
+            </div>
+         </div>
+      )}
+
+      {/* ─── CLEAR CONFIRM MODAL ─── */}
+      {showClearConfirm && (
+         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', zIndex: 9999, display: 'flex', justifyContent: 'center', alignItems: 'center', backdropFilter: 'blur(5px)' }}>
+            <div className="card fade-in" style={{ width: '400px', border: '2px solid #ef4444', boxShadow: '0 10px 40px rgba(239, 68, 68, 0.2)', textAlign: 'center' }}>
+               <h3 style={{ marginBottom: '1rem', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                  <AlertCircle size={32} /> تأكيد التفريغ
+               </h3>
+               <p style={{ marginBottom: '2rem', fontSize: '1.1rem', color: 'var(--text-main)' }}>
+                 هل أنت متأكد من رغبتك في تفريغ كافة حقول الجدول والبدء من جديد؟ سيتم مسح كافة البيانات الحالية.
+               </p>
+               <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+                  <button onClick={clearAllData} className="btn btn-primary" style={{ flex: 1, background: '#ef4444', color: '#fff', border: 'none', padding: '10px', fontSize: '1.1rem' }}>
+                     نعم، إفراغ الجدول
+                  </button>
+                  <button onClick={() => setShowClearConfirm(false)} className="btn btn-outline" style={{ flex: 1, padding: '10px', fontSize: '1.1rem', color: 'var(--text-main)', borderColor: 'var(--border-color)' }}>
+                     تراجع
+                  </button>
+               </div>
             </div>
          </div>
       )}

@@ -12,6 +12,7 @@ import PrintBarcodes from './pages/PrintBarcodes'
 import ReportsPortal from './pages/ReportsPortal'
 import ShippingInvoice from './pages/ShippingInvoice'
 import PackingList from './pages/PackingList'
+import WarehouseReceipt from './pages/WarehouseReceipt'
 import { AppDataProvider } from './context/AppDataContext'
 import './index.css'
 
@@ -46,6 +47,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             <Route path="reports" element={<ReportsPortal />} />
             <Route path="shipping-invoice" element={<ShippingInvoice />} />
             <Route path="packing-list" element={<PackingList />} />
+            <Route path="warehouse-receipt" element={<WarehouseReceipt />} />
           </Route>
         </Routes>
       </BrowserRouter>

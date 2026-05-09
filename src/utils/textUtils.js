@@ -36,3 +36,38 @@ export const englishOnly = (name) => {
 
   return stripped || str;
 };
+
+/**
+ * Maps color names to CSS colors for UI display.
+ * Handles English, Arabic, and mixed string formats.
+ */
+export const extractColorCSS = (colorStr) => {
+    if (!colorStr) return 'transparent';
+    const lower = colorStr.toLowerCase();
+    
+    // Common mappings
+    if (lower.includes('red') || lower.includes('أحمر')) return '#ef4444';
+    if (lower.includes('blue') || lower.includes('أزرق')) return '#3b82f6';
+    if (lower.includes('green') || lower.includes('أخضر')) return '#22c55e';
+    if (lower.includes('black') || lower.includes('أسود')) return '#000000';
+    if (lower.includes('white') || lower.includes('أبيض')) return '#ffffff';
+    if (lower.includes('yellow') || lower.includes('أصفر')) return '#eab308';
+    if (lower.includes('pink') || lower.includes('وردي') || lower.includes('زهر')) return '#ec4899';
+    if (lower.includes('purple') || lower.includes('بنفسجي')) return '#a855f7';
+    if (lower.includes('orange') || lower.includes('برتقالي')) return '#f97316';
+    if (lower.includes('gray') || lower.includes('grey') || lower.includes('رمادي')) return '#6b7280';
+    if (lower.includes('brown') || lower.includes('بني')) return '#78350f';
+    if (lower.includes('beige') || lower.includes('بيج')) return '#f5f5dc';
+    if (lower.includes('gold') || lower.includes('ذهبي')) return '#ffd700';
+    if (lower.includes('silver') || lower.includes('فضي')) return '#c0c0c0';
+    if (lower.includes('navy') || lower.includes('كحلي')) return '#1e3a8a';
+    if (lower.includes('maroon') || lower.includes('عنابي')) return '#7f1d1d';
+    if (lower.includes('olive') || lower.includes('زيتي')) return '#3f6212';
+    if (lower.includes('teal')) return '#0f766e';
+    if (lower.includes('cyan') || lower.includes('سماوي')) return '#06b6d4';
+    if (lower.includes('apricot') || lower.includes('مشمشي')) return '#fbceb1';
+    
+    // Try to extract an English word before any separator
+    const englishPart = colorStr.split(/[-_]/)[0].trim().replace(/\s+/g, '');
+    return englishPart || 'transparent';
+};

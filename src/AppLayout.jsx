@@ -13,6 +13,7 @@ const NAV_PAGES = [
   { path: '/reports', label: 'التقارير والإحصائيات', icon: Printer, color: '#ec4899' },
   { path: '/shipping-invoice', label: 'فاتورة الشحن', icon: FileSpreadsheet, color: '#06b6d4' },
   { path: '/packing-list', label: 'بوليصة التعبئة (Packing List)', icon: Package, color: '#10b981' },
+  { path: '/warehouse-receipt', label: 'تقرير استلام البضائع (Warehouse Receipt)', icon: FileSpreadsheet, color: '#f59e0b' },
 ];
 
 const AppLayout = () => {
@@ -40,7 +41,7 @@ const AppLayout = () => {
 
   return (
     <div className="app-container">
-      <header className="glass-panel hide-on-print" style={{ margin: '1rem 2rem', padding: '1rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative', zIndex: 50 }}>
+      <header className="glass-panel hide-on-print" style={{ margin: '1rem 2rem', padding: '1rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: '1rem', zIndex: 50 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <div style={{ 
             background: 'var(--accent-color)', 

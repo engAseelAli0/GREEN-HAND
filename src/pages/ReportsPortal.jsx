@@ -3,8 +3,11 @@ import { supabase } from '../supabaseClient';
 import { useAppData } from '../context/AppDataContext';
 import { Filter, Download, FileText, ChevronDown, ChevronUp, Printer, Calendar, Factory, ArrowUpDown, Camera, X } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { CustomDateInput } from '../components/CustomDateInput';
 import * as XLSX from 'xlsx';
 import { englishOnly } from '../utils/textUtils';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 const ReportsPortal = () => {
   const { lookups } = useAppData();
@@ -271,63 +274,90 @@ const ReportsPortal = () => {
     if (filteredOrders.length === 0) return toast.error('لا توجد بيانات لتصديرها');
     
     const toastId = toast.loading('جاري تجهيز وتصدير التقرير الشامل...');
-    const element = document.getElementById('report-print-area');
-    
-    // Backup UI states
-    const originalShadow = element.style.boxShadow;
-    element.style.boxShadow = 'none';
-
-    // Expand all rows heavily in real DOM for canvas capture
-    const expandableSections = document.querySelectorAll('.expandable-content');
-    const originalDisplays = [];
-    expandableSections.forEach(sec => {
-        originalDisplays.push(sec.style.display);
-        sec.style.display = 'table-row';
-    });
 
     try {
-       const { default: html2canvas } = await import('html2canvas');
-       const { default: jsPDF } = await import('jspdf');
-
-       const canvas = await html2canvas(element, {
-         scale: 2,
-         useCORS: true,
-         logging: false,
-         windowWidth: Math.max(element.scrollWidth, 1200) // Ensure wide view for tables
-       });
-
-       const imgData = canvas.toDataURL('image/jpeg', 1.0);
-       const imgWidthPx = canvas.width;
-       const imgHeightPx = canvas.height;
-
-       // A3 landscape width = 420mm -> plenty of room for wide tables without shrinking too much
-       const pdfWidthMM = 420;
-       const margin = 10;
-       const contentWidthMM = pdfWidthMM - margin * 2;
-       
-       // Calculate height dynamically so it NEVER breaks into pages
-       const contentHeightMM = (imgHeightPx * contentWidthMM) / imgWidthPx;
-       const pdfHeightMM = contentHeightMM + margin * 2;
-
        const pdf = new jsPDF({
-         orientation: pdfWidthMM > pdfHeightMM ? 'landscape' : 'portrait',
+         orientation: 'landscape',
          unit: 'mm',
-         format: [pdfWidthMM, pdfHeightMM],
+         format: 'a4',
        });
 
-       pdf.addImage(imgData, 'JPEG', margin, margin, contentWidthMM, contentHeightMM);
+       const pageW = pdf.internal.pageSize.getWidth();
+       const margin = 10;
+
+       // === Title ===
+       pdf.setFontSize(18);
+       pdf.setFont('helvetica', 'bold');
+       pdf.text('Orders Report', pageW / 2, 16, { align: 'center' });
+       pdf.setFontSize(10);
+       pdf.setFont('helvetica', 'normal');
+       pdf.text(`Generated: ${new Date().toLocaleDateString()} | Total: ${filteredOrders.length} orders`, pageW / 2, 23, { align: 'center' });
+       pdf.setDrawColor(30, 41, 59);
+       pdf.setLineWidth(0.5);
+       pdf.line(margin, 26, pageW - margin, 26);
+
+       // === Data Table ===
+       const tblHead = [['#', 'Serial', 'Product Name', 'Buyer', 'Factory', 'Factory Code', 'Sizes', 'Total Qty', 'Unit Price', 'Currency', 'Total Price', 'Order Date', 'Delivery Date']];
+
+       const tblBody = filteredOrders.map((order, idx) => {
+         const d = order.order_data || {};
+         const computedTotal = calculateTotalPiecesCount(d);
+         const qty = computedTotal > 0 ? computedTotal : (parseInt(d.totalQuantity) || 0);
+         const totalPrice = (parseFloat(d.productPrice || 0) * qty) || 0;
+         return [
+           idx + 1,
+           order.serial_number || '-',
+           englishOnly(d.productName) || '-',
+           d.buyerCompany || '-',
+           d.factoryId || '-',
+           getFactoryCode(d.factoryId) || '-',
+           `${d.sizeFrom || '-'} - ${d.sizeTo || '-'}`,
+           qty,
+           d.productPrice || 0,
+           d.currency || '-',
+           totalPrice.toLocaleString(undefined, { minimumFractionDigits: 2 }),
+           d.requestDate || '-',
+           d.deliveryDate || '-',
+         ];
+       });
+
+       autoTable(pdf, {
+         startY: 30,
+         head: tblHead,
+         body: tblBody,
+         theme: 'grid',
+         headStyles: { fillColor: [226, 232, 240], textColor: [15, 23, 42], fontStyle: 'bold', fontSize: 7, halign: 'center', cellPadding: 2.5 },
+         styles: { fontSize: 7, cellPadding: 2, halign: 'center', font: 'helvetica', overflow: 'linebreak' },
+         columnStyles: {
+           0: { cellWidth: 8 },
+           1: { cellWidth: 16 },
+           2: { cellWidth: 40, halign: 'left' },
+           3: { cellWidth: 25, halign: 'left' },
+           4: { cellWidth: 22, halign: 'left' },
+           5: { cellWidth: 16 },
+           6: { cellWidth: 20 },
+           7: { cellWidth: 16 },
+           8: { cellWidth: 16 },
+           9: { cellWidth: 14 },
+           10: { cellWidth: 22 },
+           11: { cellWidth: 22 },
+           12: { cellWidth: 22 },
+         },
+         margin: { left: margin, right: margin },
+         didDrawPage: (data) => {
+           // Footer on each page
+           pdf.setFontSize(7);
+           pdf.setFont('helvetica', 'normal');
+           pdf.text(`Page ${pdf.internal.getNumberOfPages()}`, pageW - margin, pdf.internal.pageSize.getHeight() - 5, { align: 'right' });
+         },
+       });
+
        pdf.save(`Report_${new Date().toISOString().split('T')[0]}.pdf`);
        
-       toast.success('تم تحميل التقرير بصفحة واحدة بنجاح!', { id: toastId });
+       toast.success('تم تحميل التقرير بنجاح!', { id: toastId });
     } catch (err) {
        toast.error('حدث خطأ أثناء تحميل الـ PDF', { id: toastId });
        console.error(err);
-    } finally {
-       // Restore UI
-       element.style.boxShadow = originalShadow;
-       expandableSections.forEach((sec, idx) => {
-           sec.style.display = originalDisplays[idx];
-       });
     }
   };
 
@@ -472,15 +502,17 @@ const ReportsPortal = () => {
             {showSerialsList && activeSerialField === 'toSerial' && renderSerialsLookup()}
           </div>
 
-          <div className="form-group">
-            <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><Calendar size={14}/> من تاريخ</label>
-            <input type="date" className="form-control" value={filters.fromDate} onChange={(e) => updateFilter('fromDate', e.target.value)} />
-          </div>
+          <CustomDateInput 
+            label={<><Calendar size={14}/> من تاريخ</>}
+            value={filters.fromDate}
+            onChange={(val) => updateFilter('fromDate', val)}
+          />
 
-          <div className="form-group">
-            <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><Calendar size={14}/> إلى تاريخ</label>
-            <input type="date" className="form-control" value={filters.toDate} onChange={(e) => updateFilter('toDate', e.target.value)} />
-          </div>
+          <CustomDateInput 
+            label={<><Calendar size={14}/> إلى تاريخ</>}
+            value={filters.toDate}
+            onChange={(val) => updateFilter('toDate', val)}
+          />
 
           <div className="form-group">
             <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><Factory size={14}/> تحديد المصنع</label>

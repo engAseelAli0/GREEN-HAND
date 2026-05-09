@@ -4,6 +4,7 @@ import { supabase } from '../supabaseClient';
 import { Search, Save, PackageCheck, AlertCircle, Info, Box, Palette, Calculator, CheckCircle2, XCircle, Download, Printer, X, Factory } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
+import { extractColorCSS } from '../utils/textUtils';
 
 const FactoryReceiving = () => {
   const { lookups } = useAppData();
@@ -173,10 +174,11 @@ const FactoryReceiving = () => {
               for (const qty of Object.values(sizesObj)) {
                  sum += parseInt(qty) || 0;
               }
+              const factAct = (oData.factoryProduction && oData.factoryProduction[colorStr]) ? oData.factoryProduction[colorStr] : 0;
               newCols[idx].colorName = colorStr;
-              newCols[idx].quantity = sum.toString();
+              newCols[idx].quantity = factAct ? factAct.toString() : sum.toString();
               newCols[idx].expected = sum;
-              newCols[idx].factoryActual = (oData.factoryProduction && oData.factoryProduction[colorStr]) ? oData.factoryProduction[colorStr] : 0;
+              newCols[idx].factoryActual = factAct;
               idx++;
            }
         }
@@ -759,7 +761,8 @@ const FactoryReceiving = () => {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '1rem', marginTop: '1.5rem' }}>
               {colors.filter(c => c.colorName).map((c, i) => (
                 <div key={i} style={{ background: 'var(--surface-highlight)', border: '1px solid var(--border-color)', borderRadius: '10px', overflow: 'hidden' }}>
-                  <div style={{ background: 'var(--surface-color)', padding: '8px', textAlign: 'center', fontSize: '0.85rem', fontWeight: 'bold', borderBottom: '1px solid var(--border-color)' }}>
+                  <div style={{ background: 'var(--surface-color)', padding: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontSize: '0.85rem', fontWeight: 'bold', borderBottom: '1px solid var(--border-color)' }}>
+                    <div style={{ width: '16px', height: '16px', borderRadius: '50%', border: '1px solid rgba(255,255,255,0.2)', backgroundColor: extractColorCSS(c.colorName), flexShrink: 0 }}></div>
                     {c.colorName}
                   </div>
                   <div style={{ padding: '10px', display: 'flex', flexDirection: 'column', gap: '5px' }}>

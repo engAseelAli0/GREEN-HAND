@@ -4,6 +4,7 @@ import { Save, RefreshCw, Hash, Calendar, Box, Scissors, Palette, LayoutGrid, Ch
 import { supabase } from '../supabaseClient';
 import toast from 'react-hot-toast';
 import { compressImage } from '../utils/imageUtils';
+import { CustomDateInput } from '../components/CustomDateInput';
 
 const TABS = [
   { id: 'buyer', label: 'المشتري والمنتج', icon: Hash, num: 1 },
@@ -14,72 +15,6 @@ const TABS = [
   { id: 'packaging', label: 'شروط التعبئة', icon: CheckSquare, num: 6 },
   { id: 'measurements', label: 'المقاسات التفصيلية', icon: Ruler, num: 7 },
 ];
-
-// Helper to format date as DD/MM/YYYY for display
-const formatDateForDisplay = (dateStr) => {
-  if (!dateStr) return '';
-  const parts = dateStr.split('-');
-  if (parts.length === 3) {
-    const [year, month, day] = parts;
-    return `${day}/${month}/${year}`;
-  }
-  return dateStr;
-};
-
-const CustomDateInput = ({ label, value, onChange, min }) => {
-  return (
-    <div className="form-group">
-      <label className="form-label">{label}</label>
-      <div style={{ position: 'relative' }}>
-        <input 
-          type="text" 
-          className="form-control" 
-          value={formatDateForDisplay(value)} 
-          placeholder="DD/MM/YYYY"
-          readOnly
-          style={{ cursor: 'pointer', backgroundColor: 'var(--bg-color)' }}
-          onClick={(e) => {
-             const picker = e.currentTarget.nextSibling;
-             if (picker && picker.showPicker) picker.showPicker();
-          }}
-        />
-        <input 
-          type="date" 
-          className="form-control"
-          style={{ 
-            position: 'absolute', 
-            top: 0, 
-            left: 0, 
-            width: '100%', 
-            height: '100%', 
-            opacity: 0, 
-            cursor: 'pointer',
-            padding: 0
-          }} 
-          value={value || ''} 
-          min={min || ''}
-          onChange={(e) => onChange(e.target.value)} 
-          onClick={(e) => {
-            if (e.target.showPicker) e.target.showPicker();
-          }}
-        />
-        <div style={{ 
-          position: 'absolute', 
-          left: '12px', 
-          top: '50%', 
-          transform: 'translateY(-50%)', 
-          pointerEvents: 'none',
-          opacity: 0.7,
-          color: 'var(--accent-color)',
-          display: 'flex',
-          alignItems: 'center'
-        }}>
-          <Calendar size={18} />
-        </div>
-      </div>
-    </div>
-  );
-};
 
 const ClearableSelect = ({ value, onChange, children, className = "form-control", style, disabled }) => (
   <div style={{ position: 'relative', width: '100%', ...style }}>
@@ -111,7 +46,12 @@ const ClearableSelect = ({ value, onChange, children, className = "form-control"
 const DataEntryWizard = () => {
   const { lookups, currentOrder, updateOrder, setCurrentOrder } = useAppData();
   const [activeTab, setActiveTab] = useState('buyer');
-  const [selectedColorsArr, setSelectedColorsArr] = useState([]);
+  const [selectedColorsArr, setSelectedColorsArr] = useState(() => {
+    if (currentOrder?.colorDistribution) {
+      return Object.keys(currentOrder.colorDistribution);
+    }
+    return [];
+  });
   const [serialStatus, setSerialStatus] = useState(null);
   const [tabKey, setTabKey] = useState(0);
   const [productImages, setProductImages] = useState(() => {
@@ -244,10 +184,36 @@ const DataEntryWizard = () => {
         const match = data[0].serial_number.match(/\d+/);
         if (match) return (parseInt(match[0]) + 1).toString();
       }
-      return '1000';
+      return '1';
     } catch (err) {
       console.error('Error fetching latest serial', err);
-      return '1000';
+      return '1';
+    }
+  };
+
+  const fetchNextOrderNumber = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('orders')
+        .select('order_data')
+        .order('created_at', { ascending: false })
+        .limit(100);
+      if (data && data.length > 0) {
+        let maxOrder = 0;
+        for (const row of data) {
+           if (row.order_data && row.order_data.orderNumber) {
+             const num = parseInt(row.order_data.orderNumber);
+             if (!isNaN(num) && num > maxOrder) maxOrder = num;
+           }
+        }
+        if (maxOrder >= 0) {
+          return (maxOrder + 1).toString();
+        }
+      }
+      return '0';
+    } catch (err) {
+      console.error('Error fetching order number', err);
+      return '0';
     }
   };
 
@@ -256,6 +222,11 @@ const DataEntryWizard = () => {
        fetchNextAvailableSerial().then(nextNum => {
          updateOrder('serialNumber', nextNum);
          setSerialStatus('available');
+       });
+    }
+    if (!currentOrder.orderNumber) {
+       fetchNextOrderNumber().then(nextNum => {
+         updateOrder('orderNumber', nextNum);
        });
     }
   }, []); // eslint-disable-line
@@ -456,11 +427,13 @@ const DataEntryWizard = () => {
     return true;
   };
 
-  const resetAfterSave = () => {
+  const resetAfterSave = async () => {
     const nextNum = parseInt(currentOrder.serialNumber) + 1;
+    const nextOrderNum = await fetchNextOrderNumber();
     setCurrentOrder({
       ...defaultOrderState,
-      serialNumber: !isNaN(nextNum) ? nextNum.toString() : '1000'
+      serialNumber: !isNaN(nextNum) ? nextNum.toString() : '1000',
+      orderNumber: nextOrderNum
     });
     setSelectedColorsArr([]);
     setProductImages([]);
@@ -480,9 +453,11 @@ const DataEntryWizard = () => {
     }
     const toastId = toast.loading('جاري حفظ الطلبية الجديدة...');
     try {
+      const actualOrderNum = await fetchNextOrderNumber();
+      const orderToSave = { ...currentOrder, orderNumber: actualOrderNum };
       const { data, error } = await supabase
         .from('orders')
-        .insert([{ serial_number: currentOrder.serialNumber, order_data: currentOrder }]);
+        .insert([{ serial_number: currentOrder.serialNumber, order_data: orderToSave }]);
       if (error) {
         console.error(error);
         toast.error('حدث خطأ أثناء الحفظ! تأكد من إنشاء جدول orders وتصريحاته.', { id: toastId });
@@ -581,9 +556,11 @@ const DataEntryWizard = () => {
     }
     const toastId = toast.loading('جاري حفظ النسخة الجديدة...');
     try {
+      const actualOrderNum = await fetchNextOrderNumber();
+      const orderToSave = { ...currentOrder, orderNumber: actualOrderNum };
       const { data, error } = await supabase
         .from('orders')
-        .insert([{ serial_number: currentOrder.serialNumber, order_data: currentOrder }]);
+        .insert([{ serial_number: currentOrder.serialNumber, order_data: orderToSave }]);
       if (error) {
         console.error(error);
         toast.error('حدث خطأ أثناء الحفظ!', { id: toastId });
@@ -704,7 +681,8 @@ const DataEntryWizard = () => {
 
   const handleClear = async () => {
     const nextNum = await fetchNextAvailableSerial();
-    setCurrentOrder({ ...defaultOrderState, serialNumber: nextNum });
+    const nextOrderNum = await fetchNextOrderNumber();
+    setCurrentOrder({ ...defaultOrderState, serialNumber: nextNum, orderNumber: nextOrderNum });
     setProductImages([]);
     setSelectedColorsArr([]);
     setIsEditMode(false);
@@ -856,8 +834,12 @@ const DataEntryWizard = () => {
         return (
           <div className="tab-panel" key={tabKey}>
             <div className="card">
-              <div className="tab-section-header">
+              <div className="tab-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <h3><Hash size={22} /> بيانات المشتري والمنتج</h3>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(212, 175, 55, 0.1)', padding: '0.4rem 1rem', borderRadius: '8px', border: '1px dashed var(--accent-color)' }}>
+                   <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>رقم الأوردر:</span>
+                   <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--accent-color)' }}>{currentOrder.orderNumber || '---'}</span>
+                </div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div className="form-group">
@@ -893,6 +875,10 @@ const DataEntryWizard = () => {
                       return <option key={i} value={val}>{val}</option>;
                     })}
                   </ClearableSelect>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">رقم المشتري</label>
+                  <input type="text" className="form-control" value={currentOrder.buyerNumber || ''} onChange={(e) => updateOrder('buyerNumber', e.target.value)} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">رقم الموديل (Product Number)</label>

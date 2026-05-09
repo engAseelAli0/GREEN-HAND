@@ -222,6 +222,17 @@ const HomePortal = () => {
           </p>
         </Link>
 
+        {/* Capsule 9: Warehouse Receipt */}
+        <Link to="/warehouse-receipt" className="capsule-card">
+          <div className="icon-ring" style={{ color: '#f59e0b', borderColor: 'rgba(245, 158, 11, 0.3)' }}>
+            <FileSpreadsheet size={40} />
+          </div>
+          <h2 className="capsule-title">تقرير استلام البضائع</h2>
+          <p className="capsule-desc">
+            (Warehouse Receipt) تقرير متقدم بحالة استلام البضائع من المصانع وفلترة الفترات الزمنية مع إمكانية التصدير.
+          </p>
+        </Link>
+
       </div>
     </div>
   );

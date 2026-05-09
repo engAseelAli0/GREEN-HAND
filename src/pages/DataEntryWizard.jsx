@@ -5,6 +5,7 @@ import { supabase } from '../supabaseClient';
 import toast from 'react-hot-toast';
 import { compressImage } from '../utils/imageUtils';
 import { CustomDateInput } from '../components/CustomDateInput';
+import ImageEditorModal from '../components/ImageEditorModal';
 
 const TABS = [
   { id: 'buyer', label: 'المشتري والمنتج', icon: Hash, num: 1 },
@@ -80,6 +81,11 @@ const DataEntryWizard = () => {
   const [viewMode, setViewMode] = useState(() => {
     try { return localStorage.getItem('gh_viewMode') || 'tabs'; } catch { return 'tabs'; }
   });
+
+  // ─── Image Editor States ───
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [imageToEdit, setImageToEdit] = useState(null);
+  const [pendingImages, setPendingImages] = useState([]);
 
   // ─── Close pickers on outside click ───
   useEffect(() => {
@@ -236,7 +242,7 @@ const DataEntryWizard = () => {
     setTabKey(prev => prev + 1);
   };
 
-  // ─── Image Upload Handlers ───
+  // ─── Image Upload & Editor Handlers ───
   const handleImageUpload = async (e) => {
     const originalFiles = Array.from(e.target.files);
     if (!originalFiles.length) return;
@@ -247,50 +253,86 @@ const DataEntryWizard = () => {
       return;
     }
 
+    // Put images in queue and start with the first one
+    setPendingImages(originalFiles);
+    setImageToEdit(originalFiles[0]);
+    setIsEditorOpen(true);
+    
+    // Clear inputs so they can be triggered again
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (cameraInputRef.current) cameraInputRef.current.value = '';
+  };
+
+  const onSaveEditedImage = async (editedFile) => {
+    setIsEditorOpen(false);
+    setImageToEdit(null);
+    
     setUploadingImage(true);
-    const toastId = toast.loading('جاري ضغط ورفع الصور...');
+    const toastId = toast.loading('جاري ضغط ورفع الصورة المعدلة...');
 
     try {
-      const newImages = [];
-      for (let i = 0; i < originalFiles.length; i++) {
-        const file = await compressImage(originalFiles[i], 1200, 0.75);
-        const ext = file.name.split('.').pop();
-        const currentCount = productImages.length + newImages.length;
-        const fileName = currentCount === 0 ? `${modelNum}.${ext}` : `${modelNum}#${currentCount}.${ext}`;
-        const filePath = `product-images/${fileName}`;
+      const modelNum = currentOrder.serialNumber?.trim();
+      const file = await compressImage(editedFile, 1200, 0.75);
+      const ext = file.name.split('.').pop();
+      
+      // Calculate next filename index based on current images
+      const currentCount = productImages.length;
+      const fileName = currentCount === 0 ? `${modelNum}.${ext}` : `${modelNum}#${currentCount}.${ext}`;
+      const filePath = `product-images/${fileName}`;
 
-        const { data, error } = await supabase.storage
-          .from('product_images')
-          .upload(filePath, file, { upsert: true });
+      const { data, error } = await supabase.storage
+        .from('product_images')
+        .upload(filePath, file, { upsert: true });
 
-        if (error) {
-          console.error('Upload error:', error);
-          toast.error(`فشل رفع الصورة: ${error.message}`);
-          continue;
-        }
-
+      if (error) {
+        console.error('Upload error:', error);
+        toast.error(`فشل رفع الصورة: ${error.message}`, { id: toastId });
+      } else {
         const { data: urlData } = supabase.storage
           .from('product_images')
           .getPublicUrl(filePath);
 
-        newImages.push({
+        const newImage = {
           name: fileName,
           path: filePath,
           url: urlData.publicUrl,
           preview: URL.createObjectURL(file)
-        });
-      }
+        };
 
-      setProductImages(prev => [...prev, ...newImages]);
-      updateOrder('productImages', [...(currentOrder.productImages || []), ...newImages.map(img => ({ name: img.name, path: img.path, url: img.url }))]);
-      toast.success(`تم رفع ${newImages.length} صورة بنجاح!`, { id: toastId });
+        setProductImages(prev => [...prev, newImage]);
+        updateOrder('productImages', [...(currentOrder.productImages || []), { name: newImage.name, path: newImage.path, url: newImage.url }]);
+        toast.success('تم حفظ ورفع الصورة بنجاح!', { id: toastId });
+      }
     } catch (err) {
       console.error(err);
-      toast.error('حدث خطأ أثناء رفع الصور!', { id: toastId });
+      toast.error('حدث خطأ أثناء رفع الصورة!', { id: toastId });
     } finally {
       setUploadingImage(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-      if (cameraInputRef.current) cameraInputRef.current.value = '';
+      
+      // Process next image in queue if any
+      const remaining = pendingImages.slice(1);
+      if (remaining.length > 0) {
+        setPendingImages(remaining);
+        setImageToEdit(remaining[0]);
+        setTimeout(() => setIsEditorOpen(true), 500); // Small delay for smoothness
+      } else {
+        setPendingImages([]);
+      }
+    }
+  };
+
+  const onCancelEdit = () => {
+    setIsEditorOpen(false);
+    setImageToEdit(null);
+    
+    // Process next if cancelled
+    const remaining = pendingImages.slice(1);
+    if (remaining.length > 0) {
+      setPendingImages(remaining);
+      setImageToEdit(remaining[0]);
+      setTimeout(() => setIsEditorOpen(true), 500);
+    } else {
+      setPendingImages([]);
     }
   };
 
@@ -1555,6 +1597,27 @@ const DataEntryWizard = () => {
                         borderRadius: 'var(--radius-md)', boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
                         maxHeight: '260px', overflowY: 'auto'
                       }}>
+                        {/* Select All Button */}
+                        {lookups.colors?.length > 0 && (
+                          <div
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const allNames = lookups.colors.map(c => c.name || c);
+                              setSelectedColorsArr(allNames);
+                              toast.success(`تم تحديد جميع الألوان (${allNames.length})`);
+                            }}
+                            style={{
+                              padding: '0.6rem', marginBottom: '0.5rem', textAlign: 'center',
+                              background: 'rgba(212, 175, 55, 0.1)', border: '1px dashed var(--accent-color)',
+                              borderRadius: '8px', cursor: 'pointer', color: 'var(--accent-color)',
+                              fontSize: '0.85rem', fontWeight: 'bold', transition: 'all 0.2s'
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(212, 175, 55, 0.2)'}
+                            onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(212, 175, 55, 0.1)'}
+                          >
+                            تحديد جميع الألوان ✓
+                          </div>
+                        )}
                         {lookups.colors?.map((colorObj, i) => {
                           const colorName = colorObj.name || colorObj;
                           const colorHex = colorObj.hex || '#cccccc';
@@ -2410,6 +2473,12 @@ const DataEntryWizard = () => {
         )}
       </div>
 
+      <ImageEditorModal 
+        isOpen={isEditorOpen}
+        imageFile={imageToEdit}
+        onSave={onSaveEditedImage}
+        onCancel={onCancelEdit}
+      />
     </div>
   );
 };

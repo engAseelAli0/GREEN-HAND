@@ -4,15 +4,15 @@ import { Settings, Edit3, Printer, Truck, Factory, Barcode, FileSpreadsheet, Pac
 import { Toaster } from 'react-hot-toast';
 
 const NAV_PAGES = [
-  { path: '/entry', label: 'أوامر الإنتاج وتوثيق الطلبيات', icon: Edit3, color: 'var(--accent-color)' },
+  { path: '/entry', label: 'أوامر الإنتاج وتوثيق الطلبات', icon: Edit3, color: 'var(--accent-color)' },
   { path: '/export', label: 'مستندات وفواتير التصدير', icon: Printer, color: '#60a5fa' },
   { path: '/admin', label: 'لوحة الإدارة والإعدادات', icon: Settings, color: '#a78bfa' },
-  { path: '/receiving', label: 'استلام البضائع والفرز', icon: Truck, color: '#4ade80' },
-  { path: '/factory-portal', label: 'بوابة المصنع', icon: Factory, color: '#d4af37' },
-  { path: '/barcodes', label: 'دفعات الباركود (Batches)', icon: Barcode, color: '#fb923c' },
+  { path: '/receiving', label: 'استلام البضائع الخاصه بالشركة', icon: Truck, color: '#4ade80' },
+  { path: '/factory-portal', label: 'استلام البضائع الخاصه بالمصانع', icon: Factory, color: '#d4af37' },
+  { path: '/barcodes', label: 'استخراج الباركود', icon: Barcode, color: '#fb923c' },
   { path: '/reports', label: 'التقارير والإحصائيات', icon: Printer, color: '#ec4899' },
   { path: '/shipping-invoice', label: 'فاتورة الشحن', icon: FileSpreadsheet, color: '#06b6d4' },
-  { path: '/packing-list', label: 'بوليصة التعبئة (Packing List)', icon: Package, color: '#10b981' },
+  { path: '/packing-list', label: 'فاتورة الجمارك (Packing List)', icon: Package, color: '#10b981' },
   { path: '/warehouse-receipt', label: 'تقرير استلام البضائع (Warehouse Receipt)', icon: FileSpreadsheet, color: '#f59e0b' },
 ];
 

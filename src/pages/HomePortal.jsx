@@ -161,7 +161,7 @@ const HomePortal = () => {
           <div className="icon-ring" style={{ color: '#4ade80', borderColor: 'rgba(74, 222, 128, 0.3)' }}>
             <Truck size={40} />
           </div>
-          <h2 className="capsule-title">استلام البضائع والفرز</h2>
+          <h2 className="capsule-title">استلام البضائع الخاصه بالشركة</h2>
           <p className="capsule-desc">
             واجهة المطابقة المتقدمة. إضافة تفاصيل الكراتين المستلمة من المصانع والتحقق الرياضي من مطابقة الكميات.
           </p>
@@ -172,7 +172,7 @@ const HomePortal = () => {
           <div className="icon-ring" style={{ color: '#d4af37', borderColor: 'rgba(212, 175, 55, 0.3)' }}>
             <Factory size={40} />
           </div>
-          <h2 className="capsule-title">بوابة المصنع</h2>
+          <h2 className="capsule-title">استلام البضائع الخاصه بالمصانع</h2>
           <p className="capsule-desc">
             واجهة صاحب المصنع. تسجيل الكميات المصنعة فعلياً وتغيير حالة التسليم للموديلات الجاهزة.
           </p>
@@ -183,7 +183,7 @@ const HomePortal = () => {
           <div className="icon-ring" style={{ color: '#fb923c', borderColor: 'rgba(251, 146, 60, 0.3)' }}>
             <Barcode size={40} />
           </div>
-          <h2 className="capsule-title">دفعات الباركود (Batches)</h2>
+          <h2 className="capsule-title">استخراج الباركود (Batches)</h2>
           <p className="capsule-desc">
             توليد ومطابقة باركودات متسلسلة للمصانع والماسحات الضوئية بناءً على الألوان والمقاسات.
           </p>
@@ -216,7 +216,7 @@ const HomePortal = () => {
           <div className="icon-ring" style={{ color: '#10b981', borderColor: 'rgba(16, 185, 129, 0.3)' }}>
             <Package size={40} />
           </div>
-          <h2 className="capsule-title">بوليصة التعبئة (Packing List)</h2>
+          <h2 className="capsule-title">فاتورة الجمارك (Packing List)</h2>
           <p className="capsule-desc">
             كشف تعبئة البضائع للجمارك مع إمكانية دمج عدة موديلات في كرتون واحد ومطابقتها للتصدير.
           </p>

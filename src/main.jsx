@@ -14,6 +14,8 @@ import ShippingInvoice from './pages/ShippingInvoice'
 import PackingList from './pages/PackingList'
 import WarehouseReceipt from './pages/WarehouseReceipt'
 import { AppDataProvider } from './context/AppDataContext'
+import { ThemeProvider } from './context/ThemeContext'
+import './i18n'
 import './index.css'
 
 // Global fix to prevent mouse wheel and arrow keys from altering number inputs everywhere
@@ -33,24 +35,26 @@ document.addEventListener('keydown', function(e) {
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <AppDataProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<AppLayout />}>
-            <Route index element={<HomePortal />} />
-            <Route path="entry" element={<DataEntryWizard />} />
-            <Route path="admin" element={<AdminDashboard />} />
-            <Route path="export" element={<ExportOrder />} />
-            <Route path="receiving" element={<FactoryReceiving />} />
-            <Route path="factory-portal" element={<FactoryOwnerPortal />} />
-            <Route path="barcodes" element={<PrintBarcodes />} />
-            <Route path="reports" element={<ReportsPortal />} />
-            <Route path="shipping-invoice" element={<ShippingInvoice />} />
-            <Route path="packing-list" element={<PackingList />} />
-            <Route path="warehouse-receipt" element={<WarehouseReceipt />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
-    </AppDataProvider>
+    <ThemeProvider>
+      <AppDataProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<AppLayout />}>
+              <Route index element={<HomePortal />} />
+              <Route path="entry" element={<DataEntryWizard />} />
+              <Route path="admin" element={<AdminDashboard />} />
+              <Route path="export" element={<ExportOrder />} />
+              <Route path="receiving" element={<FactoryReceiving />} />
+              <Route path="factory-portal" element={<FactoryOwnerPortal />} />
+              <Route path="barcodes" element={<PrintBarcodes />} />
+              <Route path="reports" element={<ReportsPortal />} />
+              <Route path="shipping-invoice" element={<ShippingInvoice />} />
+              <Route path="packing-list" element={<PackingList />} />
+              <Route path="warehouse-receipt" element={<WarehouseReceipt />} />
+            </Route>
+          </Routes>
+        </BrowserRouter>
+      </AppDataProvider>
+    </ThemeProvider>
   </React.StrictMode>,
 )

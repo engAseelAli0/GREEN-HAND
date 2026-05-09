@@ -1,8 +1,9 @@
-import React from 'react';
 import { Link } from 'react-router-dom';
 import { Edit3, Printer, Settings, Hexagon, Truck, Barcode, Factory, FileSpreadsheet, Package } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 const HomePortal = () => {
+  const { t } = useTranslation();
   return (
     <div className="fade-in" style={{ 
         display: 'flex', 
@@ -22,7 +23,7 @@ const HomePortal = () => {
         .portal-title {
            font-size: 3rem;
            font-weight: 900;
-           background: linear-gradient(135deg, #fff 0%, var(--accent-color) 100%);
+           background: linear-gradient(135deg, var(--text-strong) 0%, var(--accent-color) 100%);
            -webkit-background-clip: text;
            -webkit-text-fill-color: transparent;
            margin-bottom: 1rem;
@@ -46,7 +47,7 @@ const HomePortal = () => {
         }
 
         .capsule-card {
-           background: linear-gradient(145deg, var(--surface-color) 0%, rgba(30, 41, 59, 0.4) 100%);
+           background: linear-gradient(145deg, var(--surface-color) 0%, var(--bg-color) 100%);
            border: 1px solid rgba(212, 175, 55, 0.15);
            border-radius: 24px;
            padding: 3rem 2rem;
@@ -56,7 +57,7 @@ const HomePortal = () => {
            flex-direction: column;
            align-items: center;
            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-           box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+           box-shadow: var(--shadow-md);
            position: relative;
            overflow: hidden;
         }
@@ -117,7 +118,7 @@ const HomePortal = () => {
         </div>
         <h1 className="portal-title">GREEN HAND Platform</h1>
         <p className="portal-subtitle">
-          مرحباً بك في لوحة القيادة الاستراتيجية. اختر الواجهة التي ترغب في العمل عليها اليوم من خلال بوابات النظام المخصصة أدناه.
+          {t('portal_welcome')}
         </p>
       </div>
 
@@ -128,9 +129,9 @@ const HomePortal = () => {
           <div className="icon-ring">
             <Edit3 size={40} />
           </div>
-          <h2 className="capsule-title">أوامر الإنتاج وتوثيق الطلبيات</h2>
+          <h2 className="capsule-title">{t('nav.entry')}</h2>
           <p className="capsule-desc">
-            واجهة التسجيل الذكية. إنشاء طلبيات جديدة للمصانع، وتحديد الكميات، ألوان المنتجات وتوزيع المقاسات في قاعدة البيانات.
+            {t('home.entry_desc')}
           </p>
         </Link>
 
@@ -139,9 +140,9 @@ const HomePortal = () => {
           <div className="icon-ring" style={{ color: '#60a5fa', borderColor: 'rgba(96, 165, 250, 0.3)' }}>
             <Printer size={40} />
           </div>
-          <h2 className="capsule-title">مستندات وفواتير التصدير</h2>
+          <h2 className="capsule-title">{t('nav.export')}</h2>
           <p className="capsule-desc">
-            توليد النماذج الرسمية. استرداد الطلبيات المحفوظة وتحويلها إلى مستندات PDF فاخرة ثنائية اللغة لمراسلة المصانع.
+            {t('home.export_desc')}
           </p>
         </Link>
 
@@ -150,9 +151,9 @@ const HomePortal = () => {
           <div className="icon-ring" style={{ color: '#a78bfa', borderColor: 'rgba(167, 139, 250, 0.3)' }}>
             <Settings size={40} />
           </div>
-          <h2 className="capsule-title">لوحة الإدارة والإعدادات</h2>
+          <h2 className="capsule-title">{t('nav.admin')}</h2>
           <p className="capsule-desc">
-            مركز البيانات. إضافة وتحرير الأقمشة، الألوان، المصانع، العملات، وجميع القوائم المنسدلة التي تغذي النظام بالكامل.
+            {t('home.admin_desc')}
           </p>
         </Link>
 
@@ -161,9 +162,9 @@ const HomePortal = () => {
           <div className="icon-ring" style={{ color: '#4ade80', borderColor: 'rgba(74, 222, 128, 0.3)' }}>
             <Truck size={40} />
           </div>
-          <h2 className="capsule-title">استلام البضائع الخاصه بالشركة</h2>
+          <h2 className="capsule-title">{t('nav.receiving')}</h2>
           <p className="capsule-desc">
-            واجهة المطابقة المتقدمة. إضافة تفاصيل الكراتين المستلمة من المصانع والتحقق الرياضي من مطابقة الكميات.
+            {t('home.receiving_desc')}
           </p>
         </Link>
 
@@ -172,9 +173,9 @@ const HomePortal = () => {
           <div className="icon-ring" style={{ color: '#d4af37', borderColor: 'rgba(212, 175, 55, 0.3)' }}>
             <Factory size={40} />
           </div>
-          <h2 className="capsule-title">استلام البضائع الخاصه بالمصانع</h2>
+          <h2 className="capsule-title">{t('nav.factory_portal')}</h2>
           <p className="capsule-desc">
-            واجهة صاحب المصنع. تسجيل الكميات المصنعة فعلياً وتغيير حالة التسليم للموديلات الجاهزة.
+            {t('home.factory_portal_desc')}
           </p>
         </Link>
 
@@ -183,9 +184,9 @@ const HomePortal = () => {
           <div className="icon-ring" style={{ color: '#fb923c', borderColor: 'rgba(251, 146, 60, 0.3)' }}>
             <Barcode size={40} />
           </div>
-          <h2 className="capsule-title">استخراج الباركود (Batches)</h2>
+          <h2 className="capsule-title">{t('nav.barcodes')}</h2>
           <p className="capsule-desc">
-            توليد ومطابقة باركودات متسلسلة للمصانع والماسحات الضوئية بناءً على الألوان والمقاسات.
+            {t('home.barcodes_desc')}
           </p>
         </Link>
 
@@ -194,9 +195,9 @@ const HomePortal = () => {
           <div className="icon-ring" style={{ color: '#ec4899', borderColor: 'rgba(236, 72, 153, 0.3)' }}>
             <Printer size={40} />
           </div>
-          <h2 className="capsule-title">التقارير والإحصائيات</h2>
+          <h2 className="capsule-title">{t('nav.reports')}</h2>
           <p className="capsule-desc">
-            بوابة الفلترة المتقدمة. استخراج تقارير شاملة ومحددة بالمصنع، رقم الموديل، أو التاريخ مع إمكانية التصدير لاكسل و PDF.
+            {t('home.reports_desc')}
           </p>
         </Link>
 
@@ -205,9 +206,9 @@ const HomePortal = () => {
           <div className="icon-ring" style={{ color: '#06b6d4', borderColor: 'rgba(6, 182, 212, 0.3)' }}>
             <FileSpreadsheet size={40} />
           </div>
-          <h2 className="capsule-title">فاتورة الشحن والتقارير المجمعة</h2>
+          <h2 className="capsule-title">{t('nav.shipping_invoice')}</h2>
           <p className="capsule-desc">
-            إنشاء فواتير شحن وتقارير مجمعة مرنة ومخصصة للطباعة والتصدير.
+            {t('home.shipping_invoice_desc')}
           </p>
         </Link>
 
@@ -216,9 +217,9 @@ const HomePortal = () => {
           <div className="icon-ring" style={{ color: '#10b981', borderColor: 'rgba(16, 185, 129, 0.3)' }}>
             <Package size={40} />
           </div>
-          <h2 className="capsule-title">فاتورة الجمارك (Packing List)</h2>
+          <h2 className="capsule-title">{t('nav.packing_list')}</h2>
           <p className="capsule-desc">
-            كشف تعبئة البضائع للجمارك مع إمكانية دمج عدة موديلات في كرتون واحد ومطابقتها للتصدير.
+            {t('home.packing_list_desc')}
           </p>
         </Link>
 
@@ -227,9 +228,9 @@ const HomePortal = () => {
           <div className="icon-ring" style={{ color: '#f59e0b', borderColor: 'rgba(245, 158, 11, 0.3)' }}>
             <FileSpreadsheet size={40} />
           </div>
-          <h2 className="capsule-title">تقرير استلام البضائع</h2>
+          <h2 className="capsule-title">{t('nav.warehouse_receipt')}</h2>
           <p className="capsule-desc">
-            (Warehouse Receipt) تقرير متقدم بحالة استلام البضائع من المصانع وفلترة الفترات الزمنية مع إمكانية التصدير.
+            {t('home.warehouse_receipt_desc')}
           </p>
         </Link>
 

@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAppData, defaultOrderState } from '../context/AppDataContext';
 import { Save, RefreshCw, Hash, Calendar, Box, Scissors, Palette, LayoutGrid, ChevronRight, ChevronLeft, MessageSquare, CheckSquare, Square, Ruler, Camera, X, ImagePlus, Edit3, Copy, Trash2, Layers, PanelTop } from 'lucide-react';
 import { supabase } from '../supabaseClient';
@@ -7,17 +8,7 @@ import { compressImage } from '../utils/imageUtils';
 import { CustomDateInput } from '../components/CustomDateInput';
 import ImageEditorModal from '../components/ImageEditorModal';
 
-const TABS = [
-  { id: 'buyer', label: 'المشتري والمنتج', icon: Hash, num: 1 },
-  { id: 'dates', label: 'المواعيد والكمية', icon: Calendar, num: 2 },
-  { id: 'fabrics', label: 'الأقمشة والمواد', icon: Scissors, num: 3 },
-  { id: 'factory', label: 'المصنع والتغليف', icon: Box, num: 4 },
-  { id: 'colors', label: 'الألوان والمقاسات', icon: Palette, num: 5 },
-  { id: 'packaging', label: 'شروط التعبئة', icon: CheckSquare, num: 6 },
-  { id: 'measurements', label: 'المقاسات التفصيلية', icon: Ruler, num: 7 },
-];
-
-const ClearableSelect = ({ value, onChange, children, className = "form-control", style, disabled }) => (
+const ClearableSelect = ({ value, onChange, children, className = "form-control", style, disabled, clearTitle }) => (
   <div style={{ position: 'relative', width: '100%', ...style }}>
     <select className={className} value={value || ''} onChange={onChange} disabled={disabled}>
       {children}
@@ -36,7 +27,7 @@ const ClearableSelect = ({ value, onChange, children, className = "form-control"
           color: '#ef4444', cursor: 'pointer', padding: '3px', borderRadius: '4px',
           display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10
         }}
-        title="إلغاء الاختيار"
+        title={clearTitle || "إلغاء الاختيار"}
       >
         <X size={12} strokeWidth={3} />
       </button>
@@ -45,7 +36,18 @@ const ClearableSelect = ({ value, onChange, children, className = "form-control"
 );
 
 const DataEntryWizard = () => {
+  const { t } = useTranslation();
   const { lookups, currentOrder, updateOrder, setCurrentOrder } = useAppData();
+
+  const TABS = [
+    { id: 'buyer', label: t('entry.tabs.buyer'), icon: Hash, num: 1 },
+    { id: 'dates', label: t('entry.tabs.dates'), icon: Calendar, num: 2 },
+    { id: 'fabrics', label: t('entry.tabs.fabrics'), icon: Scissors, num: 3 },
+    { id: 'factory', label: t('entry.tabs.factory'), icon: Box, num: 4 },
+    { id: 'colors', label: t('entry.tabs.colors'), icon: Palette, num: 5 },
+    { id: 'packaging', label: t('entry.tabs.packaging'), icon: CheckSquare, num: 6 },
+    { id: 'measurements', label: t('entry.tabs.measurements'), icon: Ruler, num: 7 },
+  ];
   const [activeTab, setActiveTab] = useState('buyer');
   const [selectedColorsArr, setSelectedColorsArr] = useState(() => {
     if (currentOrder?.colorDistribution) {
@@ -268,14 +270,13 @@ const DataEntryWizard = () => {
     setImageToEdit(null);
     
     setUploadingImage(true);
-    const toastId = toast.loading('جاري ضغط ورفع الصورة المعدلة...');
+    const toastId = toast.loading(t('entry.messages.uploading_images'));
 
     try {
       const modelNum = currentOrder.serialNumber?.trim();
       const file = await compressImage(editedFile, 1200, 0.75);
       const ext = file.name.split('.').pop();
       
-      // Calculate next filename index based on current images
       const currentCount = productImages.length;
       const fileName = currentCount === 0 ? `${modelNum}.${ext}` : `${modelNum}#${currentCount}.${ext}`;
       const filePath = `product-images/${fileName}`;
@@ -286,7 +287,7 @@ const DataEntryWizard = () => {
 
       if (error) {
         console.error('Upload error:', error);
-        toast.error(`فشل رفع الصورة: ${error.message}`, { id: toastId });
+        toast.error(t('entry.messages.upload_error', { error: error.message }), { id: toastId });
       } else {
         const { data: urlData } = supabase.storage
           .from('product_images')
@@ -300,21 +301,21 @@ const DataEntryWizard = () => {
         };
 
         setProductImages(prev => [...prev, newImage]);
-        updateOrder('productImages', [...(currentOrder.productImages || []), { name: newImage.name, path: newImage.path, url: newImage.url }]);
-        toast.success('تم حفظ ورفع الصورة بنجاح!', { id: toastId });
+        const updatedImages = [...(currentOrder.productImages || []), { name: newImage.name, path: newImage.path, url: newImage.url }];
+        updateOrder('productImages', updatedImages);
+        toast.success(t('entry.messages.upload_success'), { id: toastId });
       }
     } catch (err) {
       console.error(err);
-      toast.error('حدث خطأ أثناء رفع الصورة!', { id: toastId });
+      toast.error(t('entry.messages.upload_error', { error: err.message }), { id: toastId });
     } finally {
       setUploadingImage(false);
       
-      // Process next image in queue if any
       const remaining = pendingImages.slice(1);
       if (remaining.length > 0) {
         setPendingImages(remaining);
         setImageToEdit(remaining[0]);
-        setTimeout(() => setIsEditorOpen(true), 500); // Small delay for smoothness
+        setTimeout(() => setIsEditorOpen(true), 500); 
       } else {
         setPendingImages([]);
       }
@@ -325,7 +326,6 @@ const DataEntryWizard = () => {
     setIsEditorOpen(false);
     setImageToEdit(null);
     
-    // Process next if cancelled
     const remaining = pendingImages.slice(1);
     if (remaining.length > 0) {
       setPendingImages(remaining);
@@ -334,19 +334,6 @@ const DataEntryWizard = () => {
     } else {
       setPendingImages([]);
     }
-  };
-
-  const handleRemoveImage = async (index) => {
-    const img = productImages[index];
-    try {
-      await supabase.storage.from('product_images').remove([img.path]);
-    } catch (err) {
-      console.error('Delete error:', err);
-    }
-    const updated = productImages.filter((_, i) => i !== index);
-    setProductImages(updated);
-    updateOrder('productImages', updated.map(im => ({ name: im.name, path: im.path, url: im.url })));
-    toast('تم حذف الصورة', { icon: '🗑️' });
   };
 
   const goNext = () => {
@@ -368,13 +355,11 @@ const DataEntryWizard = () => {
         nextArr = [...prev, colorName];
       }
       
-      // If removing a color and no totalQty, just clean up that color from distribution
       if (nextArr.length === 0) {
         const dist = { ...(currentOrder.colorDistribution || {}) };
         delete dist[colorName];
         updateOrder('colorDistribution', dist);
       }
-      // The useEffect below will handle redistribution automatically
       return nextArr;
     });
   };
@@ -399,15 +384,14 @@ const DataEntryWizard = () => {
     
     if (totalQty > 0 && packageQty > 0) {
       if (packageQty > totalQty) {
-        // If typing total quantity and it's temporarily less than package, just show warning in text field
-        if (currentOrder.cartonQty !== 'الكمية غير كافية') {
-          updateOrder('cartonQty', 'الكمية غير كافية');
+        if (currentOrder.cartonQty !== t('entry.messages.insufficient_quantity')) {
+          updateOrder('cartonQty', t('entry.messages.insufficient_quantity'));
         }
         return;
       }
 
       const cartons = parseFloat((totalQty / packageQty).toFixed(2));
-      const resultText = `${cartons} كرتون × ${packageQty} قطعة`;
+      const resultText = `${cartons} ${t('entry.units.carton')} × ${packageQty} ${t('entry.units.piece')}`;
       
       if (currentOrder.cartonQty !== resultText) {
         updateOrder('cartonQty', resultText);
@@ -415,7 +399,7 @@ const DataEntryWizard = () => {
     } else if ((!totalQty || !packageQty) && currentOrder.cartonQty) {
       updateOrder('cartonQty', '');
     }
-  }, [currentOrder.totalQuantity, currentOrder.cartonPackage, currentOrder.cartonQty, updateOrder]);
+  }, [currentOrder.totalQuantity, currentOrder.cartonPackage, currentOrder.cartonQty, updateOrder, t]);
 
   const handleSerialChange = async (val) => {
     updateOrder('serialNumber', val);
@@ -425,7 +409,7 @@ const DataEntryWizard = () => {
     }
     setSerialStatus('checking');
     try {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('orders')
         .select('serial_number')
         .eq('serial_number', val)
@@ -440,215 +424,100 @@ const DataEntryWizard = () => {
     }
   };
 
-  const validateOrder = () => {
-    if (!currentOrder.serialNumber?.trim()) {
-      toast.error('الرجاء كتابة الرقم التسلسلي للطلبية أولاً.');
-      return false;
-    }
-    const requiredFields = [
-      { key: 'buyerMobile', label: 'رقم جوال المشتري' },
-      { key: 'buyerCompany', label: 'اسم شركة المشتري' },
-      { key: 'productName', label: 'اسم المنتج' },
-      { key: 'totalQuantity', label: 'الكمية الإجمالية' },
-      { key: 'deliveryDate', label: 'تاريخ التسليم' },
+  const validateForm = () => {
+    if (!currentOrder.serialNumber) { toast.error(t('entry.messages.serial_required')); return false; }
+    
+    const required = [
+      { key: 'productName', label: t('entry.buyer.product_name') },
+      { key: 'factoryId', label: t('entry.factory.factory_select') }
     ];
-    for (const field of requiredFields) {
-      if (!currentOrder[field.key] || currentOrder[field.key].toString().trim() === '') {
-        toast.error(`الرجاء تعبئة حقل: ${field.label}`);
+    for (const field of required) {
+      if (!currentOrder[field.key]) {
+        toast.error(t('entry.messages.field_required', { label: field.label }));
         return false;
       }
     }
-    const totalQty = parseInt(currentOrder.totalQuantity) || 0;
-    const packageVal = currentOrder.cartonPackage || '';
-    const packageQty = parseInt(packageVal.replace(/[^0-9]/g, '')) || 0;
-    if (packageQty > 0 && totalQty > 0 && packageQty > totalQty) {
-      toast.error(`خطأ في التعبئة: تعبئة الكرتون (${packageQty}) لا يمكن أن تكون أكبر من الكمية الإجمالية (${totalQty}).`);
-      return false;
+
+    if (currentOrder.cartonPackage) {
+      const pkgQty = parseInt(currentOrder.cartonPackage.replace(/[^0-9]/g, '')) || 0;
+      const totalQty = parseInt(currentOrder.totalQuantity) || 0;
+      if (pkgQty > totalQty) {
+        toast.error(t('entry.messages.packaging_error', { package: pkgQty, total: totalQty }));
+        return false;
+      }
     }
 
     return true;
   };
 
-  const resetAfterSave = async () => {
-    const nextNum = parseInt(currentOrder.serialNumber) + 1;
-    const nextOrderNum = await fetchNextOrderNumber();
-    setCurrentOrder({
-      ...defaultOrderState,
-      serialNumber: !isNaN(nextNum) ? nextNum.toString() : '1000',
-      orderNumber: nextOrderNum
-    });
-    setSelectedColorsArr([]);
-    setProductImages([]);
-    setSerialStatus('available');
-    setIsEditMode(false);
-    setOriginalSerial('');
-    switchTab('buyer');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  // Save as NEW order
   const handleSaveNew = async () => {
-    if (!validateOrder()) return;
-    if (serialStatus === 'used') {
-      toast.error('هذا الرقم التسلسلي مستخدم مسبقاً! قم باسترداده للتعديل أو استخدم رقماً جديداً.');
-      return;
+    if (!validateForm()) return;
+
+    const { data: existing } = await supabase.from('orders').select('id').eq('serial_number', currentOrder.serialNumber).single();
+    if (existing) {
+       toast.error(t('entry.messages.serial_used_error'));
+       return;
     }
-    const toastId = toast.loading('جاري حفظ الطلبية الجديدة...');
+
+    const toastId = toast.loading(t('entry.messages.saving'));
     try {
-      const actualOrderNum = await fetchNextOrderNumber();
-      const orderToSave = { ...currentOrder, orderNumber: actualOrderNum };
-      const { data, error } = await supabase
-        .from('orders')
-        .insert([{ serial_number: currentOrder.serialNumber, order_data: orderToSave }]);
-      if (error) {
-        console.error(error);
-        toast.error('حدث خطأ أثناء الحفظ! تأكد من إنشاء جدول orders وتصريحاته.', { id: toastId });
-      } else {
-        toast.success(`تم حفظ الطلبية الجديدة (${currentOrder.serialNumber}) بنجاح!`, { id: toastId });
-        resetAfterSave();
-      }
+      const { error } = await supabase.from('orders').insert([currentOrder]);
+      if (error) throw error;
+      toast.success(t('entry.messages.save_success', { serial: currentOrder.serialNumber }), { id: toastId });
+      handleClear();
     } catch (err) {
-      console.error(err);
-      toast.error('خطأ في الاتصال بقاعدة البيانات!', { id: toastId });
+      toast.error(t('entry.messages.save_error'), { id: toastId });
     }
   };
 
-  // UPDATE existing order (same or changed serial)
   const handleUpdate = async () => {
-    if (!validateOrder()) return;
-    
-    if (currentOrder.serialNumber !== originalSerial && serialStatus === 'used') {
-      toast.error('رقم الموديل المستهدف مستخدم في طلبية أخرى! اختر رقماً مختلفاً أو تراجع.');
-      return;
-    }
-
-    const toastId = toast.loading('جاري تحديث الطلبية...');
+    if (!validateForm()) return;
+    const toastId = toast.loading(t('entry.messages.updating'));
     try {
-      let updatedImages = [...(currentOrder.productImages || [])];
-      let hasImageErrors = false;
-
-      if (currentOrder.serialNumber !== originalSerial && updatedImages.length > 0) {
-         toast.loading('جاري نقل الصور للرقم الجديد...', { id: toastId });
-         const newImagesObj = [];
-         
-         for (let i = 0; i < updatedImages.length; i++) {
-            const img = updatedImages[i];
-            const ext = img.name.split('.').pop();
-            const newName = i === 0 ? `${currentOrder.serialNumber}.${ext}` : `${currentOrder.serialNumber}_${i}.${ext}`;
-            const newPath = `product-images/${newName}`;
-            
-            if (img.path !== newPath) {
-               const { data, error } = await supabase.storage.from('product_images').move(img.path, newPath);
-               if (error) {
-                 console.error('Error renaming image:', error);
-                 hasImageErrors = true;
-                 newImagesObj.push(img);
-               } else {
-                 const { data: urlData } = supabase.storage.from('product_images').getPublicUrl(newPath);
-                 newImagesObj.push({
-                   name: newName,
-                   path: newPath,
-                   url: urlData.publicUrl,
-                   preview: urlData.publicUrl
-                 });
-               }
-            } else {
-               newImagesObj.push(img);
-            }
-         }
-         updatedImages = newImagesObj;
-         currentOrder.productImages = updatedImages; // Prepare to save new URLs
-      }
-
-      const { data, error } = await supabase
-        .from('orders')
-        .update({ 
-            serial_number: currentOrder.serialNumber,
-            order_data: currentOrder 
-        })
-        .eq('serial_number', originalSerial);
-
-      if (error) {
-        console.error(error);
-        toast.error('حدث خطأ أثناء التحديث!', { id: toastId });
-      } else {
-        if (hasImageErrors) {
-           toast.success(`تم التحديث للرقم (${currentOrder.serialNumber}) مع مشكلة في نقل بعض الصور ⚠️`, { id: toastId });
-        } else {
-           toast.success(`تم التحديث بنجاح! رقم الطلبية الآن هو (${currentOrder.serialNumber}) ✏️`, { id: toastId });
-        }
-        resetAfterSave();
-      }
+      const { error } = await supabase.from('orders').update(currentOrder).eq('serial_number', originalSerial);
+      if (error) throw error;
+      toast.success(t('entry.messages.update_success', { serial: currentOrder.serialNumber }), { id: toastId });
+      setIsEditMode(false);
+      setOriginalSerial('');
     } catch (err) {
-      console.error(err);
-      toast.error('خطأ في الاتصال بقاعدة البيانات!', { id: toastId });
+      toast.error(t('entry.messages.save_error'), { id: toastId });
     }
   };
 
-  // Save as COPY (new serial from edit mode)
   const handleSaveAsCopy = async () => {
-    if (!validateOrder()) return;
-    if (currentOrder.serialNumber === originalSerial) {
-      toast.error('الرجاء تغيير رقم الموديل لحفظ نسخة جديدة!');
-      return;
-    }
-    if (serialStatus === 'used') {
-      toast.error('رقم الموديل الجديد مستخدم مسبقاً! استخدم رقماً مختلفاً.');
-      return;
-    }
-    const toastId = toast.loading('جاري حفظ النسخة الجديدة...');
-    try {
-      const actualOrderNum = await fetchNextOrderNumber();
-      const orderToSave = { ...currentOrder, orderNumber: actualOrderNum };
-      const { data, error } = await supabase
-        .from('orders')
-        .insert([{ serial_number: currentOrder.serialNumber, order_data: orderToSave }]);
-      if (error) {
-        console.error(error);
-        toast.error('حدث خطأ أثناء الحفظ!', { id: toastId });
-      } else {
-        toast.success(`تم حفظ نسخة جديدة برقم (${currentOrder.serialNumber}) بنجاح! 📋`, { id: toastId });
-        resetAfterSave();
-      }
-    } catch (err) {
-      console.error(err);
-      toast.error('خطأ في الاتصال بقاعدة البيانات!', { id: toastId });
-    }
+     if (!validateForm()) return;
+     
+     const newSerial = window.prompt(t('entry.messages.serial_required'), currentOrder.serialNumber + "-COPY");
+     if (!newSerial) return;
+
+     const toastId = toast.loading(t('entry.messages.saving'));
+     try {
+       const { data: existing } = await supabase.from('orders').select('id').eq('serial_number', newSerial).single();
+       if (existing) {
+          toast.error(t('entry.messages.serial_used_error'), { id: toastId });
+          return;
+       }
+
+       const newOrder = { ...currentOrder, serial_number: newSerial, order_number: null };
+       const { error } = await supabase.from('orders').insert([newOrder]);
+       if (error) throw error;
+       toast.success(t('entry.messages.copy_success', { serial: newSerial }), { id: toastId });
+     } catch (err) {
+       toast.error(t('entry.messages.save_error'), { id: toastId });
+     }
   };
 
   const handleDeleteOrder = async () => {
-    if (!originalSerial) return;
+    if (!window.confirm(t('entry.messages.confirm_delete', { serial: originalSerial }))) return;
     
-    const confirmDelete = window.confirm(`هل أنت متأكد من حذف الطلبية رقم (${originalSerial}) بالكامل؟\n\n- سيتم مسح بياناتها نهائياً من قاعدة البيانات.\n- سيتم تحرير رقم الموديل ليمكن استخدامه مجدداً.\n- سيتم حذف جميع الصور المرتبطة بها.`);
-    
-    if (!confirmDelete) return;
-
-    const toastId = toast.loading('جاري حذف الطلبية...');
-
+    const toastId = toast.loading(t('entry.messages.deleting'));
     try {
-      if (currentOrder.productImages && currentOrder.productImages.length > 0) {
-         const imagePaths = currentOrder.productImages.map(img => img.path);
-         const { error: storageError } = await supabase.storage.from('product_images').remove(imagePaths);
-         if (storageError) {
-             console.error('Error deleting images:', storageError);
-         }
-      }
-
-      const { error: dbError } = await supabase
-        .from('orders')
-        .delete()
-        .eq('serial_number', originalSerial);
-
-      if (dbError) {
-        console.error(dbError);
-        toast.error('حدث خطأ أثناء حذف الطلبية!', { id: toastId });
-      } else {
-        toast.success(`تم حذف الطلبية رقم (${originalSerial}) بنجاح وتحرير الرقم! 🗑️`, { id: toastId });
-        resetAfterSave();
-      }
+      const { error } = await supabase.from('orders').delete().eq('serial_number', originalSerial);
+      if (error) throw error;
+      toast.success(t('entry.messages.delete_success', { serial: originalSerial }), { id: toastId });
+      handleClear();
     } catch (err) {
-      console.error(err);
-      toast.error('خطأ في الاتصال بقاعدة البيانات!', { id: toastId });
+      toast.error(t('entry.messages.save_error'), { id: toastId });
     }
   };
 
@@ -675,7 +544,6 @@ const DataEntryWizard = () => {
         console.error(err);
       } finally {
          setFetchingSerials(false);
-         // Auto-focus search input after data loads
          setTimeout(() => serialSearchRef.current?.focus(), 100);
       }
     } else if (e.key === 'Escape') {
@@ -684,55 +552,37 @@ const DataEntryWizard = () => {
     }
   };
 
-  const handleFetch = async (overrideSerial) => {
-    const serial = typeof overrideSerial === 'string' ? overrideSerial : document.getElementById('fetchSerialInput')?.value;
-    if (!serial) {
-       toast.error('الرجاء إدخال رقم الطلبية التسلسلي المراد استردادها');
-       return;
+  const handleFetch = async (s) => {
+    const searchVal = typeof s === 'string' ? s : document.getElementById('fetchSerialInput')?.value;
+    if (!searchVal) {
+      toast.error(t('entry.messages.search_hint'));
+      return;
     }
-    const toastId = toast.loading('جاري البحث في قاعدة البيانات...');
+
+    const toastId = toast.loading(t('entry.messages.searching'));
     try {
-      const { data, error } = await supabase
-        .from('orders')
-        .select('order_data')
-        .eq('serial_number', serial)
-        .single();
+      const { data, error } = await supabase.from('orders').select('*').eq('serial_number', searchVal).single();
       if (error || !data) {
-        toast.error('الطلبية غير موجودة في السحابة!', { id: toastId });
-      } else {
-        setCurrentOrder(data.order_data);
-        const savedImages = data.order_data.productImages || [];
-        setProductImages(savedImages.map(img => ({ ...img, preview: img.url })));
-        
-        // Restore selected colors for the table
-        if (data.order_data.colorDistribution) {
-           setSelectedColorsArr(Object.keys(data.order_data.colorDistribution));
-        } else {
-           setSelectedColorsArr([]);
-        }
-        
-        setSerialStatus('used');
-        setIsEditMode(true);
-        setOriginalSerial(serial);
-        toast.success(`تم استرداد الطلبية: ${serial} — يمكنك التعديل الآن ✏️`, { id: toastId });
+        toast.error(t('entry.messages.not_found'), { id: toastId });
+        return;
       }
+      setCurrentOrder(data);
+      setIsEditMode(true);
+      setOriginalSerial(data.serial_number);
+      toast.success(t('entry.messages.fetch_success', { serial: data.serial_number }), { id: toastId });
+      if (document.getElementById('fetchSerialInput')) document.getElementById('fetchSerialInput').value = '';
     } catch (err) {
-      toast.error('خطأ في الاتصال بالانترنت أو قاعدة البيانات!', { id: toastId });
+      toast.error(t('entry.messages.save_error'), { id: toastId });
     }
   };
 
-  const handleClear = async () => {
-    const nextNum = await fetchNextAvailableSerial();
-    const nextOrderNum = await fetchNextOrderNumber();
-    setCurrentOrder({ ...defaultOrderState, serialNumber: nextNum, orderNumber: nextOrderNum });
+  const handleClear = () => {
+    setCurrentOrder(defaultOrderState);
     setProductImages([]);
-    setSelectedColorsArr([]);
     setIsEditMode(false);
     setOriginalSerial('');
-    setSerialStatus('available');
-    switchTab('buyer');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    toast('تم تصفير وإلغاء جميع الحقول بنجاح', { icon: '🧹' });
+    setSerialStatus(null);
+    toast.success(t('entry.messages.cleared_success'));
   };
 
   const handleColorChange = (color, size, qty) => {
@@ -748,13 +598,11 @@ const DataEntryWizard = () => {
 
   const handleMaterialChange = (index, field, value) => {
     const newMaterials = (currentOrder.materials || []).map(m => ({ ...m }));
-    // Ensure the array has enough slots
     while (newMaterials.length <= index) {
       newMaterials.push({ name: '', percentage: '' });
     }
     
     if (field === 'percentage') {
-       // Force Western digits (English digits)
        const standardValue = value.toString().replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d));
        const valNum = parseFloat(standardValue) || 0;
        
@@ -766,7 +614,7 @@ const DataEntryWizard = () => {
        if (otherTotal + valNum > 100) {
          const allowed = 100 - otherTotal;
          newMaterials[index].percentage = allowed > 0 ? allowed.toString() : '0';
-         toast(`لقد وصلت للحد الأقصى (100%). المسموح لهذا الحقل هو ${allowed}% فقط.`, { icon: '⚠️' });
+         toast.error(t('entry.messages.material_limit_error', { allowed: allowed }));
        } else {
          newMaterials[index].percentage = standardValue;
        }
@@ -778,16 +626,8 @@ const DataEntryWizard = () => {
 
   const handleMeasurementChange = (part, mName, size, value) => {
     const grouped = { ...(currentOrder.groupedMeasurements || {}) };
-    if (grouped[part]) {
-       grouped[part] = { ...grouped[part] };
-    } else {
-       grouped[part] = {};
-    }
-    if (grouped[part][mName]) {
-       grouped[part][mName] = { ...grouped[part][mName] };
-    } else {
-       grouped[part][mName] = {};
-    }
+    if (!grouped[part]) grouped[part] = {};
+    if (!grouped[part][mName]) grouped[part][mName] = {};
     grouped[part][mName][size] = value;
     updateOrder('groupedMeasurements', grouped);
   };
@@ -801,11 +641,11 @@ const DataEntryWizard = () => {
   const distributeQuantity = (colorsArr, isSilent = false, overrideTotalQty) => {
     const totalQty = overrideTotalQty !== undefined ? overrideTotalQty : parseInt(currentOrder.totalQuantity);
     if (!totalQty || isNaN(totalQty)) {
-      if (!isSilent) toast.error('الرجاء إدخال الكمية الإجمالية أولاً');
+      if (!isSilent) toast.error(t('entry.messages.qty_error'));
       return;
     }
     if (colorsArr.length === 0) {
-      if (!isSilent) toast.error('الرجاء تحديد لون واحد على الأقل لتوزيع الكمية');
+      if (!isSilent) toast.error(t('entry.messages.select_color_error'));
       return;
     }
     let sizes = lookups.sizes || [];
@@ -817,7 +657,7 @@ const DataEntryWizard = () => {
       }
     }
     if (sizes.length === 0) {
-      if (!isSilent) toast.error('لا توجد مقاسات محددة للتوزيع');
+      if (!isSilent) toast.error(t('entry.messages.no_sizes_error'));
       return;
     }
     const cellsCount = colorsArr.length * sizes.length;
@@ -836,10 +676,9 @@ const DataEntryWizard = () => {
     });
     
     updateOrder('colorDistribution', newDist);
-    if (!isSilent) toast.success('تم توزيع الكمية الإجمالية بالتساوي بين الألوان والمقاسات!');
+    if (!isSilent) toast.success(t('entry.messages.distribution_success'));
   };
 
-  // Auto-redistribute when totalQuantity, selected colors, or size range changes
   useEffect(() => {
     const totalQty = parseInt(currentOrder.totalQuantity);
     if (totalQty && !isNaN(totalQty) && selectedColorsArr.length > 0) {
@@ -853,10 +692,8 @@ const DataEntryWizard = () => {
   const hasManual = currentOrder.manualSizes && currentOrder.manualSizes.length > 0;
 
   if (hasManual) {
-    // If manual sizes are provided, they take priority and the range is ignored
     targetSizes = currentOrder.manualSizes.filter(s => s && s.trim() !== '');
   } else if (currentOrder.sizeFrom && currentOrder.sizeTo) {
-    // Otherwise use the range if both bounds are selected
     const allSizes = lookups.sizes || [];
     const idx1 = allSizes.indexOf(currentOrder.sizeFrom);
     const idx2 = allSizes.indexOf(currentOrder.sizeTo);
@@ -867,7 +704,6 @@ const DataEntryWizard = () => {
 
   const currentTabIdx = TABS.findIndex(t => t.id === activeTab);
 
-  // ─── Render Tab Content ───
   const renderTabContent = (tabId) => {
     const targetTab = tabId || activeTab;
     switch (targetTab) {
@@ -877,41 +713,41 @@ const DataEntryWizard = () => {
           <div className="tab-panel" key={tabKey}>
             <div className="card">
               <div className="tab-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h3><Hash size={22} /> بيانات المشتري والمنتج</h3>
+                <h3><Hash size={22} /> {t('entry.buyer.section_title')}</h3>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(212, 175, 55, 0.1)', padding: '0.4rem 1rem', borderRadius: '8px', border: '1px dashed var(--accent-color)' }}>
-                   <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>رقم الأوردر:</span>
+                   <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>{t('entry.buyer.order_no')}</span>
                    <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--accent-color)' }}>{currentOrder.orderNumber || '---'}</span>
                 </div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div className="form-group">
-                  <label className="form-label">الرقم التسلسلي (إدخال يدوي)</label>
-                  <input 
+                   <label className="form-label">{t('entry.buyer.serial_no_manual')}</label>
+                   <input 
                     type="text" 
                     className="form-control" 
                     value={currentOrder.serialNumber} 
                     onChange={(e) => handleSerialChange(e.target.value)} 
                     onKeyDown={(e) => e.key === 'Enter' && handleFetch(currentOrder.serialNumber)}
-                    placeholder="أدخل الرقم واضغط Enter لجلبه..." 
+                    placeholder={t('entry.buyer.serial_placeholder')} 
                   />
                   <div style={{ display: 'flex', justifyContent: 'space-between', margin: '4px 0' }}>
                     <span>
-                      {serialStatus === 'checking' && <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>جاري التحقق...</span>}
-                      {serialStatus === 'used' && <span style={{ fontSize: '0.8rem', color: '#ef4444', fontWeight: 'bold' }}>⚠️ مستخدمة مسبقاً!</span>}
-                      {serialStatus === 'available' && <span style={{ fontSize: '0.8rem', color: '#22c55e', fontWeight: 'bold' }}>✅ الرقم متاح، يمكن استخدامه.</span>}
+                      {serialStatus === 'checking' && <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('entry.buyer.checking')}</span>}
+                      {serialStatus === 'used' && <span style={{ fontSize: '0.8rem', color: '#ef4444', fontWeight: 'bold' }}>{t('entry.buyer.used')}</span>}
+                      {serialStatus === 'available' && <span style={{ fontSize: '0.8rem', color: '#22c55e', fontWeight: 'bold' }}>{t('entry.buyer.available')}</span>}
                     </span>
-                    {serialStatus === 'used' && <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>اضغط Enter لجلب بيانات المنتج</span>}
+                    {serialStatus === 'used' && <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{t('entry.buyer.fetch_hint')}</span>}
                   </div>
                   {currentOrder.barcode && (
                     <div style={{ marginTop: '8px', padding: '6px', backgroundColor: 'rgba(212, 175, 55, 0.1)', border: '1px dashed var(--accent-color)', borderRadius: '6px', color: 'var(--accent-color)', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                       الباركود المولد: <strong style={{ letterSpacing: '2px', fontSize: '1.1rem' }}>{currentOrder.barcode}</strong>
+                       {t('entry.buyer.generated_barcode')} <strong style={{ letterSpacing: '2px', fontSize: '1.1rem' }}>{currentOrder.barcode}</strong>
                     </div>
                   )}
                 </div>
                 <div className="form-group">
-                  <label className="form-label">رقم أو رمز المشتري</label>
-                  <ClearableSelect className="form-control" value={currentOrder.buyerMobile || ''} onChange={(e) => updateOrder('buyerMobile', e.target.value)}>
-                    <option value="">اختر رقم أو رمز المشتري...</option>
+                   <label className="form-label">{t('entry.buyer.buyer_code')}</label>
+                   <ClearableSelect className="form-control" value={currentOrder.buyerMobile || ''} onChange={(e) => updateOrder('buyerMobile', e.target.value)} clearTitle={t('entry.actions.clear_btn')}>
+                    <option value="">{t('entry.buyer.buyer_code_placeholder')}</option>
                     {lookups.buyerCodes?.map((code, i) => {
                       const val = typeof code === 'object' ? code.name : code;
                       return <option key={i} value={val}>{val}</option>;
@@ -919,21 +755,21 @@ const DataEntryWizard = () => {
                   </ClearableSelect>
                 </div>
                 <div className="form-group">
-                  <label className="form-label">رقم المشتري</label>
+                   <label className="form-label">{t('entry.buyer.buyer_number')}</label>
                   <input type="text" className="form-control" value={currentOrder.buyerNumber || ''} onChange={(e) => updateOrder('buyerNumber', e.target.value)} />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">رقم الموديل (Product Number)</label>
+                   <label className="form-label">{t('entry.buyer.model_number')}</label>
                   <input type="text" className="form-control" value={currentOrder.serialNumber || ''} readOnly style={{ backgroundColor: 'var(--bg-color)', opacity: 0.8, cursor: 'not-allowed', color: 'var(--text-muted)' }} />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">اسم شركة المشتري</label>
+                   <label className="form-label">{t('entry.buyer.company_name')}</label>
                   <input type="text" className="form-control" value={currentOrder.buyerCompany || ''} onChange={(e) => updateOrder('buyerCompany', e.target.value)} />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">اسم المنتج</label>
-                  <ClearableSelect className="form-control" value={currentOrder.productName} onChange={(e) => updateOrder('productName', e.target.value)}>
-                    <option value="">اختر...</option>
+                   <label className="form-label">{t('entry.buyer.product_name')}</label>
+                   <ClearableSelect className="form-control" value={currentOrder.productName} onChange={(e) => updateOrder('productName', e.target.value)} clearTitle={t('entry.actions.clear_btn')}>
+                     <option value="">{t('entry.actions.loading')}</option>
                     {lookups.products?.map((p, i) => {
                       const val = typeof p === 'object' ? p.name : p;
                       return <option key={i} value={val}>{val}</option>;
@@ -941,20 +777,20 @@ const DataEntryWizard = () => {
                   </ClearableSelect>
                 </div>
                 <div className="form-group">
-                  <label className="form-label">السعر / العملة</label>
+                   <label className="form-label">{t('entry.buyer.price_currency')}</label>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <input type="number" className="form-control" placeholder="السعر" style={{ flex: 2 }} value={currentOrder.productPrice || ''} onChange={(e) => updateOrder('productPrice', e.target.value)} />
-                    <ClearableSelect className="form-control" style={{ flex: 1 }} value={currentOrder.currency || ''} onChange={(e) => updateOrder('currency', e.target.value)}>
-                      <option value="">العملة...</option>
+                     <input type="number" className="form-control" placeholder={t('entry.buyer.price_placeholder')} style={{ flex: 2 }} value={currentOrder.productPrice || ''} onChange={(e) => updateOrder('productPrice', e.target.value)} />
+                     <ClearableSelect className="form-control" style={{ flex: 1 }} value={currentOrder.currency || ''} onChange={(e) => updateOrder('currency', e.target.value)} clearTitle={t('entry.actions.clear_btn')}>
+                       <option value="">{t('entry.buyer.currency_placeholder')}</option>
                       {lookups.currencies?.map((c, i) => <option key={i} value={c}>{c}</option>)}
                     </ClearableSelect>
                   </div>
                 </div>
 
                 <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-                  <label className="form-label">نوع البيع (Sale Type)</label>
+                   <label className="form-label">{t('entry.buyer.sale_type')}</label>
                   <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
-                    <ClearableSelect className="form-control" style={{ flex: '0 0 200px' }} value={currentOrder.saleType || ''} onChange={(e) => {
+                     <ClearableSelect className="form-control" style={{ flex: '0 0 200px' }} value={currentOrder.saleType || ''} onChange={(e) => {
                        const val = e.target.value;
                        updateOrder('saleType', val);
                        if (val === 'تجزئة') {
@@ -967,23 +803,23 @@ const DataEntryWizard = () => {
                           updateOrder('retailPercentage', '');
                           updateOrder('wholesalePercentage', '');
                        }
-                    }}>
-                      <option value="">اختر النوع...</option>
-                      <option value="تجزئة">تجزئة</option>
-                      <option value="جملة">جملة</option>
-                      <option value="جملة وتجزئة">جملة وتجزئة</option>
+                     }} clearTitle={t('entry.actions.clear_btn')}>
+                       <option value="">{t('entry.buyer.sale_type_placeholder')}</option>
+                       <option value="تجزئة">{t('entry.buyer.retail')}</option>
+                       <option value="جملة">{t('entry.buyer.wholesale')}</option>
+                       <option value="جملة وتجزئة">{t('entry.buyer.both')}</option>
                     </ClearableSelect>
 
                     {currentOrder.saleType === 'تجزئة' && (
                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>نسبة التجزئة:</span>
+                           <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{t('entry.buyer.retail_percentage')}</span>
                           <input type="text" className="form-control" value="100%" readOnly style={{ width: '80px', backgroundColor: 'var(--bg-color)', color: 'var(--accent-color)', fontWeight: 'bold', textAlign: 'center' }} />
                        </div>
                     )}
                     
                     {currentOrder.saleType === 'جملة' && (
                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>نسبة الجملة:</span>
+                           <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{t('entry.buyer.wholesale_percentage')}</span>
                           <input type="text" className="form-control" value="100%" readOnly style={{ width: '80px', backgroundColor: 'var(--bg-color)', color: 'var(--accent-color)', fontWeight: 'bold', textAlign: 'center' }} />
                        </div>
                     )}
@@ -991,8 +827,8 @@ const DataEntryWizard = () => {
                     {currentOrder.saleType === 'جملة وتجزئة' && (
                        <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                             <span style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}>الجملة %:</span>
-                             <input type="number" min="0" max="100" className="form-control" placeholder="مثال: 60" 
+                              <span style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}>{t('entry.buyer.wholesale')} %:</span>
+                             <input type="number" min="0" max="100" className="form-control" placeholder={t('entry.buyer.example', { value: 60 })} 
                                style={{ width: '100px' }}
                                value={currentOrder.wholesalePercentage || ''} 
                                onChange={(e) => {
@@ -1000,7 +836,7 @@ const DataEntryWizard = () => {
                                   let num = parseInt(val) || 0;
                                   let other = parseInt(currentOrder.retailPercentage) || 0;
                                   if (num + other > 100) {
-                                     toast.error('عذراً، مجموع النسبتين لا يمكن أن يتجاوز 100%');
+                                     toast.error(t('entry.messages.material_limit_error', { allowed: 100 - other }));
                                      return;
                                   }
                                   updateOrder('wholesalePercentage', val);
@@ -1008,8 +844,8 @@ const DataEntryWizard = () => {
                              />
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                             <span style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}>التجزئة %:</span>
-                             <input type="number" min="0" max="100" className="form-control" placeholder="مثال: 40" 
+                              <span style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}>{t('entry.buyer.retail')} %:</span>
+                             <input type="number" min="0" max="100" className="form-control" placeholder={t('entry.buyer.example', { value: 40 })} 
                                style={{ width: '100px' }}
                                value={currentOrder.retailPercentage || ''}
                                onChange={(e) => {
@@ -1017,7 +853,7 @@ const DataEntryWizard = () => {
                                   let num = parseInt(val) || 0;
                                   let other = parseInt(currentOrder.wholesalePercentage) || 0;
                                   if (num + other > 100) {
-                                     toast.error('عذراً، مجموع النسبتين لا يمكن أن يتجاوز 100%');
+                                     toast.error(t('entry.messages.material_limit_error', { allowed: 100 - other }));
                                      return;
                                   }
                                   updateOrder('retailPercentage', val);
@@ -1033,10 +869,9 @@ const DataEntryWizard = () => {
                 <div className="form-group" style={{ gridColumn: '1 / -1' }}>
                   <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <Camera size={18} color="var(--accent-color)" />
-                    صور المنتج (Product Images)
+                    {t('entry.buyer.product_images')}
                   </label>
                   
-                  {/* Upload Buttons */}
                   <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem' }}>
                     <input type="file" ref={fileInputRef} accept="image/*" multiple onChange={handleImageUpload} style={{ display: 'none' }} id="galleryUpload" />
                     <input type="file" ref={cameraInputRef} accept="image/*" capture="environment" onChange={handleImageUpload} style={{ display: 'none' }} id="cameraUpload" />
@@ -1049,7 +884,7 @@ const DataEntryWizard = () => {
                       style={{ flex: 1, borderColor: 'rgba(212, 175, 55, 0.3)', gap: '0.5rem' }}
                     >
                       <ImagePlus size={18} />
-                      اختر من المعرض
+                      {t('entry.buyer.gallery_upload')}
                     </button>
                     <button
                       type="button"
@@ -1059,14 +894,14 @@ const DataEntryWizard = () => {
                       style={{ flex: 1, borderColor: 'rgba(212, 175, 55, 0.3)', gap: '0.5rem' }}
                     >
                       <Camera size={18} />
-                      التقط من الكاميرا
+                      {t('entry.buyer.camera_upload')}
                     </button>
                   </div>
 
                   {uploadingImage && (
                     <div style={{ textAlign: 'center', padding: '1rem', color: 'var(--accent-color)', fontSize: '0.9rem' }}>
                       <div style={{ width: '28px', height: '28px', border: '3px solid var(--border-color)', borderTopColor: 'var(--accent-color)', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 0.5rem' }}></div>
-                      جاري رفع الصور...
+                      {t('entry.buyer.uploading')}
                     </div>
                   )}
 
@@ -1129,6 +964,7 @@ const DataEntryWizard = () => {
                             }}
                             onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.15)'}
                             onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                            title={t('entry.actions.delete_btn')}
                           >
                             <X size={14} />
                           </button>
@@ -1149,14 +985,14 @@ const DataEntryWizard = () => {
                     }}>
                       <Camera size={32} style={{ marginBottom: '0.5rem', opacity: 0.4 }} />
                       <br />
-                      لم يتم إضافة صور بعد — اضغط أحد الأزرار أعلاه لرفع صور المنتج
+                      {t('entry.buyer.no_images')}
                     </div>
                   )}
                 </div>
 
                 <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-                  <label className="form-label">ملاحظات الطلب (Order Remarks)</label>
-                  <textarea className="form-control" rows="3" placeholder="أدخل أي ملاحظات إضافية حول الطلبية أو الألوان هنا..." value={currentOrder.remarks || ''} onChange={(e) => updateOrder('remarks', e.target.value)}></textarea>
+                  <label className="form-label">{t('entry.buyer.remarks')}</label>
+                  <textarea className="form-control" rows="3" placeholder={t('entry.buyer.remarks_placeholder')} value={currentOrder.remarks || ''} onChange={(e) => updateOrder('remarks', e.target.value)}></textarea>
                 </div>
               </div>
             </div>
@@ -1168,35 +1004,35 @@ const DataEntryWizard = () => {
           <div className="tab-panel" key={tabKey}>
             <div className="card">
               <div className="tab-section-header">
-                <h3><Calendar size={22} /> المواعيد والكمية والمقاسات</h3>
+                <h3><Calendar size={22} /> {t('entry.dates.section_title')}</h3>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <CustomDateInput 
-                  label="تاريخ طلب المشتري" 
+                  label={t('entry.dates.request_date')} 
                   value={currentOrder.requestDate} 
                   onChange={(val) => {
                     updateOrder('requestDate', val);
                     // If delivery date is now before request date, clear it or adjust it
                     if (currentOrder.deliveryDate && val && currentOrder.deliveryDate < val) {
                       updateOrder('deliveryDate', '');
-                      toast('تم مسح تاريخ التسليم لأنه أصبح قبل تاريخ الطلب الجديد', { icon: 'ℹ️' });
+                      toast(t('entry.messages.delivery_date_reset'), { icon: 'ℹ️' });
                     }
                   }} 
                 />
                 <CustomDateInput 
-                  label="تاريخ التسليم في المصنع" 
+                  label={t('entry.dates.delivery_date')} 
                   value={currentOrder.deliveryDate} 
                   onChange={(val) => updateOrder('deliveryDate', val)} 
                   min={currentOrder.requestDate}
                 />
                 <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-                  <label className="form-label">الكمية الإجمالية (Product Quantity)</label>
+                  <label className="form-label">{t('entry.dates.total_quantity')}</label>
                   <input type="number" className="form-control" value={currentOrder.totalQuantity} onChange={(e) => updateOrder('totalQuantity', e.target.value)} />
                 </div>
                 <div className="form-group" style={{ gridColumn: '1 / -1' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
                     <label className="form-label" style={{ margin: 0 }}>
-                      {hasManual ? 'المقاسات المضافة يدوياً (تجاهل النطاق)' : 'نطاق المقاسات (Size Range)'}
+                      {hasManual ? t('entry.dates.custom_sizes') : t('entry.dates.size_range')}
                     </label>
                     {targetSizes.length > 0 && (
                       <span style={{ 
@@ -1208,7 +1044,7 @@ const DataEntryWizard = () => {
                         fontWeight: 'bold',
                         border: '1px solid rgba(212, 175, 55, 0.3)'
                       }}>
-                        تم اختيار {targetSizes.length} مقاساً
+                        {t('entry.colors.color_selected_count', { count: targetSizes.length })}
                       </span>
                     )}
                   </div>
@@ -1216,7 +1052,7 @@ const DataEntryWizard = () => {
                   {!hasManual ? (
                     <div className="fade-in" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                       <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label className="form-label" style={{ fontSize: '0.75rem', opacity: 0.8 }}>من (From)</label>
+                        <label className="form-label" style={{ fontSize: '0.75rem', opacity: 0.8 }}>{t('entry.dates.from')}</label>
                         <ClearableSelect className="form-control" value={currentOrder.sizeFrom || ''} onChange={(e) => {
                           const newVal = e.target.value;
                           if (newVal === 'MANUAL_TRIGGER') {
@@ -1232,14 +1068,14 @@ const DataEntryWizard = () => {
                               updateOrder('sizeTo', '');
                             }
                           }
-                        }}>
-                          <option value="">اختر...</option>
-                          <option value="MANUAL_TRIGGER" style={{ color: 'var(--accent-color)', fontWeight: 'bold' }}>+ ادخال يدوي جديد...</option>
+                        }} clearTitle={t('entry.actions.clear_btn')}>
+                          <option value="">{t('entry.actions.loading')}</option>
+                          <option value="MANUAL_TRIGGER" style={{ color: 'var(--accent-color)', fontWeight: 'bold' }}>{t('entry.dates.manual_trigger')}</option>
                           {lookups.sizes?.map((s, i) => <option key={i} value={s}>{s}</option>)}
                         </ClearableSelect>
                       </div>
                       <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label className="form-label" style={{ fontSize: '0.75rem', opacity: 0.8 }}>إلى (To)</label>
+                        <label className="form-label" style={{ fontSize: '0.75rem', opacity: 0.8 }}>{t('entry.dates.to')}</label>
                         <ClearableSelect className="form-control" value={currentOrder.sizeTo || ''} onChange={(e) => {
                           const newVal = e.target.value;
                           if (newVal === 'MANUAL_TRIGGER') {
@@ -1247,9 +1083,9 @@ const DataEntryWizard = () => {
                              return;
                           }
                           updateOrder('sizeTo', newVal);
-                        }}>
-                          <option value="">اختر...</option>
-                          <option value="MANUAL_TRIGGER" style={{ color: 'var(--accent-color)', fontWeight: 'bold' }}>+ ادخال يدوي جديد...</option>
+                        }} clearTitle={t('entry.actions.clear_btn')}>
+                          <option value="">{t('entry.actions.loading')}</option>
+                          <option value="MANUAL_TRIGGER" style={{ color: 'var(--accent-color)', fontWeight: 'bold' }}>{t('entry.dates.manual_trigger')}</option>
                           {(() => {
                             if (!currentOrder.sizeFrom) return lookups.sizes;
                             const isNumeric = !isNaN(parseFloat(currentOrder.sizeFrom)) && isFinite(currentOrder.sizeFrom);
@@ -1276,7 +1112,7 @@ const DataEntryWizard = () => {
                     }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: 'var(--accent-color)' }}>
                         <CheckSquare size={18} />
-                        <span style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>وضع الإدخال اليدوي مفعل حالياً</span>
+                        <span style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>{t('entry.dates.manual_sizes_active')}</span>
                       </div>
                       <button 
                         type="button" 
@@ -1284,10 +1120,10 @@ const DataEntryWizard = () => {
                         style={{ padding: '4px 12px', fontSize: '0.8rem', borderColor: '#ef4444', color: '#ef4444' }}
                         onClick={() => {
                           updateOrder('manualSizes', []);
-                          toast('تم العودة لاختيار النطاق والمقاسات الجاهزة', { icon: '🔄' });
+                          toast(t('entry.dates.cancel_manual'), { icon: '🔄' });
                         }}
                       >
-                        إلغاء اليدوي والعودة للنطاق
+                        {t('entry.dates.cancel_manual')}
                       </button>
                     </div>
                   )}
@@ -1298,7 +1134,7 @@ const DataEntryWizard = () => {
                   <div className="form-group fade-in" style={{ gridColumn: '1 / -1', marginTop: '0.5rem' }}>
                     <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                       <Edit3 size={16} color="var(--accent-color)" />
-                      إدخال المقاسات المخصصة
+                      {t('entry.dates.custom_sizes')}
                     </label>
                     
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
@@ -1310,7 +1146,7 @@ const DataEntryWizard = () => {
                             style={{ width: '100px', textAlign: 'center', border: '1px solid var(--accent-color)' }}
                             value={s}
                             autoFocus={idx === (currentOrder.manualSizes?.length - 1)}
-                            placeholder="المقاس..."
+                            placeholder={t('entry.dates.size_placeholder')}
                             onChange={(e) => {
                               const newManual = [...(currentOrder.manualSizes || [])];
                               newManual[idx] = e.target.value;
@@ -1344,7 +1180,7 @@ const DataEntryWizard = () => {
                           updateOrder('manualSizes', [...(currentOrder.manualSizes || []), '']);
                         }}
                       >
-                        + إضافة مقاس آخر
+                        {t('entry.dates.add_another_size')}
                       </button>
                     </div>
                   </div>
@@ -1359,20 +1195,20 @@ const DataEntryWizard = () => {
           <div className="tab-panel" key={tabKey}>
             <div className="card">
               <div className="tab-section-header">
-                <h3><Scissors size={22} /> تفاصيل الأقمشة والمواد</h3>
+                <h3><Scissors size={22} /> {t('entry.fabrics.section_title')}</h3>
               </div>
               <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', alignItems: 'flex-start' }}>
                 <div className="form-group" style={{ flex: 1 }}>
-                  <label className="form-label">نوع القماش (Product Fabrics)</label>
-                  <ClearableSelect className="form-control" value={currentOrder.productFabric || ''} onChange={(e) => updateOrder('productFabric', e.target.value)}>
-                    <option value="">اختر...</option>
+                  <label className="form-label">{t('entry.fabrics.fabric_type')}</label>
+                  <ClearableSelect className="form-control" value={currentOrder.productFabric || ''} onChange={(e) => updateOrder('productFabric', e.target.value)} clearTitle={t('entry.actions.clear_btn')}>
+                    <option value="">{t('entry.actions.loading')}</option>
                     {lookups.fabrics?.map((f, i) => <option key={i} value={f}>{f}</option>)}
                   </ClearableSelect>
                 </div>
                 <div className="form-group" style={{ flex: 1 }}>
-                  <label className="form-label">العلامة التجارية (Trade Mark)</label>
-                  <ClearableSelect className="form-control" value={currentOrder.tradeMark || ''} onChange={(e) => updateOrder('tradeMark', e.target.value)}>
-                    <option value="">اختر...</option>
+                  <label className="form-label">{t('entry.fabrics.trade_mark')}</label>
+                  <ClearableSelect className="form-control" value={currentOrder.tradeMark || ''} onChange={(e) => updateOrder('tradeMark', e.target.value)} clearTitle={t('entry.actions.clear_btn')}>
+                    <option value="">{t('entry.actions.loading')}</option>
                     {lookups.tradeMarks?.map((t, i) => {
                       const tmName = typeof t === 'object' ? t.name : t;
                       return <option key={i} value={tmName}>{tmName}</option>;
@@ -1406,14 +1242,14 @@ const DataEntryWizard = () => {
 
                   return (
                     <div className="form-group" key={i}>
-                      <label className="form-label">المادة {num}</label>
+                      <label className="form-label">{t('entry.fabrics.material')} {num}</label>
                       <div 
                         style={{ display: 'flex', gap: '0.5rem' }}
                         onClickCapture={(e) => {
                           if (isLocked) {
                             e.preventDefault();
                             e.stopPropagation();
-                            toast.error('لا يوجد نسبة متبقية! مجموع المواد السابقة وصل إلى 100%');
+                            toast.error(t('entry.messages.material_limit_error', { allowed: 0 }));
                           }
                         }}
                       >
@@ -1425,8 +1261,9 @@ const DataEntryWizard = () => {
                           }}
                           disabled={isLocked}
                           style={{ opacity: isLocked ? 0.5 : 1, cursor: isLocked ? 'not-allowed' : 'auto' }}
+                          clearTitle={t('entry.actions.clear_btn')}
                         >
-                          <option value="">اختر المادة...</option>
+                          <option value="">{t('entry.actions.loading')}</option>
                           {lookups.materials?.map((m, j) => <option key={j} value={m}>{m}</option>)}
                         </ClearableSelect>
                         <input 
@@ -1465,12 +1302,12 @@ const DataEntryWizard = () => {
           <div className="tab-panel" key={tabKey}>
             <div className="card">
               <div className="tab-section-header">
-                <h3><Box size={22} /> المصنع والتعبئة والتغليف</h3>
+                <h3><Box size={22} /> {t('entry.factory.section_title')}</h3>
               </div>
               <div className="form-group">
-                <label className="form-label">المصنع</label>
-                <ClearableSelect className="form-control" value={currentOrder.factoryId || ''} onChange={(e) => updateOrder('factoryId', e.target.value)}>
-                  <option value="">اختر المصنع...</option>
+                <label className="form-label">{t('entry.factory.factory_select')}</label>
+                <ClearableSelect className="form-control" value={currentOrder.factoryId || ''} onChange={(e) => updateOrder('factoryId', e.target.value)} clearTitle={t('entry.actions.clear_btn')}>
+                  <option value="">{t('entry.factory.factory_placeholder')}</option>
                   {lookups.factories?.map((f, i) => <option key={i} value={f.name || f}>{f.name || f}</option>)}
                 </ClearableSelect>
               </div>
@@ -1481,19 +1318,19 @@ const DataEntryWizard = () => {
                     <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
                       {selectedFactoryObj.code && (
                         <div className="form-group" style={{ flex: 1, minWidth: '120px', marginBottom: 0 }}>
-                          <label className="form-label" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>كود المصنع</label>
+                          <label className="form-label" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('entry.factory.factory_code')}</label>
                           <input type="text" className="form-control" value={selectedFactoryObj.code} readOnly style={{ backgroundColor: 'var(--bg-color)', opacity: 0.8, borderStyle: 'dashed', color: 'var(--accent-color)', fontWeight: 'bold' }} />
                         </div>
                       )}
                       {selectedFactoryObj.mobile && (
                         <div className="form-group" style={{ flex: 1, minWidth: '150px', marginBottom: 0 }}>
-                          <label className="form-label" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>جوال المصنع</label>
+                          <label className="form-label" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('entry.factory.factory_mobile')}</label>
                           <input type="text" className="form-control" value={selectedFactoryObj.mobile} readOnly style={{ backgroundColor: 'var(--bg-color)', opacity: 0.8, borderStyle: 'dashed' }} />
                         </div>
                       )}
                       {selectedFactoryObj.address && (
                         <div className="form-group" style={{ flex: 2, minWidth: '200px', marginBottom: 0 }}>
-                          <label className="form-label" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>عنوان المصنع</label>
+                          <label className="form-label" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('entry.factory.factory_address')}</label>
                           <input type="text" className="form-control" value={selectedFactoryObj.address} readOnly style={{ backgroundColor: 'var(--bg-color)', opacity: 0.8, borderStyle: 'dashed' }} />
                         </div>
                       )}
@@ -1504,43 +1341,43 @@ const DataEntryWizard = () => {
               })()}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div className="form-group">
-                  <label className="form-label">تعبئة الكرتون</label>
+                  <label className="form-label">{t('entry.factory.carton_package')}</label>
                   <ClearableSelect className="form-control" value={currentOrder.cartonPackage || ''} onChange={(e) => {
                     const val = e.target.value;
                     const pkgQty = parseInt(val.replace(/[^0-9]/g, '')) || 0;
                     const totQty = parseInt(currentOrder.totalQuantity) || 0;
                     if (val && pkgQty > totQty) {
-                      toast.error(`عفواً، لا يمكن أن تكون تعبئة الكرتون (${pkgQty}) أكبر من الكمية الإجمالية (${totQty}).`);
+                      toast.error(t('entry.messages.packaging_error', { package: pkgQty, total: totQty }));
                       return;
                     }
                     updateOrder('cartonPackage', val);
-                  }}>
-                    <option value="">اختر...</option>
+                  }} clearTitle={t('entry.actions.clear_btn')}>
+                    <option value="">{t('entry.buyer.sale_type_placeholder')}</option>
                     {lookups.cartonPackages?.map((cp, i) => <option key={i} value={cp}>{cp}</option>)}
                   </ClearableSelect>
                 </div>
                 <div className="form-group">
-                  <label className="form-label">كمية الكرتون (Pcs)</label>
+                  <label className="form-label">{t('entry.factory.carton_quantity')}</label>
                   <input 
                     type="text" 
                     className="form-control" 
                     value={currentOrder.cartonQty || ''} 
                     readOnly 
                     style={{ backgroundColor: 'var(--surface-highlight)', color: 'var(--accent-color)', fontWeight: 'bold' }} 
-                    placeholder="تُحسب تلقائياً..." 
+                    placeholder={t('entry.factory.auto_calc_placeholder')} 
                   />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">حجم الكرتون</label>
-                  <ClearableSelect className="form-control" value={currentOrder.cartonSize || ''} onChange={(e) => updateOrder('cartonSize', e.target.value)}>
-                    <option value="">اختر...</option>
+                  <label className="form-label">{t('entry.factory.carton_size')}</label>
+                  <ClearableSelect className="form-control" value={currentOrder.cartonSize || ''} onChange={(e) => updateOrder('cartonSize', e.target.value)} clearTitle={t('entry.actions.clear_btn')}>
+                    <option value="">{t('entry.buyer.sale_type_placeholder')}</option>
                     {lookups.cartonSizes?.map((cs, i) => <option key={i} value={cs}>{cs}</option>)}
                   </ClearableSelect>
                 </div>
                 <div className="form-group">
-                  <label className="form-label">أحجام الأكياس</label>
-                  <ClearableSelect className="form-control" value={currentOrder.plasticBagSize || ''} onChange={(e) => updateOrder('plasticBagSize', e.target.value)}>
-                    <option value="">اختر...</option>
+                  <label className="form-label">{t('entry.factory.plastic_bag_size')}</label>
+                  <ClearableSelect className="form-control" value={currentOrder.plasticBagSize || ''} onChange={(e) => updateOrder('plasticBagSize', e.target.value)} clearTitle={t('entry.actions.clear_btn')}>
+                    <option value="">{t('entry.buyer.sale_type_placeholder')}</option>
                     {lookups.plasticBagSizes?.map((pb, i) => <option key={i} value={pb}>{pb}</option>)}
                   </ClearableSelect>
                 </div>
@@ -1555,23 +1392,21 @@ const DataEntryWizard = () => {
           <div className="tab-panel" key={tabKey}>
             <div className="card">
               <div className="tab-section-header" style={{ justifyContent: 'space-between' }}>
-                <h3><Palette size={22} /> توزيع الألوان والمقاسات</h3>
+                <h3><Palette size={22} /> {t('entry.colors.section_title')}</h3>
                 {selectedColorsArr.length > 0 && sizesReady && (
                   <button className="btn btn-primary" onClick={divideQuantityEqually} style={{ fontSize: '0.85rem', padding: '0.5rem 1rem' }}>
-                    <LayoutGrid size={16} /> تقسيم بالتساوي
+                    <LayoutGrid size={16} /> {t('entry.colors.divide_equally')}
                   </button>
                 )}
               </div>
 
-              {/* ─── Custom Multi-Select Color Picker ─── */}
               <div style={{ marginBottom: '1.5rem', padding: '1rem', backgroundColor: 'var(--surface-color)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap' }}>
                   <label style={{ fontWeight: 'bold', fontSize: '0.9rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', paddingTop: '0.5rem' }}>
                     <Palette size={16} style={{ verticalAlign: 'middle', marginLeft: '0.4rem' }} />
-                    اختيار الألوان:
+                    {t('entry.colors.select_colors')}
                   </label>
                   <div ref={colorPickerRef} style={{ position: 'relative', flex: '1', minWidth: '220px', maxWidth: '400px' }}>
-                    {/* Trigger button */}
                     <button
                       type="button"
                       onClick={() => setShowColorPicker(prev => !prev)}
@@ -1585,10 +1420,9 @@ const DataEntryWizard = () => {
                         transition: 'border-color 0.2s'
                       }}
                     >
-                      <span>{selectedColorsArr.length > 0 ? `${selectedColorsArr.length} لون محدد` : '— اختر الألوان —'}</span>
+                      <span>{selectedColorsArr.length > 0 ? t('entry.colors.color_selected_count', { count: selectedColorsArr.length }) : t('entry.colors.select_colors_placeholder')}</span>
                       <ChevronLeft size={16} style={{ transform: showColorPicker ? 'rotate(90deg)' : 'rotate(-90deg)', transition: 'transform 0.2s', opacity: 0.6 }} />
                     </button>
-                    {/* Dropdown panel */}
                     {showColorPicker && (
                       <div style={{
                         position: 'absolute', top: '100%', right: 0, left: 0, zIndex: 100,
@@ -1597,14 +1431,13 @@ const DataEntryWizard = () => {
                         borderRadius: 'var(--radius-md)', boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
                         maxHeight: '260px', overflowY: 'auto'
                       }}>
-                        {/* Select All Button */}
                         {lookups.colors?.length > 0 && (
                           <div
                             onClick={(e) => {
                               e.stopPropagation();
                               const allNames = lookups.colors.map(c => c.name || c);
                               setSelectedColorsArr(allNames);
-                              toast.success(`تم تحديد جميع الألوان (${allNames.length})`);
+                              toast.success(t('entry.messages.all_colors_selected', { count: allNames.length }));
                             }}
                             style={{
                               padding: '0.6rem', marginBottom: '0.5rem', textAlign: 'center',
@@ -1615,7 +1448,7 @@ const DataEntryWizard = () => {
                             onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(212, 175, 55, 0.2)'}
                             onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(212, 175, 55, 0.1)'}
                           >
-                            تحديد جميع الألوان ✓
+                            {t('entry.colors.select_all')}
                           </div>
                         )}
                         {lookups.colors?.map((colorObj, i) => {
@@ -1657,13 +1490,12 @@ const DataEntryWizard = () => {
                           );
                         })}
                         {(!lookups.colors || lookups.colors.length === 0) && (
-                          <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>لا توجد ألوان محفوظة</div>
+                          <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>{t('entry.colors.no_colors_saved')}</div>
                         )}
                       </div>
                     )}
                   </div>
                 </div>
-                {/* Selected color badges */}
                 {selectedColorsArr.length > 0 && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border-color)' }}>
                     {selectedColorsArr.map((colorName, i) => {
@@ -1684,7 +1516,7 @@ const DataEntryWizard = () => {
                           <button type="button" onClick={() => toggleColor(colorName)} style={{
                             background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer',
                             padding: '0', display: 'flex', alignItems: 'center', marginRight: '-0.2rem'
-                          }} title="إزالة">
+                          }} title={t('entry.actions.delete_btn')}>
                             <X size={13} strokeWidth={3} />
                           </button>
                         </span>
@@ -1694,16 +1526,15 @@ const DataEntryWizard = () => {
                 )}
               </div>
 
-              {/* ─── Distribution Table ─── */}
               {selectedColorsArr.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-muted)', fontSize: '0.95rem', backgroundColor: 'var(--surface-color)', borderRadius: 'var(--radius-md)', border: '1px dashed var(--border-color)' }}>
                   <Palette size={40} style={{ opacity: 0.25, display: 'block', margin: '0 auto 0.75rem' }} />
-                  اختر لوناً واحداً على الأقل من القائمة أعلاه لعرض جدول التوزيع.
+                  {t('entry.colors.no_colors_selected_hint')}
                 </div>
               ) : !sizesReady ? (
                 <div style={{ textAlign: 'center', padding: '2.5rem 1rem', color: 'var(--text-muted)', fontSize: '0.95rem', backgroundColor: 'var(--surface-color)', borderRadius: 'var(--radius-md)', border: '1px dashed var(--border-color)' }}>
                   <Ruler size={36} style={{ opacity: 0.25, display: 'block', margin: '0 auto 0.75rem' }} />
-                  يرجى تحديد نطاق المقاسات (المقاس من — المقاس إلى) من تبويب <strong>"المواعيد والكمية"</strong> لعرض جدول التوزيع.
+                  {t('entry.colors.select_range_hint')}
                 </div>
               ) : (
                 <div style={{ overflowX: 'auto', backgroundColor: 'var(--surface-color)', borderRadius: 'var(--radius-md)', padding: '1rem', border: '1px solid var(--border-color)' }}>
@@ -1711,7 +1542,7 @@ const DataEntryWizard = () => {
                     <thead>
                       <tr>
                         <th style={{ padding: '0.75rem', textAlign: 'right', borderBottom: '2px solid var(--accent-color)', backgroundColor: 'var(--surface-highlight)', minWidth: '100px' }}>
-                          المقاس
+                          {t('entry.colors.size')}
                         </th>
                         {selectedColorsArr.map((colorName, i) => {
                           const colorObj = lookups.colors?.find(c => (c.name || c) === colorName);
@@ -1726,7 +1557,7 @@ const DataEntryWizard = () => {
                           );
                         })}
                         <th style={{ padding: '0.75rem', textAlign: 'center', borderBottom: '2px solid var(--accent-color)', backgroundColor: 'var(--surface-highlight)', color: 'var(--accent-color)', fontWeight: 'bold' }}>
-                          إجمالي المقاس
+                          {t('entry.colors.total_per_size')}
                         </th>
                       </tr>
                     </thead>
@@ -1753,15 +1584,14 @@ const DataEntryWizard = () => {
                           </td>
                         </tr>
                       ))}
-                      {/* ─── Totals Row (per color) ─── */}
                       <tr style={{ borderTop: '2px solid var(--accent-color)', backgroundColor: 'var(--surface-highlight)' }}>
-                        <td style={{ padding: '0.75rem', fontWeight: 'bold', color: 'var(--accent-color)' }}>إجمالي اللون</td>
+                        <td style={{ padding: '0.75rem', fontWeight: 'bold', color: 'var(--accent-color)' }}>{t('entry.colors.total_per_color')}</td>
                         {selectedColorsArr.map((colorName, cIdx) => (
                           <td key={cIdx} style={{ padding: '0.75rem', textAlign: 'center', fontWeight: 'bold', color: 'var(--accent-color)', fontSize: '1.05rem' }}>
                             {targetSizes.reduce((sum, size) => sum + (parseInt(currentOrder.colorDistribution?.[colorName]?.[size]) || 0), 0)}
                           </td>
                         ))}
-                        <td style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '900', color: 'var(--primary-color)', fontSize: '1.15rem', backgroundColor: 'rgba(212, 175, 55, 0.1)' }}>
+                        <td style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '900', color: 'var(--text-strong)', fontSize: '1.15rem', backgroundColor: 'rgba(212, 175, 55, 0.1)' }}>
                           {selectedColorsArr.reduce((total, cn) => total + targetSizes.reduce((sum, s) => sum + (parseInt(currentOrder.colorDistribution?.[cn]?.[s]) || 0), 0), 0)}
                         </td>
                       </tr>
@@ -1776,22 +1606,20 @@ const DataEntryWizard = () => {
 
       case 'packaging': {
         const selectedConditions = lookups.packagingConditionsList?.filter(cond => !!currentOrder.packagingConditions?.[cond]) || [];
-        
         return (
           <div className="tab-panel" key={tabKey}>
             <div className="card">
               <div className="tab-section-header">
-                <h3><CheckSquare size={22} /> شروط وتفاصيل التعبئة الخاصة</h3>
+                <h3><CheckSquare size={22} /> {t('entry.packaging.section_title')}</h3>
               </div>
               
               <div style={{ marginBottom: '1.5rem', padding: '1rem', backgroundColor: 'var(--surface-color)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap' }}>
                   <label style={{ fontWeight: 'bold', fontSize: '0.9rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', paddingTop: '0.5rem' }}>
                     <CheckSquare size={16} style={{ verticalAlign: 'middle', marginLeft: '0.4rem' }} />
-                    اختيار الشروط:
+                    {t('entry.packaging.select_conditions')}
                   </label>
                   <div ref={packagingPickerRef} style={{ position: 'relative', flex: '1', minWidth: '220px', maxWidth: '400px' }}>
-                    {/* Trigger button */}
                     <button
                       type="button"
                       onClick={() => setShowPackagingPicker(prev => !prev)}
@@ -1805,10 +1633,9 @@ const DataEntryWizard = () => {
                         transition: 'border-color 0.2s'
                       }}
                     >
-                      <span>{selectedConditions.length > 0 ? `${selectedConditions.length} شرط محدد` : '— اختر الشروط —'}</span>
+                      <span>{selectedConditions.length > 0 ? t('entry.packaging.conditions_selected_count', { count: selectedConditions.length }) : t('entry.packaging.select_conditions_placeholder')}</span>
                       <ChevronLeft size={16} style={{ transform: showPackagingPicker ? 'rotate(90deg)' : 'rotate(-90deg)', transition: 'transform 0.2s', opacity: 0.6 }} />
                     </button>
-                    {/* Dropdown panel */}
                     {showPackagingPicker && (
                       <div style={{
                         position: 'absolute', top: '100%', right: 0, left: 0, zIndex: 100,
@@ -1849,14 +1676,13 @@ const DataEntryWizard = () => {
                           );
                         })}
                         {(!lookups.packagingConditionsList || lookups.packagingConditionsList.length === 0) && (
-                          <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>لا توجد شروط تعبئة محفوظة</div>
+                          <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>{t('entry.packaging.no_conditions_saved')}</div>
                         )}
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* Selected condition badges */}
                 {selectedConditions.length > 0 && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border-color)' }}>
                     {selectedConditions.map((cond, i) => (
@@ -1873,7 +1699,7 @@ const DataEntryWizard = () => {
                         <button type="button" onClick={() => handlePackagingConditionChange(cond, false)} style={{
                           background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer',
                           padding: '0', display: 'flex', alignItems: 'center', marginRight: '-0.2rem'
-                        }} title="إزالة">
+                        }} title={t('entry.actions.delete_btn')}>
                           <X size={13} strokeWidth={3} />
                         </button>
                       </span>
@@ -1885,10 +1711,9 @@ const DataEntryWizard = () => {
               {selectedConditions.length === 0 && (
                 <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-muted)', fontSize: '0.95rem', backgroundColor: 'var(--surface-color)', borderRadius: 'var(--radius-md)', border: '1px dashed var(--border-color)' }}>
                   <CheckSquare size={40} style={{ opacity: 0.25, display: 'block', margin: '0 auto 0.75rem' }} />
-                  اختر شرطاً واحداً على الأقل من القائمة أعلاه.
+                  {t('entry.packaging.no_conditions_hint')}
                 </div>
               )}
-              
             </div>
           </div>
         );
@@ -1900,8 +1725,8 @@ const DataEntryWizard = () => {
              <div className="tab-panel fade-in" key={tabKey}>
                <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-muted)', backgroundColor: 'var(--surface-color)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
                  <Ruler size={48} color="var(--accent-color)" style={{ marginBottom: '1rem', opacity: 0.5 }} />
-                 <h3 style={{ margin: '0 0 0.5rem 0', color: 'var(--text-main)' }}>لم يتم تحديد منتج</h3>
-                 <p style={{ margin: 0 }}>الرجاء اختيار "اسم المنتج" من قسم البيانات الأساسية أولاً لعرض المقاسات التفصيلية الخاصة به.</p>
+                 <h3 style={{ margin: '0 0 0.5rem 0', color: 'var(--text-main)' }}>{t('entry.measurements.no_product_selected')}</h3>
+                 <p style={{ margin: 0 }}>{t('entry.measurements.no_product_hint')}</p>
                </div>
              </div>
            );
@@ -1916,23 +1741,21 @@ const DataEntryWizard = () => {
              {partsList.map((partName, pIdx) => {
                const partMeasurements = (lookups.measurements || []).filter(m => {
                   if (typeof m === 'object' && m.part) {
-                     // Strictly match assigned parts
                      return m.part.split('،').map(p => p.trim()).includes(partName.trim()); 
                   }
-                  // Hide all legacy unassigned or string measurements
                   return false;
                }).map(m => typeof m === 'object' ? m.name : m);
 
                return (
                 <div className="card" key={pIdx} style={{ marginBottom: '2rem' }}>
                   <div className="tab-section-header">
-                    <h3><Ruler size={22} /> مقاسات المنتج التفصيلية ({partName})</h3>
+                    <h3><Ruler size={22} /> {t('entry.measurements.section_title')} ({partName})</h3>
                   </div>
                   <div style={{ overflowX: 'auto', backgroundColor: 'var(--surface-color)', borderRadius: 'var(--radius-md)', padding: '1rem', border: '1px solid var(--border-color)' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '600px' }}>
                       <thead>
                         <tr>
-                          <th style={{ padding: '0.75rem', textAlign: 'right', borderBottom: '2px solid var(--border-color)', backgroundColor: 'var(--surface-highlight)', width: '200px' }}>نوع القياس (Size Name)</th>
+                          <th style={{ padding: '0.75rem', textAlign: 'right', borderBottom: '2px solid var(--border-color)', backgroundColor: 'var(--surface-highlight)', width: '200px' }}>{t('entry.measurements.size_name')}</th>
                           {targetSizes.map((s, i) => (
                             <th key={i} style={{ padding: '0.75rem', textAlign: 'center', borderBottom: '2px solid var(--border-color)', backgroundColor: 'var(--surface-highlight)' }}>{s}</th>
                           ))}
@@ -1940,7 +1763,7 @@ const DataEntryWizard = () => {
                       </thead>
                       <tbody>
                         {partMeasurements.length === 0 && (
-                          <tr><td colSpan={targetSizes.length + 1} style={{ textAlign: 'center', padding: '1rem', color: 'var(--text-muted)' }}>لا توجد مقاسات مسجلة تدعم ({partName}). قم بإضافتها عبر إعدادات المقاسات.</td></tr>
+                          <tr><td colSpan={targetSizes.length + 1} style={{ textAlign: 'center', padding: '1rem', color: 'var(--text-muted)' }}>{t('entry.measurements.no_measurements_hint', { part: partName })}</td></tr>
                         )}
                         {partMeasurements.map((mName, i) => (
                           <tr key={i} style={{ borderBottom: '1px solid var(--border-color)' }}>
@@ -1993,30 +1816,29 @@ const DataEntryWizard = () => {
   return (
     <div className="wizard-tabs-container">
 
-      {/* Top Actions Row */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }} className="fade-in">
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
           <div className="form-group" style={{ marginBottom: 0 }}>
-            <label className="form-label" style={{ fontSize: '0.8rem' }}>التاريخ (Date)</label>
+            <label className="form-label" style={{ fontSize: '0.8rem' }}>{t('entry.actions.date_label')}</label>
             <input type="text" className="form-control" value={new Date().toLocaleDateString('en-GB')} readOnly style={{ width: '120px', backgroundColor: 'var(--surface-highlight)', opacity: 0.8 }} />
           </div>
           <div className="form-group" style={{ marginBottom: 0 }}>
-            <label className="form-label" style={{ fontSize: '0.8rem' }}>رقم الموديل للاسترداد (Item No)</label>
+            <label className="form-label" style={{ fontSize: '0.8rem' }}>{t('entry.actions.fetch_serial_label')}</label>
             <div style={{ display: 'flex', gap: '0.5rem', position: 'relative' }}>
               <input 
                 type="text" 
                 id="fetchSerialInput" 
                 className="form-control" 
-                placeholder="أدخل الرقم... (F9)" 
+                placeholder={t('entry.actions.fetch_placeholder')} 
                 style={{ width: '150px' }} 
                 onKeyDown={handleF9Press}
                 autoComplete="off"
               />
-              <button className="btn btn-primary" onClick={handleFetch} style={{ padding: '0.5rem 1rem' }}>جلب (Fetch)</button>
+              <button className="btn btn-primary" onClick={handleFetch} style={{ padding: '0.5rem 1rem' }}>{t('entry.actions.fetch_btn')}</button>
               <button
                 className="btn"
                 onClick={() => {
-                  if (window.confirm('⚠️ هل أنت متأكد من تفريغ جميع البيانات وبدء طلبية جديدة؟\n\nسيتم مسح كل الحقول المدخلة وإعادة تعيين النموذج بالكامل.')) {
+                  if (window.confirm(t('entry.messages.confirm_clear'))) {
                     handleClear();
                   }
                 }}
@@ -2046,7 +1868,7 @@ const DataEntryWizard = () => {
                   e.currentTarget.style.transform = 'translateY(0)';
                 }}
               >
-                <RefreshCw size={15} /> تفريغ وبدء جديد
+                <RefreshCw size={15} /> {t('entry.actions.clear_btn')}
               </button>
               
               {showSerialsList && (
@@ -2060,17 +1882,16 @@ const DataEntryWizard = () => {
                   zIndex: 1000
                 }}>
                   <div style={{ padding: '0.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--surface-highlight)' }}>
-                      <span style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>اختر موديلاً محفوظاً:</span>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>{t('entry.actions.select_saved_model')}</span>
                       <button onClick={() => { setShowSerialsList(false); setSerialSearchQuery(''); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-color)', padding: 0, display: 'flex', alignItems: 'center' }}>
                          <X size={16} />
                       </button>
                   </div>
-                  {/* Search Field */}
                   <div style={{ padding: '0.5rem', borderBottom: '1px solid var(--border-color)', backgroundColor: 'var(--bg-color)' }}>
                     <input
                       ref={serialSearchRef}
                       type="text"
-                      placeholder="🔍 ابحث برقم الموديل..."
+                      placeholder={t('entry.actions.search_serial_placeholder')}
                       value={serialSearchQuery}
                       onChange={(e) => setSerialSearchQuery(e.target.value)}
                       onKeyDown={(e) => {
@@ -2078,7 +1899,6 @@ const DataEntryWizard = () => {
                           setShowSerialsList(false);
                           setSerialSearchQuery('');
                         }
-                        // Enter to select first filtered result
                         if (e.key === 'Enter') {
                           const filtered = availableSerials.filter(s => s.toString().includes(serialSearchQuery));
                           if (filtered.length > 0) {
@@ -2100,7 +1920,6 @@ const DataEntryWizard = () => {
                         color: 'var(--text-color)',
                         outline: 'none',
                         boxSizing: 'border-box',
-                        direction: 'rtl',
                         transition: 'border-color 0.2s'
                       }}
                       onFocus={(e) => e.currentTarget.style.borderColor = 'var(--accent-color)'}
@@ -2109,7 +1928,7 @@ const DataEntryWizard = () => {
                     />
                   </div>
                   {fetchingSerials ? (
-                      <div style={{ padding: '1rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)' }}>جاري التحميل...</div>
+                      <div style={{ padding: '1rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)' }}>{t('entry.actions.loading')}</div>
                   ) : (
                      (() => {
                        const filteredSerials = serialSearchQuery.trim()
@@ -2117,12 +1936,11 @@ const DataEntryWizard = () => {
                          : availableSerials;
                        return filteredSerials.length === 0 ? (
                          <div style={{ padding: '1rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                           {availableSerials.length === 0 ? 'لا توجد موديلات محفوظة' : 'لا توجد نتائج مطابقة للبحث'}
+                           {availableSerials.length === 0 ? t('entry.actions.no_saved_models') : t('entry.actions.no_match')}
                          </div>
                        ) : (
                         <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
                             {filteredSerials.map(serial => {
-                                // Highlight matching part
                                 const query = serialSearchQuery.trim();
                                 const serialStr = serial.toString();
                                 const matchIdx = query ? serialStr.indexOf(query) : -1;
@@ -2162,7 +1980,6 @@ const DataEntryWizard = () => {
           </div>
         </div>
 
-        {/* ═══ View Mode Toggle ═══ */}
         <button
           onClick={toggleViewMode}
           style={{
@@ -2179,7 +1996,6 @@ const DataEntryWizard = () => {
             borderRadius: 'var(--radius-md)',
             color: viewMode === 'scroll' ? 'var(--accent-color)' : 'var(--text-muted)',
             cursor: 'pointer',
-            fontFamily: 'Tajawal, sans-serif',
             fontSize: '0.85rem',
             fontWeight: '600',
             transition: 'all 0.3s ease',
@@ -2195,21 +2011,19 @@ const DataEntryWizard = () => {
             e.currentTarget.style.color = viewMode === 'scroll' ? 'var(--accent-color)' : 'var(--text-muted)';
             e.currentTarget.style.transform = 'translateY(0)';
           }}
-          title={viewMode === 'tabs' ? 'التبديل إلى العرض الكامل (صفحة واحدة)' : 'التبديل إلى عرض التبويبات'}
+          title={viewMode === 'tabs' ? t('entry.actions.view_full_page') : t('entry.actions.view_tabs')}
         >
           {viewMode === 'tabs' ? (
-            <><Layers size={17} /> صفحة كاملة</>
+            <><Layers size={17} /> {t('entry.actions.view_full_page')}</>
           ) : (
-            <><PanelTop size={17} /> تبويبات</>
+            <><PanelTop size={17} /> {t('entry.actions.view_tabs')}</>
           )}
         </button>
       </div>
 
       {viewMode === 'tabs' ? (
         <>
-          {/* ═══ Tab Navigation Bar ═══ */}
           <div style={{ position: 'relative' }}>
-            {/* Arrow on LEFT side — shows when there are hidden tabs to the left (e.g. tab 7 in RTL) */}
             {canScrollLeft && (
               <button
                 onClick={() => scrollTabNav('left')}
@@ -2225,14 +2039,13 @@ const DataEntryWizard = () => {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  background: 'linear-gradient(to right, rgba(22, 27, 34, 0.98) 60%, transparent)',
+                  background: 'linear-gradient(to right, var(--surface-color) 60%, transparent)',
                   color: 'var(--accent-color)',
                   borderRadius: 'var(--radius-lg) 0 0 var(--radius-lg)',
                   transition: 'all 0.2s ease',
                 }}
                 onMouseEnter={e => e.currentTarget.style.width = '52px'}
                 onMouseLeave={e => e.currentTarget.style.width = '44px'}
-                title="عرض المزيد"
               >
                 <ChevronLeft size={20} />
               </button>
@@ -2255,7 +2068,6 @@ const DataEntryWizard = () => {
               })}
             </nav>
 
-            {/* Arrow on RIGHT side — shows when there are hidden tabs to the right (e.g. tab 1 scrolled out) */}
             {canScrollRight && (
               <button
                 onClick={() => scrollTabNav('right')}
@@ -2271,21 +2083,19 @@ const DataEntryWizard = () => {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  background: 'linear-gradient(to left, rgba(22, 27, 34, 0.98) 60%, transparent)',
+                  background: 'linear-gradient(to left, var(--surface-color) 60%, transparent)',
                   color: 'var(--accent-color)',
                   borderRadius: '0 var(--radius-lg) var(--radius-lg) 0',
                   transition: 'all 0.2s ease',
                 }}
                 onMouseEnter={e => e.currentTarget.style.width = '52px'}
                 onMouseLeave={e => e.currentTarget.style.width = '44px'}
-                title="عرض المزيد"
               >
                 <ChevronRight size={20} />
               </button>
             )}
           </div>
 
-          {/* Progress Dots */}
           <div className="tab-progress">
             {TABS.map((tab, i) => (
               <div
@@ -2295,33 +2105,29 @@ const DataEntryWizard = () => {
             ))}
           </div>
 
-          {/* ═══ Tab Content ═══ */}
           <div className="tab-content-wrapper">
             {renderTabContent()}
 
-            {/* Navigation Arrows */}
             <div className="tab-nav-arrows">
               <button className="tab-nav-arrow" onClick={goPrev} disabled={currentTabIdx === 0}>
                 <ChevronRight size={18} />
-                {currentTabIdx > 0 ? TABS[currentTabIdx - 1].label : 'السابق'}
+                {currentTabIdx > 0 ? TABS[currentTabIdx - 1].label : t('entry.actions.prev')}
               </button>
               <button className="tab-nav-arrow" onClick={goNext} disabled={currentTabIdx === TABS.length - 1}>
-                {currentTabIdx < TABS.length - 1 ? TABS[currentTabIdx + 1].label : 'التالي'}
+                {currentTabIdx < TABS.length - 1 ? TABS[currentTabIdx + 1].label : t('entry.actions.next')}
                 <ChevronLeft size={18} />
               </button>
             </div>
           </div>
         </>
       ) : (
-        /* ═══ SCROLL VIEW MODE ═══ */
         <div className="tab-content-wrapper fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          {/* Sticky section jump bar */}
           <div style={{
             display: 'flex',
             flexWrap: 'wrap',
             gap: '0.4rem',
             padding: '0.75rem 1rem',
-            background: 'rgba(22, 27, 34, 0.85)',
+            background: 'var(--glass-bg)',
             backdropFilter: 'blur(16px)',
             border: '1px solid rgba(212, 175, 55, 0.15)',
             borderRadius: 'var(--radius-lg)',
@@ -2349,7 +2155,6 @@ const DataEntryWizard = () => {
                     color: 'var(--text-muted)',
                     borderRadius: '8px',
                     cursor: 'pointer',
-                    fontFamily: 'Tajawal, sans-serif',
                     fontSize: '0.8rem',
                     fontWeight: '500',
                     transition: 'all 0.2s ease',
@@ -2373,7 +2178,6 @@ const DataEntryWizard = () => {
             })}
           </div>
 
-          {/* All sections rendered */}
           {TABS.map((tab) => (
             <div key={tab.id} id={`scroll-section-${tab.id}`} style={{ scrollMarginTop: '5rem' }}>
               {renderTabContent(tab.id)}
@@ -2382,7 +2186,6 @@ const DataEntryWizard = () => {
         </div>
       )}
 
-      {/* ═══ Edit Mode Banner ═══ */}
       {isEditMode && (
         <div style={{
           display: 'flex',
@@ -2398,19 +2201,18 @@ const DataEntryWizard = () => {
         }}>
           <Edit3 size={18} color="var(--accent-color)" />
           <span style={{ color: 'var(--accent-color)', fontWeight: '600', fontSize: '0.95rem' }}>
-            وضع التعديل — تعدّل على الطلبية رقم: <strong style={{ fontSize: '1.1rem' }}>#{originalSerial}</strong>
+            {t('entry.actions.edit_mode_banner', { serial: originalSerial })}
           </span>
           <button
             className="btn btn-outline"
             onClick={handleClear}
             style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderColor: 'rgba(212, 175, 55, 0.3)' }}
           >
-            <X size={14} /> إلغاء وضع التعديل وتفريغ الحقول
+            <X size={14} /> {t('entry.actions.cancel_edit')}
           </button>
         </div>
       )}
 
-      {/* ═══ Bottom Actions Bar ═══ */}
       <div className="wizard-bottom-bar">
         <button
           className="btn"
@@ -2422,7 +2224,7 @@ const DataEntryWizard = () => {
             transition: 'all 0.2s'
           }}
           onClick={() => {
-            if (window.confirm('⚠️ هل أنت متأكد من تفريغ جميع البيانات وبدء طلبية جديدة؟\n\nسيتم مسح كل الحقول المدخلة وإعادة تعيين النموذج بالكامل.')) {
+            if (window.confirm(t('entry.messages.confirm_clear'))) {
               handleClear();
             }
           }}
@@ -2437,7 +2239,7 @@ const DataEntryWizard = () => {
             e.currentTarget.style.transform = 'translateY(0)';
           }}
         >
-          <RefreshCw size={18} /> تفريغ وبدء جديد
+          <RefreshCw size={18} /> {t('entry.actions.clear_btn')}
         </button>
 
         {isEditMode ? (
@@ -2446,29 +2248,31 @@ const DataEntryWizard = () => {
               className="btn btn-outline"
               style={{ flex: 1, maxWidth: '180px', fontSize: '0.95rem', padding: '0.9rem', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.4)' }}
               onClick={handleDeleteOrder}
-              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.1)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
             >
-              <Trash2 size={18} /> حذف الطلبية
+              <Trash2 size={18} /> {t('entry.actions.delete_btn')}
             </button>
             <button
-              className="btn btn-accent"
-              style={{ flex: 2, maxWidth: '300px', fontSize: '1.1rem', padding: '0.9rem' }}
-              onClick={handleUpdate}
+              className="btn"
+              style={{ flex: 1.5, maxWidth: '250px', fontSize: '1rem', padding: '0.9rem', backgroundColor: '#3b82f6', color: '#fff', fontWeight: 'bold' }}
+              onClick={handleSaveAsCopy}
             >
-              <Edit3 size={20} /> تحديث الطلبية #{originalSerial}
+              <Copy size={18} /> {t('entry.actions.save_as_copy')}
             </button>
             <button
               className="btn btn-primary"
-              style={{ flex: 1, maxWidth: '250px', fontSize: '1rem', padding: '0.9rem' }}
-              onClick={handleSaveAsCopy}
+              style={{ flex: 2, maxWidth: '350px', fontSize: '1.1rem', padding: '0.9rem', fontWeight: 'bold' }}
+              onClick={handleUpdate}
             >
-              <Copy size={18} /> حفظ كنسخة جديدة
+              <Save size={20} /> {t('entry.actions.update_btn', { serial: originalSerial })}
             </button>
           </>
         ) : (
-          <button className="btn btn-accent" style={{ flex: 2, maxWidth: '400px', fontSize: '1.2rem', padding: '1rem' }} onClick={handleSaveNew}>
-            <Save size={24} /> اعتماد وحفظ الطلب
+          <button
+            className="btn btn-primary"
+            style={{ flex: 3, maxWidth: '600px', fontSize: '1.15rem', padding: '1rem', fontWeight: 'bold', boxShadow: '0 4px 15px rgba(212, 175, 55, 0.3)' }}
+            onClick={handleSaveNew}
+          >
+            <Save size={22} /> {t('entry.actions.save_btn')}
           </button>
         )}
       </div>

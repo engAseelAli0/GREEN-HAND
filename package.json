@@ -15,6 +15,8 @@
     "fabric": "^7.2.0",
     "html2canvas": "^1.4.1",
     "html2pdf.js": "^0.14.0",
+    "i18next": "^26.0.10",
+    "i18next-browser-languagedetector": "^8.2.1",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.7",
     "lucide-react": "^1.7.0",
@@ -22,6 +24,7 @@
     "react-barcode": "^1.6.1",
     "react-dom": "^19.2.4",
     "react-hot-toast": "^2.6.0",
+    "react-i18next": "^17.0.7",
     "react-router-dom": "^7.13.2",
     "xlsx": "^0.18.5"
   },

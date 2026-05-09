@@ -299,7 +299,7 @@ const AdminDashboard = () => {
       justifyContent: 'space-between',
       gap: '1rem',
       padding: '1.5rem 2rem',
-      background: 'linear-gradient(135deg, rgba(22, 27, 34, 0.95), rgba(13, 17, 23, 0.98))',
+      background: 'linear-gradient(135deg, var(--surface-color), var(--bg-color))',
       borderRadius: 'var(--radius-lg)',
       border: '1px solid rgba(212, 175, 55, 0.15)',
       marginBottom: '1.5rem',
@@ -311,7 +311,7 @@ const AdminDashboard = () => {
       gap: '0.85rem',
       fontSize: '1.35rem',
       fontWeight: '700',
-      background: 'linear-gradient(135deg, var(--primary-color), var(--accent-color))',
+      background: 'linear-gradient(135deg, var(--text-strong), var(--accent-color))',
       WebkitBackgroundClip: 'text',
       WebkitTextFillColor: 'transparent',
       backgroundClip: 'text',
@@ -339,7 +339,7 @@ const AdminDashboard = () => {
       flexDirection: 'column',
       gap: '0.35rem',
       padding: '1rem',
-      background: 'linear-gradient(180deg, var(--surface-color), rgba(22, 27, 34, 0.95))',
+      background: 'linear-gradient(180deg, var(--surface-color), var(--bg-color))',
       borderRadius: 'var(--radius-lg)',
       border: '1px solid var(--border-color)',
       boxShadow: '0 4px 16px rgba(0, 0, 0, 0.25)',
@@ -423,7 +423,7 @@ const AdminDashboard = () => {
       gap: '0.75rem',
       fontSize: '1.15rem',
       fontWeight: '600',
-      color: 'var(--primary-color)',
+      color: 'var(--text-strong)',
     },
     badge: {
       display: 'inline-flex',
@@ -652,7 +652,7 @@ const AdminDashboard = () => {
                 onMouseEnter={e => {
                   if (!isActive) {
                     e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)';
-                    e.currentTarget.style.color = 'var(--primary-color)';
+                    e.currentTarget.style.color = 'var(--text-strong)';
                   }
                 }}
                 onMouseLeave={e => {
@@ -1259,7 +1259,7 @@ const AdminDashboard = () => {
             padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem',
             animation: 'fadeIn 0.2s ease-out'
           }}>
-            <h3 style={{ fontSize: '1.15rem', color: 'var(--primary-color)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <h3 style={{ fontSize: '1.15rem', color: 'var(--text-strong)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <Tag size={20} color="var(--accent-color)" />
               تحديد القطع المكونة التابعة
             </h3>

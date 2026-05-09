@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { supabase } from '../supabaseClient';
 import { useAppData } from '../context/AppDataContext';
 import { Filter, Download, FileText, Printer, Calendar, Factory, CheckCircle2, Box } from 'lucide-react';
@@ -9,6 +10,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 const WarehouseReceipt = () => {
+  const { t } = useTranslation();
   const { lookups } = useAppData();
   const [orders, setOrders] = useState([]);
   const [receivings, setReceivings] = useState([]);
@@ -71,7 +73,7 @@ const WarehouseReceipt = () => {
       applyFilters(oData || [], rData || []);
     } catch (err) {
       console.error(err);
-      toast.error('حدث خطأ أثناء جلب البيانات');
+      toast.error(t('warehouse.messages.fetch_error'));
     } finally {
       setIsLoading(false);
     }
@@ -170,7 +172,7 @@ const WarehouseReceipt = () => {
     });
 
     setFilteredData(result);
-    toast.success(`تم العثور على ${result.length} نتيجة`, { id: 'filter-toast' });
+    toast.success(t('warehouse.messages.results_found', { count: result.length }), { id: 'filter-toast' });
   };
 
   const handleSearch = async () => {
@@ -190,10 +192,25 @@ const WarehouseReceipt = () => {
 
   // Export Handlers
   const exportToPDF = async () => {
-    if (filteredData.length === 0) return toast.error('No data to export');
-    const toastId = toast.loading('Exporting PDF...');
+    if (filteredData.length === 0) return toast.error(t('warehouse.messages.no_data_export'));
+    const toastId = toast.loading(t('warehouse.messages.exporting_pdf'));
     try {
-       const tblHead = [['Carton No', 'Serial', 'Product', 'CTNs', 'Pcs/CTN', 'Item Qty', 'Total Qty', 'CCY', 'Unit Price', 'Total Price', 'Amount', 'Carton Size', 'CBM', 'Remarks']];
+       const tblHead = [[
+         t('warehouse.table.cols.carton_no'), 
+         t('warehouse.table.cols.serial'), 
+         t('warehouse.table.cols.product'), 
+         t('warehouse.table.cols.ctns_qty'), 
+         t('warehouse.table.cols.ctn_pcs'), 
+         t('warehouse.table.cols.item_qty'), 
+         t('warehouse.table.cols.total_qty'), 
+         t('warehouse.table.cols.ccy'), 
+         t('warehouse.table.cols.unit_price'), 
+         t('warehouse.table.cols.total_price'), 
+         t('warehouse.table.cols.tot_amount'), 
+         t('warehouse.table.cols.carton_size'), 
+         t('warehouse.table.cols.cbm'), 
+         t('warehouse.table.cols.remarks')
+       ]];
        const tblBody = [];
        filteredData.forEach((order) => {
          order.packages.forEach((pkg) => {
@@ -208,7 +225,7 @@ const WarehouseReceipt = () => {
          });
        });
        tblBody.push([
-         { content: 'TOTAL', colSpan: 3, styles: { fontStyle: 'bold', fillColor: [220, 230, 241], fontSize: 8 } },
+         { content: t('packing.footer.total'), colSpan: 3, styles: { fontStyle: 'bold', fillColor: [220, 230, 241], fontSize: 8 } },
          { content: String(grandTotalCtn), styles: { fontStyle: 'bold', fillColor: [220, 230, 241] } },
          { content: '', styles: { fillColor: [220, 230, 241] } },
          { content: '', styles: { fillColor: [220, 230, 241] } },
@@ -219,7 +236,7 @@ const WarehouseReceipt = () => {
          { content: grandTotalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 }), styles: { fontStyle: 'bold', fillColor: [220, 230, 241], fontSize: 8 } },
          { content: '', styles: { fillColor: [220, 230, 241] } },
          { content: '', styles: { fillColor: [220, 230, 241] } },
-         { content: grandTotalItems + ' Items', styles: { fontStyle: 'bold', fillColor: [220, 230, 241] } },
+         { content: grandTotalItems + ' ' + t('warehouse.results.models_count'), styles: { fontStyle: 'bold', fillColor: [220, 230, 241] } },
        ]);
        var contentH = 50 + (tblBody.length * 4.5) + 35;
        var pdfH = Math.max(210, contentH);
@@ -228,15 +245,15 @@ const WarehouseReceipt = () => {
        var mg = 8;
        pdf.setFontSize(16);
        pdf.setFont('helvetica', 'bold');
-       pdf.text('Warehouse Receipt', pageW / 2, 12, { align: 'center' });
+       pdf.text(t('warehouse.title'), pageW / 2, 12, { align: 'center' });
        pdf.setDrawColor(50, 50, 50);
        pdf.setLineWidth(0.6);
        pdf.line(mg, 15, pageW - mg, 15);
        autoTable(pdf, {
          startY: 17,
          body: [
-           ['Buyer No:', headerInfo.buyerNo || '-', 'Supplier:', headerInfo.supplier || '-', 'Consignee:', headerInfo.consignee || '-'],
-           ['Receipt Date:', headerInfo.receiptDate || '-', 'Order No:', headerInfo.orderNo || '-', 'Inspector:', headerInfo.inspector || '-'],
+           [t('warehouse.header.buyer_no') + ':', headerInfo.buyerNo || '-', t('warehouse.header.supplier') + ':', headerInfo.supplier || '-', t('warehouse.header.consignee') + ':', headerInfo.consignee || '-'],
+           [t('warehouse.header.receipt_date') + ':', headerInfo.receiptDate || '-', t('warehouse.header.order_no') + ':', headerInfo.orderNo || '-', t('warehouse.header.inspector') + ':', headerInfo.inspector || '-'],
          ],
          theme: 'grid',
          styles: { fontSize: 7, cellPadding: 2, halign: 'center', font: 'helvetica' },
@@ -268,16 +285,16 @@ const WarehouseReceipt = () => {
        pdf.setDrawColor(50, 50, 50);
        pdf.setLineWidth(0.3);
        pdf.line(mg, fY - 2, pageW - mg, fY - 2);
-       pdf.text('Shipping Date: ' + (headerInfo.shippingDate || '____________'), mg, fY + 2);
-       pdf.text('Cabinet No: ' + (headerInfo.cabinetNumber || '____________'), mg + 90, fY + 2);
-       pdf.text('Shipper: ' + (headerInfo.shipper || '____________'), mg + 180, fY + 2);
+       pdf.text(t('warehouse.footer.shipping_date') + ': ' + (headerInfo.shippingDate || '____________'), mg, fY + 2);
+       pdf.text(t('warehouse.footer.cabinet_no') + ': ' + (headerInfo.cabinetNumber || '____________'), mg + 90, fY + 2);
+       pdf.text(t('warehouse.footer.shipper') + ': ' + (headerInfo.shipper || '____________'), mg + 180, fY + 2);
        pdf.setFontSize(7);
        pdf.setFont('helvetica', 'normal');
        pdf.text('Tel: ' + (headerInfo.companyPhone || '-'), mg, fY + 7);
        pdf.save('Warehouse_Receipt_' + new Date().toISOString().split('T')[0] + '.pdf');
-       toast.success('Done!', { id: toastId });
+       toast.success(t('warehouse.messages.export_success'), { id: toastId });
     } catch (err) {
-       toast.error('PDF export failed', { id: toastId });
+       toast.error(t('warehouse.messages.export_failed'), { id: toastId });
        console.error('PDF Export Error:', err);
     }
   };
@@ -290,9 +307,9 @@ const WarehouseReceipt = () => {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
         <div>
           <h1 className="text-gradient" style={{ fontSize: '2.2rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <FileText size={35} color="var(--accent-color)" /> تقرير البضائع المستلمة
+            <FileText size={35} color="var(--accent-color)" /> {t('warehouse.title')}
           </h1>
-          <p style={{ color: 'var(--text-muted)' }}>Warehouse Receipt - 仓库出入货清单</p>
+          <p style={{ color: 'var(--text-muted)' }}>{t('warehouse.subtitle')}</p>
         </div>
       </div>
 
@@ -300,26 +317,26 @@ const WarehouseReceipt = () => {
       <div className="card glass-panel" style={{ marginBottom: '2rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem' }}>
           <Filter color="var(--accent-color)" />
-          <h3 style={{ margin: 0 }}>محددات الاستعلام (Filters)</h3>
+          <h3 style={{ margin: 0 }}>{t('warehouse.filters.title')}</h3>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
           <CustomDateInput 
-            label={<><Calendar size={14}/> من تاريخ</>}
+            label={<><Calendar size={14}/> {t('warehouse.filters.from_date')}</>}
             value={filters.fromDate}
             onChange={(val) => updateFilter('fromDate', val)}
           />
 
           <CustomDateInput 
-            label={<><Calendar size={14}/> إلى تاريخ</>}
+            label={<><Calendar size={14}/> {t('warehouse.filters.to_date')}</>}
             value={filters.toDate}
             onChange={(val) => updateFilter('toDate', val)}
           />
 
           <div className="form-group">
-            <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><Factory size={14}/> تحديد المصنع</label>
+            <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><Factory size={14}/> {t('warehouse.filters.factory')}</label>
             <select className="form-control" value={filters.factory} onChange={(e) => updateFilter('factory', e.target.value)}>
-              <option value="">-- جميع المصانع --</option>
+              <option value="">{t('warehouse.filters.all_factories')}</option>
               {lookups.factories?.map((f, i) => {
                 const factoryName = typeof f === 'object' ? f.name : f;
                 return <option key={i} value={factoryName}>{factoryName}</option>;
@@ -328,18 +345,18 @@ const WarehouseReceipt = () => {
           </div>
 
           <div className="form-group">
-            <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><Box size={14}/> حالة الاستلام</label>
+            <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><Box size={14}/> {t('warehouse.filters.status')}</label>
             <select className="form-control" value={filters.status} onChange={(e) => updateFilter('status', e.target.value)}>
-              <option value="الكل">الكل (All)</option>
-              <option value="مستلمة">مستلمة (Received)</option>
-              <option value="غير مستلمة">غير مستلمة (Unreceived)</option>
+              <option value="الكل">{t('warehouse.filters.all')}</option>
+              <option value="مستلمة">{t('warehouse.filters.received')}</option>
+              <option value="غير مستلمة">{t('warehouse.filters.unreceived')}</option>
             </select>
           </div>
         </div>
         
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '1.5rem' }}>
           <button className="btn btn-primary" onClick={handleSearch} disabled={isLoading} style={{ padding: '0.5rem 3rem' }}>
-             {isLoading ? 'جاري البحث...' : 'بحث وعرض'}
+             {isLoading ? t('warehouse.filters.searching') : t('warehouse.filters.search_btn')}
           </button>
         </div>
       </div>
@@ -347,15 +364,15 @@ const WarehouseReceipt = () => {
       {/* Results Controls */}
       {filteredData.length > 0 && (
         <div className="hide-on-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-           <h3 style={{ margin: 0, color: 'var(--primary-color)' }}>
-              معاينة الإيصال <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', fontWeight: 'normal' }}>({filteredData.length} موديلات)</span>
+           <h3 style={{ margin: 0, color: 'var(--text-strong)' }}>
+            {t('warehouse.results.preview')} <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', fontWeight: 'normal' }}>({filteredData.length} {t('warehouse.results.models_count')})</span>
            </h3>
            <div style={{ display: 'flex', gap: '1rem' }}>
               <button className="btn btn-outline" onClick={() => window.print()} style={{ color: 'var(--text-main)', borderColor: 'var(--border-color)' }}>
-                  <Printer size={20} /> طباعة (Print)
+                  <Printer size={20} /> {t('warehouse.results.print_btn')}
               </button>
               <button className="btn" onClick={exportToPDF} style={{ backgroundColor: '#ef4444', color: 'white', boxShadow: '0 4px 15px rgba(239, 68, 68, 0.3)' }}>
-                  <Download size={20} /> تحميل PDF
+                  <Download size={20} /> {t('warehouse.results.download_pdf')}
               </button>
            </div>
         </div>
@@ -375,27 +392,27 @@ const WarehouseReceipt = () => {
             {/* Header Form Settings (Visible on screen, looks like text on print) */}
             <div className="hide-on-print" style={{ marginBottom: '1.5rem', padding: '1rem', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', direction: 'rtl' }}>
                 <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label style={{ fontSize: '0.8rem', color: '#64748b' }}>Buyer No (العميل)</label>
+                    <label style={{ fontSize: '0.8rem', color: '#64748b' }}>{t('warehouse.header.buyer_no')}</label>
                     <input type="text" value={headerInfo.buyerNo} onChange={e => updateHeaderInfo('buyerNo', e.target.value)} style={{ width: '100%', padding: '0.4rem', border: '1px solid #cbd5e1', borderRadius: '4px' }} />
                 </div>
                 <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label style={{ fontSize: '0.8rem', color: '#64748b' }}>Supplier (المورد)</label>
+                    <label style={{ fontSize: '0.8rem', color: '#64748b' }}>{t('warehouse.header.supplier')}</label>
                     <input type="text" value={headerInfo.supplier} onChange={e => updateHeaderInfo('supplier', e.target.value)} style={{ width: '100%', padding: '0.4rem', border: '1px solid #cbd5e1', borderRadius: '4px' }} />
                 </div>
                 <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label style={{ fontSize: '0.8rem', color: '#64748b' }}>Consignee (المستلم)</label>
+                    <label style={{ fontSize: '0.8rem', color: '#64748b' }}>{t('warehouse.header.consignee')}</label>
                     <input type="text" value={headerInfo.consignee} onChange={e => updateHeaderInfo('consignee', e.target.value)} style={{ width: '100%', padding: '0.4rem', border: '1px solid #cbd5e1', borderRadius: '4px' }} />
                 </div>
                 <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label style={{ fontSize: '0.8rem', color: '#64748b' }}>Inspector (المفتش)</label>
+                    <label style={{ fontSize: '0.8rem', color: '#64748b' }}>{t('warehouse.header.inspector')}</label>
                     <input type="text" value={headerInfo.inspector} onChange={e => updateHeaderInfo('inspector', e.target.value)} style={{ width: '100%', padding: '0.4rem', border: '1px solid #cbd5e1', borderRadius: '4px' }} />
                 </div>
                 <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label style={{ fontSize: '0.8rem', color: '#64748b' }}>Order No (رقم الطلبية)</label>
+                    <label style={{ fontSize: '0.8rem', color: '#64748b' }}>{t('warehouse.header.order_no')}</label>
                     <input type="text" value={headerInfo.orderNo} onChange={e => updateHeaderInfo('orderNo', e.target.value)} style={{ width: '100%', padding: '0.4rem', border: '1px solid #cbd5e1', borderRadius: '4px' }} />
                 </div>
                 <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label style={{ fontSize: '0.8rem', color: '#64748b' }}>Receipt Date (تاريخ الاستلام)</label>
+                    <label style={{ fontSize: '0.8rem', color: '#64748b' }}>{t('warehouse.header.receipt_date')}</label>
                     <input type="date" value={headerInfo.receiptDate} onChange={e => updateHeaderInfo('receiptDate', e.target.value)} style={{ width: '100%', padding: '0.4rem', border: '1px solid #cbd5e1', borderRadius: '4px' }} />
                 </div>
             </div>
@@ -403,10 +420,10 @@ const WarehouseReceipt = () => {
             {/* Print Header */}
             <div className="print-header" style={{ textAlign: 'center', marginBottom: '1rem', paddingBottom: '0.5rem', borderBottom: '3px solid #1e293b' }}>
                 <h1 style={{ fontSize: '2.2rem', margin: 0, color: '#0f172a', fontWeight: '900', letterSpacing: '1px' }}>
-                    Warehouse Receipt
+                    {t('warehouse.title')}
                 </h1>
                 <h2 style={{ fontSize: '1.5rem', margin: '0.2rem 0 0', color: '#334155', fontWeight: 'bold' }}>
-                    仓库出入货清单
+                    {t('warehouse.subtitle').split(' - ')[1]}
                 </h2>
             </div>
 
@@ -414,44 +431,44 @@ const WarehouseReceipt = () => {
             <div className="info-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1px', backgroundColor: '#94a3b8', border: '2px solid #334155', marginBottom: '1rem' }}>
                 <div style={{ display: 'flex', backgroundColor: '#fff' }}>
                     <div className="info-label" style={{ width: '40%', padding: '8px', backgroundColor: '#e2e8f0', fontWeight: 'bold', fontSize: '0.9rem', color: '#0f172a', borderRight: '1px solid #94a3b8' }}>
-                        <div>Buyer No</div>
-                        <div style={{ color: '#ef4444', fontSize: '0.75rem' }}>客户编号:</div>
+                        <div>{t('warehouse.header.buyer_no').split(' (')[0]}</div>
+                        <div style={{ color: '#ef4444', fontSize: '0.75rem' }}>{t('warehouse.header.buyer_no_zh')}:</div>
                     </div>
                     <div style={{ width: '60%', padding: '8px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{headerInfo.buyerNo || '-'}</div>
                 </div>
                 <div style={{ display: 'flex', backgroundColor: '#fff' }}>
                     <div className="info-label" style={{ width: '40%', padding: '8px', backgroundColor: '#e2e8f0', fontWeight: 'bold', fontSize: '0.9rem', color: '#0f172a', borderRight: '1px solid #94a3b8' }}>
-                        <div>Supplier</div>
-                        <div style={{ color: '#ef4444', fontSize: '0.75rem' }}>供应商:</div>
+                        <div>{t('warehouse.header.supplier').split(' (')[0]}</div>
+                        <div style={{ color: '#ef4444', fontSize: '0.75rem' }}>{t('warehouse.header.supplier_zh')}:</div>
                     </div>
                     <div style={{ width: '60%', padding: '8px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{headerInfo.supplier || '-'}</div>
                 </div>
                 <div style={{ display: 'flex', backgroundColor: '#fff' }}>
                     <div className="info-label" style={{ width: '40%', padding: '8px', backgroundColor: '#e2e8f0', fontWeight: 'bold', fontSize: '0.9rem', color: '#0f172a', borderRight: '1px solid #94a3b8' }}>
-                        <div>Consignee</div>
-                        <div style={{ color: '#ef4444', fontSize: '0.75rem' }}>收货人:</div>
+                        <div>{t('warehouse.header.consignee').split(' (')[0]}</div>
+                        <div style={{ color: '#ef4444', fontSize: '0.75rem' }}>{t('warehouse.header.consignee_zh')}:</div>
                     </div>
                     <div style={{ width: '60%', padding: '8px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{headerInfo.consignee || '-'}</div>
                 </div>
                 
                 <div style={{ display: 'flex', backgroundColor: '#fff' }}>
                     <div className="info-label" style={{ width: '40%', padding: '8px', backgroundColor: '#e2e8f0', fontWeight: 'bold', fontSize: '0.9rem', color: '#0f172a', borderRight: '1px solid #94a3b8' }}>
-                        <div>Receipt Date</div>
-                        <div style={{ color: '#ef4444', fontSize: '0.75rem' }}>收货日期:</div>
+                        <div>{t('warehouse.header.receipt_date').split(' (')[0]}</div>
+                        <div style={{ color: '#ef4444', fontSize: '0.75rem' }}>{t('warehouse.header.receipt_date_zh')}:</div>
                     </div>
                     <div style={{ width: '60%', padding: '8px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{headerInfo.receiptDate || '-'}</div>
                 </div>
                 <div style={{ display: 'flex', backgroundColor: '#fff' }}>
                     <div className="info-label" style={{ width: '40%', padding: '8px', backgroundColor: '#e2e8f0', fontWeight: 'bold', fontSize: '0.9rem', color: '#0f172a', borderRight: '1px solid #94a3b8' }}>
-                        <div>Order No.</div>
-                        <div style={{ color: '#ef4444', fontSize: '0.75rem' }}>订单号:</div>
+                        <div>{t('warehouse.header.order_no').split(' (')[0]}</div>
+                        <div style={{ color: '#ef4444', fontSize: '0.75rem' }}>{t('warehouse.header.order_no_zh')}:</div>
                     </div>
                     <div style={{ width: '60%', padding: '8px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{headerInfo.orderNo || '-'}</div>
                 </div>
                 <div style={{ display: 'flex', backgroundColor: '#fff' }}>
                     <div className="info-label" style={{ width: '40%', padding: '8px', backgroundColor: '#e2e8f0', fontWeight: 'bold', fontSize: '0.9rem', color: '#0f172a', borderRight: '1px solid #94a3b8' }}>
-                        <div>Inspector</div>
-                        <div style={{ color: '#ef4444', fontSize: '0.75rem' }}>验货人:</div>
+                        <div>{t('warehouse.header.inspector').split(' (')[0]}</div>
+                        <div style={{ color: '#ef4444', fontSize: '0.75rem' }}>{t('warehouse.header.inspector_zh')}:</div>
                     </div>
                     <div style={{ width: '60%', padding: '8px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{headerInfo.inspector || '-'}</div>
                 </div>
@@ -462,60 +479,60 @@ const WarehouseReceipt = () => {
                 <thead>
                     <tr style={{ backgroundColor: '#e2e8f0', textAlign: 'center', borderBottom: '2px solid #334155' }}>
                         <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', width: '6%' }}>
-                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>箱号</div>
-                            <div style={{ fontSize: '0.7rem' }}>Carton No</div>
+                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.carton_no_zh')}</div>
+                            <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.carton_no')}</div>
                         </th>
                         <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', width: '8%' }}>
-                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>货号</div>
-                            <div style={{ fontSize: '0.7rem' }}>Items No</div>
+                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.item_no_zh')}</div>
+                            <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.item_no')}</div>
                         </th>
                         <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', width: '14%' }}>
-                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>货名</div>
-                            <div style={{ fontSize: '0.7rem' }}>Product Name</div>
+                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.product_name_zh')}</div>
+                            <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.product_name')}</div>
                         </th>
                         <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', width: '5%' }}>
-                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>箱数</div>
-                            <div style={{ fontSize: '0.7rem' }}>CTNs Qty</div>
+                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.ctns_qty_zh')}</div>
+                            <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.ctns_qty')}</div>
                         </th>
                         <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', width: '6%' }}>
-                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>数量</div>
-                            <div style={{ fontSize: '0.7rem' }}>CTN/Pcs</div>
+                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.ctn_pcs_zh')}</div>
+                            <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.ctn_pcs')}</div>
                         </th>
                         <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', width: '6%' }}>
-                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>产品数量</div>
-                            <div style={{ fontSize: '0.7rem' }}>Item Qty</div>
+                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.item_qty_zh')}</div>
+                            <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.item_qty')}</div>
                         </th>
                         <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', width: '6%' }}>
-                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>总数量</div>
-                            <div style={{ fontSize: '0.7rem' }}>Total Qty</div>
+                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.total_qty_zh')}</div>
+                            <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.total_qty')}</div>
                         </th>
                         <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', width: '4%' }}>
-                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>货币</div>
-                            <div style={{ fontSize: '0.7rem' }}>CCY</div>
+                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.ccy_zh')}</div>
+                            <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.ccy')}</div>
                         </th>
                         <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', width: '7%' }}>
-                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>单价</div>
-                            <div style={{ fontSize: '0.7rem' }}>UNIT PRICE</div>
+                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.unit_price_zh')}</div>
+                            <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.unit_price')}</div>
                         </th>
                         <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', width: '9%' }}>
-                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>总价</div>
-                            <div style={{ fontSize: '0.7rem' }}>Total Price</div>
+                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.total_price_zh')}</div>
+                            <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.total_price')}</div>
                         </th>
                         <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', width: '9%' }}>
-                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>总金额</div>
-                            <div style={{ fontSize: '0.7rem' }}>Tot. Amount</div>
+                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.tot_amount_zh')}</div>
+                            <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.tot_amount')}</div>
                         </th>
                         <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', width: '10%' }}>
-                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>外箱尺寸</div>
-                            <div style={{ fontSize: '0.7rem' }}>Carton Size</div>
+                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.carton_size_zh')}</div>
+                            <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.carton_size')}</div>
                         </th>
                         <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', width: '5%' }}>
-                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>总体积</div>
-                            <div style={{ fontSize: '0.7rem' }}>CBM</div>
+                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.cbm_zh')}</div>
+                            <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.cbm')}</div>
                         </th>
                         <th style={{ padding: '8px 4px', width: '5%' }}>
-                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>备注</div>
-                            <div style={{ fontSize: '0.7rem' }}>Remarks</div>
+                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.remarks_zh')}</div>
+                            <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.remarks')}</div>
                         </th>
                     </tr>
                 </thead>
@@ -572,10 +589,10 @@ const WarehouseReceipt = () => {
 
                     {/* Totals Row */}
                     <tr className="totals-row" style={{ backgroundColor: '#e2e8f0', textAlign: 'center', fontWeight: 'bold', borderBottom: '2px solid #334155', borderTop: '2px solid #334155' }}>
-                        <td colSpan={2} style={{ padding: '10px 4px', borderRight: '1px solid #94a3b8', fontSize: '1rem' }}>Total</td>
-                        <td style={{ padding: '10px 4px', borderRight: '1px solid #94a3b8', color: '#1e293b' }}>{grandTotalItems} Items</td>
-                        <td colSpan={2} style={{ padding: '10px 4px', borderRight: '1px solid #94a3b8', color: '#1e293b' }}>{grandTotalCtn} CTN</td>
-                        <td colSpan={2} style={{ padding: '10px 4px', borderRight: '1px solid #94a3b8', color: '#1e293b' }}>{grandTotalPcs} PCS</td>
+                        <td colSpan={2} style={{ padding: '10px 4px', borderRight: '1px solid #94a3b8', fontSize: '1rem' }}>{t('packing.footer.total')}</td>
+                        <td style={{ padding: '10px 4px', borderRight: '1px solid #94a3b8', color: '#1e293b' }}>{grandTotalItems} {t('warehouse.results.models_count')}</td>
+                        <td colSpan={2} style={{ padding: '10px 4px', borderRight: '1px solid #94a3b8', color: '#1e293b' }}>{grandTotalCtn} {t('shipping.footer.ctn')}</td>
+                        <td colSpan={2} style={{ padding: '10px 4px', borderRight: '1px solid #94a3b8', color: '#1e293b' }}>{grandTotalPcs} {t('shipping.footer.pcs')}</td>
                         <td colSpan={7} style={{ padding: '10px 4px', color: '#1e293b', fontSize: '1.1rem' }}>{grandTotalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })} ¥ RMB</td>
                     </tr>
                 </tbody>
@@ -584,20 +601,20 @@ const WarehouseReceipt = () => {
             {/* Footer Summary */}
             <div className="footer-summary" style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1.5rem', padding: '1rem', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '0.9rem', fontWeight: 'bold', color: '#334155' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <span style={{ color: '#ef4444' }}>出货日期</span>
-                    <span>Shipping Date:</span>
+                    <span style={{ color: '#ef4444' }}>{t('warehouse.footer.shipping_date_zh')}</span>
+                    <span>{t('warehouse.footer.shipping_date')}:</span>
                     <input className="hide-on-print" type="date" value={headerInfo.shippingDate} onChange={e => updateHeaderInfo('shippingDate', e.target.value)} style={{ padding: '0.2rem', border: '1px solid #cbd5e1', borderRadius: '4px' }} />
                     <span className="print-only-inline" style={{ display: 'none' }}>{headerInfo.shippingDate || '------------------'}</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <span style={{ color: '#ef4444' }}>柜号</span>
-                    <span>Cabinet Number:</span>
+                    <span style={{ color: '#ef4444' }}>{t('warehouse.footer.cabinet_no_zh')}</span>
+                    <span>{t('warehouse.footer.cabinet_no')}:</span>
                     <input className="hide-on-print" type="text" value={headerInfo.cabinetNumber} onChange={e => updateHeaderInfo('cabinetNumber', e.target.value)} style={{ padding: '0.2rem', border: '1px solid #cbd5e1', borderRadius: '4px' }} />
                     <span className="print-only-inline" style={{ display: 'none' }}>{headerInfo.cabinetNumber || '------------------'}</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <span style={{ color: '#ef4444' }}>出货人</span>
-                    <span>Shipper:</span>
+                    <span style={{ color: '#ef4444' }}>{t('warehouse.footer.shipper_zh')}</span>
+                    <span>{t('warehouse.footer.shipper')}:</span>
                     <input className="hide-on-print" type="text" value={headerInfo.shipper} onChange={e => updateHeaderInfo('shipper', e.target.value)} style={{ padding: '0.2rem', border: '1px solid #cbd5e1', borderRadius: '4px' }} />
                     <span className="print-only-inline" style={{ display: 'none' }}>{headerInfo.shipper || '------------------'}</span>
                 </div>
@@ -605,8 +622,8 @@ const WarehouseReceipt = () => {
 
             <div style={{ marginTop: '1.5rem', display: 'flex', gap: '1.5rem', alignItems: 'center', color: '#0f172a', fontWeight: 'bold' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <span>Company Phone No.</span>
-                    <span style={{ color: '#ef4444' }}>公司电话:</span>
+                    <span>{t('warehouse.header.company_phone')}</span>
+                    <span style={{ color: '#ef4444' }}>{t('warehouse.header.company_phone_zh')}:</span>
                 </div>
                 <div style={{ display: 'flex', gap: '2rem', fontSize: '1.1rem' }}>
                     <input className="hide-on-print" type="text" value={headerInfo.companyPhone} onChange={e => updateHeaderInfo('companyPhone', e.target.value)} style={{ width: '300px', padding: '0.2rem', border: '1px solid #cbd5e1', borderRadius: '4px' }} />

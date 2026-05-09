@@ -2,9 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { Search, Save, Factory, AlertCircle, Info, Palette, CheckCircle2, X, Box } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useTranslation } from 'react-i18next';
 import { extractColorCSS } from '../utils/textUtils';
 
 const FactoryOwnerPortal = () => {
+  const { t } = useTranslation();
   const [modelNo, setModelNo] = useState('');
   const [isFetched, setIsFetched] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
@@ -25,7 +27,7 @@ const FactoryOwnerPortal = () => {
     reqTotalQuantity: 0,
     factoryId: '',
     factoryName: '',
-    factoryStatus: 'لم يتم التسليم' // Default Status
+    factoryStatus: t('owner.info.not_delivered') // Default Status
   });
 
   // Colors Table State
@@ -59,7 +61,7 @@ const FactoryOwnerPortal = () => {
         .single();
         
       if (oError || !oDataResp) {
-         toast.error(`لم يتم العثور على طلبية برقم الموديل: ${termToSearch}`);
+         toast.error(`${t('owner.messages.not_found')} ${termToSearch}`);
          setIsSearching(false);
          setIsFetched(false);
          return;
@@ -83,13 +85,13 @@ const FactoryOwnerPortal = () => {
 
       setProductInfo({
         mainBarcode: oData.barcode || `1000${oData.serialNumber}`,
-        prodFullName: oData.productName || 'غير مسجل',
+        prodFullName: oData.productName || t('owner.messages.unregistered'),
         prodPrice: parseFloat(oData.productPrice) || 0,
         priceCurrency: oData.currency || '',
         reqTotalQuantity: parseInt(oData.totalQuantity) || 0,
-        factoryId: oData.factoryId || 'غير محدد',
+        factoryId: oData.factoryId || t('owner.messages.undefined'),
         factoryName: '',
-        factoryStatus: oData.factoryStatus || 'لم يتم التسليم'
+        factoryStatus: oData.factoryStatus || t('owner.info.not_delivered')
       });
       
       const newCols = [];
@@ -123,10 +125,10 @@ const FactoryOwnerPortal = () => {
       }
       
       setIsFetched(true);
-      toast.success(`تم استرداد بيانات الموديل: ${termToSearch} بنجاح`);
+      toast.success(`${t('owner.messages.fetch_success')}: ${termToSearch}`);
 
     } catch (err) {
-      toast.error('حدث خطأ في الاتصال بقاعدة البيانات.');
+      toast.error(t('owner.messages.db_error'));
       console.error(err);
     } finally {
       setIsSearching(false);
@@ -199,7 +201,7 @@ const FactoryOwnerPortal = () => {
 
   const handleSave = async () => {
     if (!isFetched || !originalOrderData) {
-      toast.error('أدخل رقم الموديل أولاً');
+      toast.error(t('owner.search.placeholder'));
       return;
     }
 
@@ -207,8 +209,8 @@ const FactoryOwnerPortal = () => {
     const actualSum = colors.reduce((acc, c) => acc + (parseInt(c.actualQuantity) || 0), 0);
     
     if (hasActualQuantities) {
-        if (productInfo.factoryStatus !== 'تم التسليم') {
-            toast.error('عذراً! عند إدخال كميات فعلية، يجب تغيير حالة المنتج إلى "تم التسليم" أولاً.');
+        if (productInfo.factoryStatus !== t('owner.info.delivered')) {
+            toast.error(t('owner.messages.delivered_status_required'));
             return;
         }
     }
@@ -227,7 +229,7 @@ const FactoryOwnerPortal = () => {
         factoryPackages: packages
     };
     
-    const toastId = toast.loading('جاري حفظ البيانات في قاعدة البيانات...');
+    const toastId = toast.loading(t('owner.messages.saving'));
     try {
       const { error } = await supabase
         .from('orders')
@@ -235,14 +237,14 @@ const FactoryOwnerPortal = () => {
         .eq('serial_number', modelNo.trim());
 
       if (error) throw error;
-      toast.success('تم الحفظ بنجاح!', { id: toastId });
+      toast.success(t('owner.messages.save_success'), { id: toastId });
       
       // Reset form to allow entering a new model
       setModelNo('');
       setIsFetched(false);
       setProductInfo({
         mainBarcode: '', prodFullName: '', prodPrice: 0, priceCurrency: '',
-        reqTotalQuantity: 0, factoryId: '', factoryName: '', factoryStatus: 'لم يتم التسليم'
+        reqTotalQuantity: 0, factoryId: '', factoryName: '', factoryStatus: t('owner.info.not_delivered')
       });
       setColors([]);
       setPackages(Array.from({ length: 4 }).map((_, i) => ({
@@ -251,7 +253,7 @@ const FactoryOwnerPortal = () => {
       setOriginalOrderData(null);
       
     } catch (err) {
-      toast.error(`خطأ في الحفظ! ${err.message}`, { id: toastId });
+      toast.error(`${t('entry.messages.save_error')}: ${err.message}`, { id: toastId });
     }
   };
 
@@ -270,10 +272,10 @@ const FactoryOwnerPortal = () => {
         <div>
           <h1 style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '2.2rem', margin: 0 }}>
             <Factory size={40} color="var(--accent-color)" />
-            بوابة صاحب المصنع (الإنتاج الفعلي)
+            {t('owner.title')}
           </h1>
           <p style={{ color: 'var(--text-muted)', margin: '0.5rem 0 0', paddingRight: '3.5rem' }}>
-            تحديد الكميات التي تم تصنيعها فعلياً لكل لون وتغيير حالة تسليم الموديل.
+            {t('owner.desc')}
           </p>
         </div>
       </div>
@@ -282,7 +284,7 @@ const FactoryOwnerPortal = () => {
       <div className="card" style={{ marginBottom: '2rem', border: '1px solid var(--accent-color)', boxShadow: '0 8px 30px rgba(212, 175, 55, 0.1)' }}>
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end' }}>
           <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
-            <label className="form-label">بحث برقم الموديل (Enter Model NO.)</label>
+            <label className="form-label">{t('owner.search.label')}</label>
             <div style={{ position: 'relative' }}>
               <input
                 type="text"
@@ -291,7 +293,7 @@ const FactoryOwnerPortal = () => {
                 value={modelNo}
                 onChange={(e) => setModelNo(e.target.value)}
                 onKeyDown={handleF9Press}
-                placeholder="أدخل رقم الموديل هنا... (F9)"
+                placeholder={t('owner.search.placeholder')}
                 style={{ fontSize: '1.2rem', padding: '14px 20px', paddingLeft: '50px', background: 'var(--surface-color)' }}
                 autoComplete="off"
               />
@@ -308,7 +310,7 @@ const FactoryOwnerPortal = () => {
                   zIndex: 1000
                 }}>
                   <div style={{ padding: '0.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--surface-highlight)' }}>
-                      <span style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>اختر موديلاً محفوظاً:</span>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>{t('export.select_saved')}</span>
                       <button onClick={() => { setShowSerialsList(false); setSerialSearchQuery(''); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-color)', padding: 0, display: 'flex', alignItems: 'center' }}>
                          <X size={16} />
                       </button>
@@ -318,7 +320,7 @@ const FactoryOwnerPortal = () => {
                     <input
                       ref={serialSearchRef}
                       type="text"
-                      placeholder="🔍 ابحث برقم الموديل..."
+                      placeholder={t('export.search_placeholder')}
                       value={serialSearchQuery}
                       onChange={(e) => setSerialSearchQuery(e.target.value)}
                       onKeyDown={(e) => {
@@ -354,7 +356,7 @@ const FactoryOwnerPortal = () => {
                     />
                   </div>
                   {fetchingSerials ? (
-                      <div style={{ padding: '1rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)' }}>جاري التحميل...</div>
+                      <div style={{ padding: '1rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)' }}>{t('entry.actions.loading')}</div>
                   ) : (
                      (() => {
                        const filteredSerials = serialSearchQuery.trim()
@@ -362,7 +364,7 @@ const FactoryOwnerPortal = () => {
                          : availableSerials;
                        return filteredSerials.length === 0 ? (
                          <div style={{ padding: '1rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                           {availableSerials.length === 0 ? 'لا توجد موديلات محفوظة' : 'لا توجد نتائج مطابقة للبحث'}
+                           {availableSerials.length === 0 ? t('entry.actions.no_saved_models') : t('entry.actions.no_match')}
                          </div>
                        ) : (
                         <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
@@ -403,7 +405,7 @@ const FactoryOwnerPortal = () => {
             </div>
           </div>
           <button className="btn btn-primary" onClick={() => handleSearch()} disabled={isSearching} style={{ padding: '14px 30px', fontSize: '1.1rem' }}>
-            {isSearching ? <div className="spinner" style={{ width: '22px', height: '22px', border: '3px solid #fff', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} /> : 'بحث واسترداد'}
+            {isSearching ? <div className="spinner" style={{ width: '22px', height: '22px', border: '3px solid #fff', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} /> : t('owner.search.btn')}
           </button>
         </div>
       </div>
@@ -414,41 +416,41 @@ const FactoryOwnerPortal = () => {
           {/* ─── PRODUCT INFO CARD ─── */}
           <div className="card">
             <div className="tab-section-header">
-              <h3><Info size={22} /> بيانات الطلبية والمصنع (Product & Factory Info)</h3>
+              <h3><Info size={22} /> {t('owner.info.title')}</h3>
             </div>
             
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
               <div style={{ background: 'rgba(212,175,55,0.05)', padding: '12px 16px', borderRadius: '10px', border: '1px solid rgba(212,175,55,0.3)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>حالة المنتج (Product Status)</span>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('owner.info.status')}</span>
                 <select 
                    className="form-control" 
                    value={productInfo.factoryStatus} 
                    onChange={e => setProductInfo({...productInfo, factoryStatus: e.target.value})} 
                    style={{ 
                      padding: '4px', marginTop: '4px', fontWeight: 'bold', border: 'none', background: 'transparent',
-                     color: productInfo.factoryStatus === 'تم التسليم' ? '#16a34a' : '#dc2626',
+                     color: productInfo.factoryStatus === t('owner.info.delivered') ? '#16a34a' : '#dc2626',
                      cursor: 'pointer'
                    }}
                 >
-                  <option value="لم يتم التسليم">لم يتم التسليم</option>
-                  <option value="تم التسليم">تم التسليم</option>
+                  <option value={t('owner.info.not_delivered')}>{t('owner.info.not_delivered')}</option>
+                  <option value={t('owner.info.delivered')}>{t('owner.info.delivered')}</option>
                 </select>
               </div>
-              <InfoBox label="رقم واسم المصنع (Factory)" value={`${productInfo.factoryId} - ${productInfo.factoryName}`} highlight />
-              <InfoBox label="الباركود الأساسي (Barcode N)" value={productInfo.mainBarcode} />
-              <InfoBox label="الاسم الكامل (Full Name)" value={productInfo.prodFullName} />
-              <InfoBox label="إجمالي المطلوب الأصلي" value={productInfo.reqTotalQuantity} />
+              <InfoBox label={t('owner.info.factory')} value={`${productInfo.factoryId} - ${productInfo.factoryName}`} highlight />
+              <InfoBox label={t('owner.info.barcode')} value={productInfo.mainBarcode} />
+              <InfoBox label={t('owner.info.full_name')} value={productInfo.prodFullName} />
+              <InfoBox label={t('owner.info.total_req')} value={productInfo.reqTotalQuantity} />
             </div>
           </div>
 
           {/* ─── PACKAGES ENTRY CARD (Optional) ─── */}
           <div className="card">
             <div className="tab-section-header">
-              <h3><Box size={22} /> الكراتين والتعبئة الفعلية (Actual Packages - Optional)</h3>
+              <h3><Box size={22} /> {t('owner.packages.title')}</h3>
             </div>
             
             <p style={{ color: 'var(--text-muted)', marginBottom: '1rem', fontSize: '0.9rem' }}>
-              اختياري: يمكنك إدخال بيانات الكراتين لتوضيح التعبئة الفعلية التي قمت بها للمطابقة عند الاستلام.
+              {t('owner.packages.desc')}
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -482,7 +484,7 @@ const FactoryOwnerPortal = () => {
                                   onChange={(e) => handlePackageChange(idx, 'active', e.target.checked)}
                                   style={{ width: '18px', height: '18px', accentColor: 'var(--accent-color)', cursor: 'pointer' }}
                                 />
-                                {pkg.active ? 'مفعل (Active)' : 'إضافة بكج (Add Package)'}
+                                {pkg.active ? t('owner.packages.active') : t('owner.packages.add')}
                              </label>
                           )}
                        </div>
@@ -492,31 +494,31 @@ const FactoryOwnerPortal = () => {
                     {pkg.active && (
                       <div className="fade-in" style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'flex-end', paddingTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
                         <div className="form-group" style={{ flex: 1, minWidth: '120px', marginBottom: 0 }}>
-                          <label className="form-label" style={{ fontSize: '0.75rem' }}>النوع (Kind)</label>
+                          <label className="form-label" style={{ fontSize: '0.75rem' }}>{t('owner.packages.kind')}</label>
                           <select className="form-control" value={pkg.kind} onChange={e => handlePackageChange(idx, 'kind', e.target.value)}>
                             <option value=""></option>
-                            <option value="Pcs">قطع (Pcs)</option>
-                            <option value="Doz">درزن (Doz)</option>
+                            <option value="Pcs">{t('owner.packages.pcs')}</option>
+                            <option value="Doz">{t('owner.packages.doz')}</option>
                           </select>
                         </div>
                         <div className="form-group" style={{ flex: 1.5, minWidth: '150px', marginBottom: 0 }}>
-                          <label className="form-label" style={{ fontSize: '0.75rem' }}>حالة الكرتون</label>
+                          <label className="form-label" style={{ fontSize: '0.75rem' }}>{t('owner.packages.carton_status')}</label>
                           <select className="form-control" value={pkg.status} onChange={e => handlePackageChange(idx, 'status', e.target.value)}>
                             <option value=""></option>
-                            <option value="Full">Full (ممتلئ)</option>
-                            <option value="Not Full">Not Full (ناقص)</option>
+                            <option value="Full">{t('owner.packages.full')}</option>
+                            <option value="Not Full">{t('owner.packages.not_full')}</option>
                           </select>
                         </div>
                         <div className="form-group" style={{ flex: 1, minWidth: '80px', marginBottom: 0 }}>
-                          <label className="form-label" style={{ fontSize: '0.75rem' }}>من (From)</label>
+                          <label className="form-label" style={{ fontSize: '0.75rem' }}>{t('owner.packages.from')}</label>
                           <input type="number" className="form-control" value={pkg.fromCtn} onChange={e => handlePackageChange(idx, 'fromCtn', e.target.value)} />
                         </div>
                         <div className="form-group" style={{ flex: 1, minWidth: '80px', marginBottom: 0 }}>
-                          <label className="form-label" style={{ fontSize: '0.75rem' }}>إلى (To)</label>
+                          <label className="form-label" style={{ fontSize: '0.75rem' }}>{t('owner.packages.to')}</label>
                           <input type="number" className="form-control" value={pkg.toCtn} onChange={e => handlePackageChange(idx, 'toCtn', e.target.value)} />
                         </div>
                         <div className="form-group" style={{ flex: 1.5, minWidth: '120px', marginBottom: 0 }}>
-                          <label className="form-label" style={{ fontSize: '0.75rem' }}>الكمية بالكرتون</label>
+                          <label className="form-label" style={{ fontSize: '0.75rem' }}>{t('owner.packages.pcs_per_ctn')}</label>
                           <input type="number" className="form-control" value={pkg.pcsPerCtn} onChange={e => handlePackageChange(idx, 'pcsPerCtn', e.target.value)} />
                         </div>
 
@@ -532,12 +534,12 @@ const FactoryOwnerPortal = () => {
                             marginBottom: '2px'
                           }}>
                             <div style={{ textAlign: 'center' }}>
-                              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>إجمالي الكراتين</span>
+                              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>{t('owner.packages.total_ctns')}</span>
                               <strong style={{ fontSize: '1.2rem', color: '#4ade80' }}>{calc.totalCtnQty}</strong>
                             </div>
                             <div style={{ width: '1px', background: 'var(--border-color)' }}></div>
                             <div style={{ textAlign: 'center' }}>
-                              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>القطع المنتجة</span>
+                              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>{t('owner.packages.produced_pcs')}</span>
                               <strong style={{ fontSize: '1.2rem', color: '#4ade80' }}>{calc.totalProdQty}</strong>
                             </div>
                           </div>
@@ -554,11 +556,11 @@ const FactoryOwnerPortal = () => {
                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem', padding: '1rem', background: 'rgba(212,175,55,0.05)', borderRadius: '10px', border: '1px solid rgba(212,175,55,0.2)' }}>
                    <div style={{ display: 'flex', gap: '2rem' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                         <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>إجمالي كراتين المصنع</span>
+                         <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('owner.packages.factory_ctns')}</span>
                          <strong style={{ fontSize: '1.4rem', color: 'var(--accent-color)' }}>{totals.totalCtn}</strong>
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                         <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>إجمالي القطع المعبأة</span>
+                         <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('owner.packages.packed_pcs')}</span>
                          <strong style={{ fontSize: '1.4rem', color: 'var(--accent-color)' }}>{totals.totalProd}</strong>
                       </div>
                    </div>
@@ -569,11 +571,11 @@ const FactoryOwnerPortal = () => {
           {/* ─── COLORS DISTRIBUTION CARD (Actual Manufactured) ─── */}
           <div className="card">
             <div className="tab-section-header">
-              <h3 style={{ margin: 0 }}><Palette size={22} /> ألوان وكميات الطلبية المصنعة (Actual Manufactured Colors)</h3>
+              <h3 style={{ margin: 0 }}><Palette size={22} /> {t('owner.colors.title')}</h3>
             </div>
             
             <p style={{ color: 'var(--text-muted)', marginBottom: '1rem', fontSize: '0.9rem' }}>
-              قم بتحديد <strong>الكميات التي تم تصنيعها فعلياً</strong> لكل لون ليتم مطابقتها لاحقاً من قبل الإدارة.
+              {t('owner.colors.desc')}
             </p>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '1rem', marginTop: '1.5rem' }}>
@@ -585,16 +587,16 @@ const FactoryOwnerPortal = () => {
                   </div>
                   <div style={{ padding: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between' }}>
-                      <span>المطلوب:</span> <strong>{c.expected}</strong>
+                      <span>{t('owner.colors.required')}</span> <strong>{c.expected}</strong>
                     </div>
                     <div>
-                        <span style={{ fontSize: '0.75rem', color: 'var(--accent-color)' }}>كم صنع فعليا:</span>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--accent-color)' }}>{t('owner.colors.actual')}</span>
                         <input
                         type="number"
                         className="form-control"
                         value={c.actualQuantity}
                         onChange={(e) => handleColorChange(i, e.target.value)}
-                        placeholder="الكمية"
+                        placeholder={t('owner.colors.qty')}
                         style={{ textAlign: 'center', background: 'var(--bg-color)', padding: '6px', fontSize: '1.1rem', marginTop: '4px' }}
                         />
                     </div>
@@ -603,7 +605,7 @@ const FactoryOwnerPortal = () => {
               ))}
             </div>
             {colors.filter(c => c.colorName).length === 0 && (
-               <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2rem' }}>لا توجد ألوان محددة في هذا الموديل.</div>
+               <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2rem' }}>{t('owner.colors.no_colors')}</div>
             )}
           </div>
 
@@ -623,7 +625,7 @@ const FactoryOwnerPortal = () => {
           
           <div style={{ display: 'flex', gap: '3rem' }}>
              <div style={{ color: '#fff', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold' }}>
-                 حالة المنتج الآن: <span style={{ color: productInfo.factoryStatus === 'تم التسليم' ? '#4ade80' : '#f87171' }}>{productInfo.factoryStatus}</span>
+                 {t('owner.summary.current_status')} <span style={{ color: productInfo.factoryStatus === t('owner.info.delivered') ? '#4ade80' : '#f87171' }}>{productInfo.factoryStatus}</span>
              </div>
           </div>
 
@@ -632,17 +634,17 @@ const FactoryOwnerPortal = () => {
                  <>
                    {colors.reduce((acc, c) => acc + (parseInt(c.actualQuantity) || 0), 0) !== productInfo.reqTotalQuantity && (
                      <div style={{ color: '#eab308', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold' }}>
-                        <AlertCircle size={14} /> ملاحظة: إجمالي المدخل لا يطابق الأصلي المطلوب ({productInfo.reqTotalQuantity})
+                        <AlertCircle size={14} /> {t('owner.summary.mismatch_warning', { total: productInfo.reqTotalQuantity })}
                      </div>
                    )}
-                   {productInfo.factoryStatus !== 'تم التسليم' && (
+                   {productInfo.factoryStatus !== t('owner.info.delivered') && (
                      <div style={{ color: '#f87171', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold' }}>
-                        <AlertCircle size={14} /> يجب تغيير الحالة إلى "تم التسليم" لحفظ الكميات
+                        <AlertCircle size={14} /> {t('owner.summary.delivery_required')}
                      </div>
                    )}
                    {totals.totalProd > 0 && totals.totalProd !== colors.reduce((acc, c) => acc + (parseInt(c.actualQuantity) || 0), 0) && (
                      <div style={{ color: '#eab308', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold' }}>
-                        <AlertCircle size={14} /> ملاحظة: إجمالي قطع التعبئة ({totals.totalProd}) لا يطابق قطع الألوان
+                        <AlertCircle size={14} /> {t('owner.summary.packing_mismatch', { packed: totals.totalProd })}
                      </div>
                    )}
                  </>
@@ -654,12 +656,12 @@ const FactoryOwnerPortal = () => {
                  padding: '16px 40px', fontSize: '1.2rem', 
                  background: 'linear-gradient(to right, #d4af37, #b48c1e)',
                  color: '#000',
-                 opacity: (colors.some(c => c.actualQuantity !== '' && parseInt(c.actualQuantity) > 0) && productInfo.factoryStatus !== 'تم التسليم') ? 0.5 : 1,
-                 cursor: (colors.some(c => c.actualQuantity !== '' && parseInt(c.actualQuantity) > 0) && productInfo.factoryStatus !== 'تم التسليم') ? 'not-allowed' : 'pointer'
+                 opacity: (colors.some(c => c.actualQuantity !== '' && parseInt(c.actualQuantity) > 0) && productInfo.factoryStatus !== t('owner.info.delivered')) ? 0.5 : 1,
+                 cursor: (colors.some(c => c.actualQuantity !== '' && parseInt(c.actualQuantity) > 0) && productInfo.factoryStatus !== t('owner.info.delivered')) ? 'not-allowed' : 'pointer'
                }}
              >
                <Save size={24} />
-               حفظ بيانات المصنع
+               {t('owner.summary.save_btn')}
              </button>
           </div>
         </div>

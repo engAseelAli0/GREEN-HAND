@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { supabase } from '../supabaseClient';
+import { useTranslation } from 'react-i18next';
 import { Printer, Plus, Trash2, Search, Package, Layers, AlertCircle, X } from 'lucide-react';
 import { englishOnly } from '../utils/textUtils';
 import toast from 'react-hot-toast';
@@ -11,6 +12,7 @@ const toEnglishNumbers = (str) => {
 };
 
 const PackingList = () => {
+  const { t } = useTranslation();
   const today = new Date();
   const localDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
@@ -62,7 +64,7 @@ const PackingList = () => {
     setMixedGroups([]);
     setHeaderInfo(prev => ({ ...prev, buyer: '', invoiceNo: '', branch: '' }));
     setShowClearConfirm(false);
-    toast.success('تم تفريغ الجدول بنجاح');
+    toast.success(t('shipping.messages.clear_success'));
   };
 
   // Auto-calculate Totals Handlers
@@ -147,10 +149,10 @@ const PackingList = () => {
       const serialsToCheck = rows.map(r => r.serial.trim()).filter(Boolean);
       
       if (serialsToCheck.length === 0) {
-          return toast.error('الرجاء إدخال أرقام موديلات أولاً');
+          return toast.error(t('shipping.messages.enter_serials_first'));
       }
 
-      const toastId = toast.loading('جاري التحقق من حالة الموديلات في قاعدة البيانات...');
+      const toastId = toast.loading(t('shipping.messages.checking_status'));
       let invalidItems = [];
 
       try {
@@ -169,9 +171,9 @@ const PackingList = () => {
               const s = r.serial.trim();
               if (s) {
                   if (!existingOrders.has(s)) {
-                      invalidItems.push({ id: r.id, serial: s, reason: 'غير موجود في قاعدة البيانات' });
+                      invalidItems.push({ id: r.id, serial: s, reason: t('shipping.validation.reasons.not_found') });
                   } else if (!receivedMap.has(s)) {
-                      invalidItems.push({ id: r.id, serial: s, reason: 'غير مستلم من المصنع' });
+                      invalidItems.push({ id: r.id, serial: s, reason: t('shipping.validation.reasons.not_received') });
                   }
               }
           });
@@ -188,13 +190,13 @@ const PackingList = () => {
           }
       } catch (err) {
           toast.dismiss(toastId);
-          toast.error('حدث خطأ أثناء التحقق من الموديلات');
+          toast.error(t('shipping.messages.check_error'));
       }
   };
 
-  const fetchAllData = async (withImage, badSerialsToSkip = [], removeBadRows = false) => {
+   const fetchAllData = async (withImage, badSerialsToSkip = [], removeBadRows = false) => {
     setShowImageColumn(withImage);
-    const toastId = toast.loading('جاري التحقق من الموديلات وجلب البيانات...');
+    const toastId = toast.loading(t('shipping.messages.fetching_data'));
     let successCount = 0;
     let newBuyer = headerInfo.buyer;
     let newRows = [];
@@ -339,10 +341,10 @@ const PackingList = () => {
     }
 
     if (successCount > 0) {
-        const mixMsg = detectedMixedGroups.length > 0 ? ` | تم اكتشاف ${detectedMixedGroups.length} كرتون مختلط تلقائياً` : '';
-        toast.success(`تم جلب بيانات ${successCount} موديل بنجاح!${mixMsg}`, { id: toastId });
+        const mixMsg = detectedMixedGroups.length > 0 ? ` | ${t('packing.messages.mix_detected', { count: detectedMixedGroups.length })}` : '';
+        toast.success(t('packing.messages.fetch_success', { count: successCount, mixMsg }), { id: toastId });
     } else {
-        toast.error('لم يتم العثور على بيانات جديدة أو جميع الأصناف مجلوبة مسبقاً', { id: toastId });
+        toast.error(t('shipping.messages.fetch_no_data'), { id: toastId });
     }
   };
 
@@ -393,16 +395,16 @@ const PackingList = () => {
     <div className="fade-in" style={{ paddingBottom: '4rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
         <div>
-          <h1 style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '2.2rem', margin: 0, color: 'var(--primary-color)' }}>
+          <h1 style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '2.2rem', margin: 0, color: 'var(--text-strong)' }}>
             <Package size={40} color="var(--accent-color)" />
-            بوليصة التعبئة (Packing List)
+            {t('packing.title')}
           </h1>
           <p style={{ color: 'var(--text-muted)', margin: '0.5rem 0 0', paddingRight: '3.5rem' }}>
-            كشف تعبئة البضائع للجمارك مع إمكانية دمج عدة موديلات في كرتون واحد
+            {t('packing.subtitle')}
           </p>
         </div>
         <button onClick={exportToPDF} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--accent-color)', color: '#000', padding: '10px 20px', fontSize: '1.1rem', border: 'none' }}>
-          <Printer size={20} /> تصدير PDF / طباعة
+          <Printer size={20} /> {t('packing.print_btn')}
         </button>
       </div>
 
@@ -505,27 +507,27 @@ const PackingList = () => {
                 style={{ width: '100%', textAlign: 'center', background: 'transparent', border: 'none', fontSize: '1.6rem', fontWeight: '900', color: 'var(--text-main)', marginBottom: '0.5rem' }}
               />
               <div className="pl-tel" style={{ display: 'flex', justifyContent: 'center', gap: '2rem' }}>
-                 <input type="text" value={headerInfo.tel} onChange={e => setHeaderInfo({...headerInfo, tel: e.target.value})} style={{ textAlign: 'center', background: 'transparent', border: 'none', color: 'var(--text-muted)', fontWeight: 'bold', direction: 'ltr', outline: 'none' }} />
-                 <input type="text" value={headerInfo.fax} onChange={e => setHeaderInfo({...headerInfo, fax: e.target.value})} style={{ textAlign: 'center', background: 'transparent', border: 'none', color: 'var(--text-muted)', fontWeight: 'bold', direction: 'ltr', outline: 'none' }} />
+                 <div style={{ color: 'var(--text-muted)', fontWeight: 'bold' }}>{t('packing.header.tel')} <input type="text" value={headerInfo.tel} onChange={e => setHeaderInfo({...headerInfo, tel: e.target.value})} style={{ background: 'transparent', border: 'none', color: 'inherit', fontWeight: 'inherit', direction: 'ltr', outline: 'none', width: '140px' }} /></div>
+                 <div style={{ color: 'var(--text-muted)', fontWeight: 'bold' }}>{t('packing.header.fax')} <input type="text" value={headerInfo.fax} onChange={e => setHeaderInfo({...headerInfo, fax: e.target.value})} style={{ background: 'transparent', border: 'none', color: 'inherit', fontWeight: 'inherit', direction: 'ltr', outline: 'none', width: '140px' }} /></div>
               </div>
            </div>
 
            <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div className="pl-meta" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', background: 'rgba(212, 175, 55, 0.05)', padding: '1rem', borderRadius: '8px', border: '1px solid rgba(212, 175, 55, 0.2)' }}>
                  <div>
-                    <label style={{ fontSize: '0.85rem', color: 'var(--accent-color)', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>Buyer (المشتري):</label>
+                    <label style={{ fontSize: '0.85rem', color: 'var(--accent-color)', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>{t('packing.header.buyer')}</label>
                     <input type="text" className="form-control" value={headerInfo.buyer} onChange={e => setHeaderInfo({...headerInfo, buyer: e.target.value})} style={{ background: 'var(--bg-color)' }} />
                  </div>
                  <div>
-                    <label style={{ fontSize: '0.85rem', color: 'var(--accent-color)', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>Invoice No. (رقم الفاتورة):</label>
+                    <label style={{ fontSize: '0.85rem', color: 'var(--accent-color)', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>{t('packing.header.invoice_no')}</label>
                     <input type="text" className="form-control" value={headerInfo.invoiceNo} onChange={e => setHeaderInfo({...headerInfo, invoiceNo: toEnglishNumbers(e.target.value)})} style={{ background: 'var(--bg-color)' }} />
                  </div>
                  <div>
-                    <label style={{ fontSize: '0.85rem', color: 'var(--accent-color)', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>Branch (الفرع):</label>
+                    <label style={{ fontSize: '0.85rem', color: 'var(--accent-color)', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>{t('packing.header.branch')}</label>
                     <input type="text" className="form-control" value={headerInfo.branch} onChange={e => setHeaderInfo({...headerInfo, branch: e.target.value})} style={{ background: 'var(--bg-color)' }} />
                  </div>
                  <div style={{ position: 'relative' }}>
-                    <label style={{ fontSize: '0.85rem', color: 'var(--accent-color)', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>Date (التاريخ):</label>
+                    <label style={{ fontSize: '0.85rem', color: 'var(--accent-color)', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>{t('packing.header.date')}</label>
                     <CustomDateInput 
                       value={headerInfo.date} 
                       onChange={val => setHeaderInfo({...headerInfo, date: val})}
@@ -533,26 +535,26 @@ const PackingList = () => {
                  </div>
               </div>
 
-              <h2 className="pl-title" style={{ textAlign: 'center', margin: '1rem 0', fontSize: '1.8rem', color: 'var(--primary-color)' }}>Packing List</h2>
+              <h2 className="pl-title" style={{ textAlign: 'center', margin: '1rem 0', fontSize: '1.8rem', color: 'var(--text-strong)' }}>{t('packing.header.list_title')}</h2>
 
            {/* ─── INVOICE TABLE ─── */}
            <div style={{ overflowX: 'auto' }}>
              <table className="pl-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center', fontSize: '0.9rem' }}>
                <thead>
                  <tr style={{ background: 'var(--surface-highlight)', borderBottom: '2px solid var(--accent-color)' }}>
-                   <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '40px' }}>No</th>
-                   <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '80px' }}>Carton No<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>رقم الكرتون</span></th>
-                   <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '100px' }}>Items No<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>رقم الصنف</span></th>
-                   <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)' }}>Items Description<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>الوصف بالانجليزي</span></th>
-                   <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '60px' }}>Cartons Qty<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>الكراتين</span></th>
-                   <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '60px' }}>Packing Kind<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>التعبئة</span></th>
-                   <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '60px' }}>CTN/Pcs<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>الكمية</span></th>
-                   <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '60px' }}>Item Qty<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>الاجمالي</span></th>
-                   <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '60px' }}>Total Item Qty<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>المجموع</span></th>
+                   <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '40px' }}>{t('packing.table.cols.no')}</th>
+                   <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '80px' }}>{t('packing.table.cols.carton_no')}<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>{t('packing.table.cols.carton_no_ar')}</span></th>
+                   <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '100px' }}>{t('packing.table.cols.item_no')}<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>{t('packing.table.cols.item_no_ar')}</span></th>
+                   <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)' }}>{t('packing.table.cols.desc')}<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>{t('packing.table.cols.desc_ar')}</span></th>
+                   <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '60px' }}>{t('packing.table.cols.carton_qty')}<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>{t('packing.table.cols.carton_qty_ar')}</span></th>
+                   <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '60px' }}>{t('packing.table.cols.packing_kind')}<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>{t('packing.table.cols.packing_kind_ar')}</span></th>
+                   <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '60px' }}>{t('packing.table.cols.qty_per_ctn')}<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>{t('packing.table.cols.qty_per_ctn_ar')}</span></th>
+                   <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '60px' }}>{t('packing.table.cols.item_qty')}<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>{t('packing.table.cols.item_qty_ar')}</span></th>
+                   <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '60px' }}>{t('packing.table.cols.total_item_qty')}<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>{t('packing.table.cols.total_item_qty_ar')}</span></th>
                    {showImageColumn ? (
-                       <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '80px' }}>Item Image<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>صورة الصنف</span></th>
+                       <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '80px' }}>{t('packing.table.cols.image')}<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>{t('packing.table.cols.image_ar')}</span></th>
                    ) : (
-                       <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)' }}>Other Details<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>تفاصيل أخرى</span></th>
+                       <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)' }}>{t('packing.table.cols.details')}<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>{t('packing.table.cols.details_ar')}</span></th>
                    )}
                    <th className="no-print" style={{ padding: '10px 5px', width: '40px', border: '1px solid var(--border-color)' }}></th>
                  </tr>
@@ -586,7 +588,7 @@ const PackingList = () => {
                                               value={row.serial} 
                                               onChange={e => handleRowChange(row.id, 'serial', e.target.value)}
                                               onKeyDown={e => handleSerialKeyDown(e, row.id)}
-                                              placeholder="أدخل الموديل F9"
+                                              placeholder={t('packing.table.serial_placeholder')}
                                               style={{ width: '100%', background: 'transparent', border: 'none', color: highlightedSerials.includes(row.serial.trim()) ? '#ef4444' : 'var(--text-main)', textAlign: 'center', fontWeight: 'bold' }}
                                             />
                                             {activeF9RowId === row.id && showSerialsList && (
@@ -601,7 +603,7 @@ const PackingList = () => {
                                                 textAlign: 'right'
                                               }}>
                                                 <div style={{ padding: '0.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--surface-highlight)' }}>
-                                                    <span style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>اختر موديلاً:</span>
+                                                    <span style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>{t('entry.actions.select_saved_model')}</span>
                                                     <button onClick={() => { setShowSerialsList(false); setSerialSearchQuery(''); setActiveF9RowId(null); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-color)', padding: 0, display: 'flex', alignItems: 'center' }}>
                                                        <X size={16} />
                                                     </button>
@@ -610,7 +612,7 @@ const PackingList = () => {
                                                   <input
                                                     ref={serialSearchRef}
                                                     type="text"
-                                                    placeholder="🔍 ابحث..."
+                                                    placeholder={t('entry.actions.search_serial_placeholder')}
                                                     value={serialSearchQuery}
                                                     onChange={(e) => setSerialSearchQuery(e.target.value)}
                                                     onKeyDown={(e) => {
@@ -634,14 +636,14 @@ const PackingList = () => {
                                                   />
                                                 </div>
                                                 {fetchingSerials ? (
-                                                    <div style={{ padding: '1rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)' }}>جاري التحميل...</div>
+                                                    <div style={{ padding: '1rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)' }}>{t('entry.actions.loading')}</div>
                                                 ) : (
                                                    (() => {
                                                      const filteredSerials = serialSearchQuery.trim()
                                                        ? availableSerials.filter(s => s.toString().includes(serialSearchQuery.trim()))
                                                        : availableSerials;
                                                      return filteredSerials.length === 0 ? (
-                                                       <div style={{ padding: '1rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)' }}>لا توجد نتائج</div>
+                                                       <div style={{ padding: '1rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)' }}>{t('entry.actions.no_match')}</div>
                                                      ) : (
                                                       <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
                                                           {filteredSerials.map(serial => {
@@ -733,7 +735,7 @@ const PackingList = () => {
                  {mixedGroups.length > 0 && (
                      <tr className="pl-mixed-hdr">
                          <td colSpan={showImageColumn ? 11 : 11} style={{ border: '2px solid var(--border-color)', background: 'rgba(239, 68, 68, 0.1)', padding: '5px', textAlign: 'center', color: '#ef4444', fontWeight: 'bold' }}>
-                            **Mixed Items in Cartons أصناف مختلطة بكرتون**
+                            {t('packing.table.mixed_header')}
                          </td>
                      </tr>
                  )}
@@ -805,7 +807,7 @@ const PackingList = () => {
 
                                           {isFirst && (
                                          <td rowSpan={group.items.length} className="no-print" style={{ border: '1px solid var(--border-color)', padding: '5px', textAlign: 'center' }}>
-                                              <span style={{ fontSize: '0.7rem', color: '#10b981', fontWeight: 'bold' }}>تلقائي ✓</span>
+                                              <span style={{ fontSize: '0.7rem', color: '#10b981', fontWeight: 'bold' }}>{t('receiving.table.auto')} ✓</span>
                                          </td>
                                          )}
                                      </tr>
@@ -816,11 +818,11 @@ const PackingList = () => {
                  })}
 
                  {/* ─── TOTALS ROW ─── */}
-                 <tr className="pl-total-row" style={{ background: 'var(--surface-highlight)', border: '2px solid var(--accent-color)', fontWeight: 'bold', fontSize: '1.2rem', color: 'var(--primary-color)' }}>
-                    <td colSpan={3} style={{ padding: '12px', border: '1px solid var(--border-color)', background: 'rgba(212, 175, 55, 0.1)', color: 'var(--primary-color)' }}>Total</td>
-                    <td style={{ padding: '12px', border: '1px solid var(--border-color)' }}>{uniqueSerials.size} Items</td>
-                    <td colSpan={3} style={{ padding: '12px', border: '1px solid var(--border-color)' }}>{totalCtn} CTN</td>
-                    <td colSpan={4} style={{ padding: '12px', border: '1px solid var(--border-color)' }}>{totalPcs} PCS</td>
+                 <tr className="pl-total-row" style={{ background: 'var(--surface-highlight)', border: '2px solid var(--accent-color)', fontWeight: 'bold', fontSize: '1.2rem', color: 'var(--text-strong)' }}>
+                    <td colSpan={3} style={{ padding: '12px', border: '1px solid var(--border-color)', background: 'rgba(212, 175, 55, 0.1)', color: 'var(--text-strong)' }}>{t('packing.footer.total')}</td>
+                    <td style={{ padding: '12px', border: '1px solid var(--border-color)' }}>{uniqueSerials.size} {t('shipping.footer.items')}</td>
+                    <td colSpan={3} style={{ padding: '12px', border: '1px solid var(--border-color)' }}>{totalCtn} {t('shipping.footer.ctn', { defaultValue: 'CTN' })}</td>
+                    <td colSpan={4} style={{ padding: '12px', border: '1px solid var(--border-color)' }}>{totalPcs} {t('shipping.footer.pcs')}</td>
                  </tr>
 
                </tbody>
@@ -830,13 +832,13 @@ const PackingList = () => {
            {!isExporting && (
              <div className="no-print" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginTop: '1.5rem', gap: '1rem', flexWrap: 'wrap' }}>
                 <button onClick={addRow} className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--accent-color)', borderColor: 'var(--accent-color)' }}>
-                   <Plus size={18} /> اضافه صف جديد
+                   <Plus size={18} /> {t('shipping.actions.add_row')}
                 </button>
                 <button onClick={() => setShowFetchDialog(true)} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'linear-gradient(to right, #10b981, #059669)', border: 'none', padding: '10px 24px' }}>
-                   <Search size={18} /> جلب بيانات كل الأصناف المدخلة
+                   <Search size={18} /> {t('shipping.actions.fetch_all')}
                 </button>
                 <button onClick={() => setShowClearConfirm(true)} className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#ef4444', borderColor: '#ef4444' }}>
-                   <Trash2 size={18} /> تفريغ كافة البيانات
+                   <Trash2 size={18} /> {t('shipping.actions.clear_all')}
                 </button>
              </div>
            )}
@@ -844,17 +846,17 @@ const PackingList = () => {
            {/* ─── BOTTOM DETAILS ─── */}
            <div className="pl-bottom" style={{ marginTop: '2rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', fontWeight: 'bold', fontSize: '1.1rem' }} dir="ltr">
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: 'var(--surface-highlight)', padding: '10px 15px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                 <span style={{ width: '300px', color: 'var(--text-main)' }}>TOTAL OF PACKING LIST DETAILS</span>
-                 <span style={{ padding: '0 15px', color: 'var(--accent-color)' }}>{totalCtn} CTN</span>
+                 <span style={{ width: '300px', color: 'var(--text-main)' }}>{t('packing.footer.summary_label')}</span>
+                 <span style={{ padding: '0 15px', color: 'var(--accent-color)' }}>{totalCtn} {t('shipping.footer.ctn', { defaultValue: 'CTN' })}</span>
                  <span style={{ margin: '0 1rem', color: 'var(--text-muted)' }}>&</span>
-                 <span style={{ padding: '0 15px', color: 'var(--accent-color)' }}>{totalPcs} PCS</span>
+                 <span style={{ padding: '0 15px', color: 'var(--accent-color)' }}>{totalPcs} {t('shipping.footer.pcs')}</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: 'var(--surface-highlight)', padding: '10px 15px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                 <span style={{ width: '200px', color: 'var(--text-main)' }}>CONTAINER NO :</span>
+                 <span style={{ width: '200px', color: 'var(--text-main)' }}>{t('packing.footer.container_no')}</span>
                  <input type="text" value={footerInfo.containerNo} onChange={e => setFooterInfo({...footerInfo, containerNo: e.target.value})} style={{ flex: 1, background: 'transparent', border: 'none', borderBottom: '1px dashed var(--accent-color)', color: 'var(--text-main)', fontSize: '1.1rem', fontWeight: 'bold', padding: '0 10px', outline: 'none' }} />
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: 'var(--surface-highlight)', padding: '10px 15px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                 <span style={{ width: '200px', color: 'var(--text-main)' }}>SEAL NO :</span>
+                 <span style={{ width: '200px', color: 'var(--text-main)' }}>{t('packing.footer.seal_no')}</span>
                  <input type="text" value={footerInfo.sealNo} onChange={e => setFooterInfo({...footerInfo, sealNo: e.target.value})} style={{ width: '300px', background: 'transparent', border: 'none', borderBottom: '1px dashed var(--accent-color)', color: 'var(--text-main)', fontSize: '1.1rem', fontWeight: 'bold', padding: '0 10px', outline: 'none' }} />
               </div>
            </div>
@@ -866,18 +868,18 @@ const PackingList = () => {
       {showFetchDialog && (
          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', zIndex: 9999, display: 'flex', justifyContent: 'center', alignItems: 'center', backdropFilter: 'blur(5px)' }}>
             <div className="card fade-in" style={{ width: '450px', textAlign: 'center', border: '2px solid var(--accent-color)', boxShadow: '0 10px 40px rgba(212,175,55,0.2)' }}>
-               <h3 style={{ marginBottom: '1rem', color: 'var(--accent-color)' }}>جلب بيانات المنتجات</h3>
-               <p style={{ marginBottom: '2rem', fontSize: '1.2rem' }}>هل تريد جلب البيانات مع صور المنتجات؟</p>
+               <h3 style={{ marginBottom: '1rem', color: 'var(--accent-color)' }}>{t('shipping.fetch_dialog.title')}</h3>
+               <p style={{ marginBottom: '2rem', fontSize: '1.2rem' }}>{t('shipping.fetch_dialog.question')}</p>
                <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
                   <button onClick={() => validateBeforeFetch(true)} className="btn btn-primary" style={{ flex: 1, background: 'linear-gradient(135deg, var(--accent-color), #b58d27)', color: '#000', padding: '12px', fontSize: '1.1rem' }}>
-                     مع الصور
+                     {t('shipping.fetch_dialog.with_images')}
                   </button>
                   <button onClick={() => validateBeforeFetch(false)} className="btn btn-outline" style={{ flex: 1, padding: '12px', fontSize: '1.1rem', color: 'var(--text-main)', borderColor: 'var(--border-color)' }}>
-                     بدون الصور
+                     {t('shipping.fetch_dialog.without_images')}
                   </button>
                </div>
                <button onClick={() => setShowFetchDialog(false)} style={{ marginTop: '1.5rem', background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', textDecoration: 'underline', fontSize: '1rem' }}>
-                  إلغاء
+                  {t('shipping.fetch_dialog.cancel')}
                </button>
             </div>
          </div>
@@ -896,10 +898,10 @@ const PackingList = () => {
          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', zIndex: 9999, display: 'flex', justifyContent: 'center', alignItems: 'center', backdropFilter: 'blur(5px)' }}>
             <div className="card fade-in" style={{ width: '550px', border: '2px solid #ef4444', boxShadow: '0 10px 40px rgba(239, 68, 68, 0.2)' }}>
                <h3 style={{ marginBottom: '1rem', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <AlertCircle size={24} /> تنبيه: موديلات غير صالحة!
+                  <AlertCircle size={24} /> {t('shipping.validation.title')}
                </h3>
                <p style={{ marginBottom: '1rem', fontSize: '1.1rem', color: 'var(--text-main)' }}>
-                 اكتشف النظام أن الموديلات التالية غير موجودة أو غير مستلمة من المصنع. هل تريد حذفها من حقول الإدخال؟
+                 {t('shipping.validation.desc')}
                </p>
                <ul style={{ background: 'var(--surface-color)', padding: '1rem', borderRadius: '8px', maxHeight: '150px', overflowY: 'auto', marginBottom: '1.5rem', listStyle: 'none' }}>
                   {invalidSerials.map((inv, idx) => (
@@ -916,7 +918,7 @@ const PackingList = () => {
                       setShowValidationModal(false);
                       setTimeout(() => fetchAllData(pendingFetchOptions, badSerials, true), 0);
                   }} className="btn btn-primary" style={{ flex: 1, background: '#ef4444', color: '#fff', border: 'none', padding: '12px', fontSize: '1.1rem' }}>
-                     نعم، احذف الأرقام الغلط
+                     {t('shipping.validation.remove_invalid')}
                   </button>
                   <button onClick={() => {
                       const badSerials = invalidSerials.map(inv => inv.serial);
@@ -924,7 +926,7 @@ const PackingList = () => {
                       setShowValidationModal(false);
                       setTimeout(() => fetchAllData(pendingFetchOptions, badSerials, false), 0);
                   }} className="btn btn-outline" style={{ flex: 1, padding: '12px', fontSize: '1.1rem', color: 'var(--text-main)', borderColor: 'var(--border-color)' }}>
-                     لا، أبقهم في الجدول
+                     {t('shipping.validation.keep_all')}
                   </button>
                </div>
             </div>
@@ -936,17 +938,17 @@ const PackingList = () => {
          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', zIndex: 9999, display: 'flex', justifyContent: 'center', alignItems: 'center', backdropFilter: 'blur(5px)' }}>
             <div className="card fade-in" style={{ width: '400px', border: '2px solid #ef4444', boxShadow: '0 10px 40px rgba(239, 68, 68, 0.2)', textAlign: 'center' }}>
                <h3 style={{ marginBottom: '1rem', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                  <AlertCircle size={32} /> تأكيد التفريغ
+                  <AlertCircle size={32} /> {t('shipping.clear_confirm.title')}
                </h3>
                <p style={{ marginBottom: '2rem', fontSize: '1.1rem', color: 'var(--text-main)' }}>
-                 هل أنت متأكد من رغبتك في تفريغ كافة حقول الجدول والبدء من جديد؟ سيتم مسح كافة البيانات الحالية.
+                 {t('shipping.clear_confirm.desc')}
                </p>
                <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
                   <button onClick={clearAllData} className="btn btn-primary" style={{ flex: 1, background: '#ef4444', color: '#fff', border: 'none', padding: '10px', fontSize: '1.1rem' }}>
-                     نعم، إفراغ الجدول
+                     {t('shipping.clear_confirm.confirm')}
                   </button>
                   <button onClick={() => setShowClearConfirm(false)} className="btn btn-outline" style={{ flex: 1, padding: '10px', fontSize: '1.1rem', color: 'var(--text-main)', borderColor: 'var(--border-color)' }}>
-                     تراجع
+                     {t('shipping.fetch_dialog.cancel')}
                   </button>
                </div>
             </div>

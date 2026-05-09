@@ -4,9 +4,11 @@ import { supabase } from '../supabaseClient';
 import { Search, Save, PackageCheck, AlertCircle, Info, Box, Palette, Calculator, CheckCircle2, XCircle, Download, Printer, X, Factory } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
+import { useTranslation } from 'react-i18next';
 import { extractColorCSS } from '../utils/textUtils';
 
 const FactoryReceiving = () => {
+  const { t } = useTranslation();
   const { lookups } = useAppData();
   
   const [modelNo, setModelNo] = useState('');
@@ -69,9 +71,9 @@ const FactoryReceiving = () => {
     const ctnNo = hasRange ? (from === to ? `${from}` : `${from}-${to}`) : '';
     
     const multiplier = pkg.kind === 'Doz' ? 12 : 1;
-    const kindTxt = pkg.kind === 'Doz' ? 'doz' : 'pcs';
+    const kindTxt = pkg.kind === 'Doz' ? ` ${t('receiving.packages.doz')}` : ` ${t('receiving.packages.pcs')}`;
 
-    const ctnQtyString = (hasRange && hasUnits) ? `${totalCtnQty}ctn * ${units}${kindTxt}` : '';
+    const ctnQtyString = (hasRange && hasUnits) ? `${totalCtnQty}${t('receiving.packages.cartons')} * ${units}${kindTxt}` : '';
     const totalProdQty = (hasRange && hasUnits) ? (totalCtnQty * units * multiplier) : 0;
     
     return { totalCtnQty, ctnNo, ctnQtyString, totalProdQty };
@@ -110,7 +112,7 @@ const FactoryReceiving = () => {
         .single();
         
       if (oError || !oDataResp) {
-         toast.error(`لم يتم العثور على طلبية برقم الموديل: ${termToSearch}`);
+         toast.error(`${t('receiving.messages.not_found')} ${termToSearch}`);
          setIsSearching(false);
          setIsFetched(false);
          return;
@@ -120,14 +122,14 @@ const FactoryReceiving = () => {
 
       setProductInfo({
         mainBarcode: oData.barcode || `1000${oData.serialNumber}`,
-        prodFullName: oData.productName || 'غير مسجل',
-        prodShortName: oData.productName || 'غير مسجل',
+        prodFullName: oData.productName || t('receiving.messages.unregistered'),
+        prodShortName: oData.productName || t('receiving.messages.unregistered'),
         prodPrice: parseFloat(oData.productPrice) || 0,
         priceCurrency: oData.currency || '',
-        reqCartons: `${oData.cartonQty || '?'} كرتون * ${oData.cartonSize || '?'} قطعة (${oData.totalQuantity || '?'} بإجمالي)`,
+        reqCartons: `${oData.cartonQty || '?'} ${t('units.carton')} * ${oData.cartonSize || '?'} ${t('units.piece')} (${oData.totalQuantity || '?'} ${t('receiving.packages.total_pcs')})`,
         reqTotalQuantity: parseInt(oData.totalQuantity) || 0,
-        productStatus: (recData && recData.receive_data && recData.receive_data.status) ? recData.receive_data.status : 'غير مستلمة',
-        factoryId: oData.factoryId || 'غير محدد',
+        productStatus: (recData && recData.receive_data && recData.receive_data.status) ? recData.receive_data.status : t('receiving.info.not_received'),
+        factoryId: oData.factoryId || t('receiving.messages.undefined'),
         factoryName: ''
       });
       
@@ -188,13 +190,13 @@ const FactoryReceiving = () => {
       setIsFetched(true);
       
       if (recData && recData.receive_data) {
-         toast.success(`تم استرداد بيانات استلام سابقة مقيدة لهذا الموديل!`);
+         toast.success(t('receiving.messages.fetch_previous'));
       } else {
-         toast.success(`تم استرداد بيانات الموديل: ${termToSearch} بنجاح`);
+         toast.success(`${t('receiving.messages.fetch_success')}: ${termToSearch}`);
       }
 
     } catch (err) {
-      toast.error('حدث خطأ في الاتصال بقاعدة البيانات.');
+      toast.error(t('receiving.messages.db_error'));
       console.error(err);
     } finally {
       setIsSearching(false);
@@ -246,7 +248,7 @@ const FactoryReceiving = () => {
 
   const expectedTotalQty = productInfo.reqTotalQuantity || 0;
   const isQtyMatching = isFetched && expectedTotalQty > 0 && totals.totalProd === expectedTotalQty;
-  const isStatusReceived = productInfo.productStatus === 'مستلمة';
+  const isStatusReceived = productInfo.productStatus === t('receiving.info.received');
   
   const totalColorsQty = colors.reduce((acc, col) => acc + (parseInt(col.quantity) || 0), 0);
   const isColorsQtyMatching = isFetched && totalColorsQty === totals.totalProd && totals.totalProd > 0;
@@ -255,11 +257,11 @@ const FactoryReceiving = () => {
 
   const handleSave = async () => {
     if (!isFetched) {
-      toast.error('أدخل رقم الموديل أولاً');
+      toast.error(t('export.messages.enter_serial'));
       return;
     }
     if (!isStatusReceived) {
-      toast.error('لا يمكن الحفظ إلا إذا تم تغيير حالة المنتج إلى "مستلمة"');
+      toast.error(t('receiving.messages.received_status_required'));
       return;
     }
 
@@ -274,11 +276,11 @@ const FactoryReceiving = () => {
       }
     };
     
-    const toastId = toast.loading('جاري حفظ الاستلام في قاعدة البيانات...');
+    const toastId = toast.loading(t('receiving.messages.saving'));
     try {
       const { error } = await supabase.from('receivings').upsert(payload);
       if (error) throw error;
-      toast.success('تم اعتماد الاستلام وحفظ الكراتين بنجاح!', { id: toastId });
+      toast.success(t('receiving.messages.save_success'), { id: toastId });
       
       // Reset form to allow entering a new model
       setModelNo('');
@@ -297,63 +299,63 @@ const FactoryReceiving = () => {
       })));
 
     } catch (err) {
-      toast.error(`خطأ في الحفظ! تأكد من إنشاء جدول receivings بدقة. ${err.message}`, { id: toastId });
+      toast.error(`${t('entry.messages.save_error')}: ${err.message}`, { id: toastId });
     }
   };
 
   const exportToExcel = () => {
-    if (!isFetched) return toast.error('لا توجد بيانات لتصديرها');
+    if (!isFetched) return toast.error(t('receiving.messages.no_data_export'));
     
     const excelData = {
-      "رقم الموديل": modelNo,
-      "الاسم الكامل": productInfo.prodFullName,
-      "الباركود": productInfo.mainBarcode,
-      "المصنع": `${productInfo.factoryId} - ${productInfo.factoryName}`,
-      "الكمية الأصلية المطلوبة": productInfo.reqTotalQuantity,
-      "الكراتين المستلمة": totals.totalCtn,
-      "إجمالي القطع المستلمة": totals.totalProd,
-      "حالة المنتج": productInfo.productStatus,
-      "مطابقة البيانات": (isQtyMatching && isColorsQtyMatching) ? 'نعم' : 'لا'
+      [t('export.doc.model_no')]: modelNo,
+      [t('receiving.info.full_name')]: productInfo.prodFullName,
+      [t('receiving.info.barcode')]: productInfo.mainBarcode,
+      [t('receiving.info.factory')]: `${productInfo.factoryId} - ${productInfo.factoryName}`,
+      [t('receiving.info.original_order')]: productInfo.reqTotalQuantity,
+      [t('receiving.summary.total_ctn')]: totals.totalCtn,
+      [t('receiving.summary.total_qty')]: totals.totalProd,
+      [t('receiving.info.status')]: productInfo.productStatus,
+      [t('receiving.summary.qty_match')]: (isQtyMatching && isColorsQtyMatching) ? t('receiving.summary.match') : t('receiving.summary.mismatch')
     };
 
     const pkgsData = packages.filter(p => p.kind).map(p => ({
-        "معرف الكرتون": p.id,
-        "النوع": p.kind,
-        "حالة الكرتون": p.status,
-        "من رقم": p.fromCtn,
-        "إلى رقم": p.toCtn,
-        "الكمية بالكرتون": p.pcsPerCtn,
-        "إجمالي عدد القطع": getPackageCalculations(p).totalProdQty
+        [t('receiving.packages.id') || 'ID']: p.id,
+        [t('receiving.packages.kind')]: p.kind,
+        [t('receiving.packages.carton_status')]: p.status,
+        [t('receiving.packages.from')]: p.fromCtn,
+        [t('receiving.packages.to')]: p.toCtn,
+        [t('receiving.packages.pcs_per_ctn')]: p.pcsPerCtn,
+        [t('receiving.packages.total_pcs')]: getPackageCalculations(p).totalProdQty
     }));
 
     const colorsData = colors.filter(c => c.colorName).map(c => ({
-        "اللون": c.colorName,
-        "مطلوب": c.expected,
-        "تم استلام": c.quantity || 0,
-        "الفارق": (parseInt(c.quantity) || 0) - c.expected
+        [t('receiving.colors.title')]: c.colorName,
+        [t('receiving.colors.expected')]: c.expected,
+        [t('receiving.colors.receive')]: c.quantity || 0,
+        [t('receiving.summary.mismatch')]: (parseInt(c.quantity) || 0) - c.expected
     }));
 
     const workbook = XLSX.utils.book_new();
     
     const ws1 = XLSX.utils.json_to_sheet([excelData]);
-    XLSX.utils.book_append_sheet(workbook, ws1, "ملخص الاستلام");
+    XLSX.utils.book_append_sheet(workbook, ws1, t('receiving.summary.excel_summary'));
 
     if (pkgsData.length > 0) {
         const ws2 = XLSX.utils.json_to_sheet(pkgsData);
-        XLSX.utils.book_append_sheet(workbook, ws2, "بيانات الكراتين");
+        XLSX.utils.book_append_sheet(workbook, ws2, t('receiving.summary.excel_packages'));
     }
 
     if (colorsData.length > 0) {
         const ws3 = XLSX.utils.json_to_sheet(colorsData);
-        XLSX.utils.book_append_sheet(workbook, ws3, "كميات الألوان");
+        XLSX.utils.book_append_sheet(workbook, ws3, t('receiving.summary.excel_colors'));
     }
 
     XLSX.writeFile(workbook, `Receiving_${modelNo}_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   const exportToPDF = async () => {
-    if (!isFetched) return toast.error('لا توجد بيانات لتصديرها');
-    const toastId = toast.loading('جاري تجهيز وتصدير التقرير...');
+    if (!isFetched) return toast.error(t('receiving.messages.no_data_export'));
+    const toastId = toast.loading(t('receiving.messages.preparing_report'));
     const element = document.getElementById('receiving-print-area');
 
     // Just clean up shadows for a crisper PDF — keep all colors as-is
@@ -401,9 +403,9 @@ const FactoryReceiving = () => {
        pdf.addImage(imgData, 'PNG', margin, margin, contentWidthMM, contentHeightMM);
        pdf.save(`Receiving_${modelNo}_${new Date().toISOString().split('T')[0]}.pdf`);
        
-       toast.success('تم التصدير بنجاح!', { id: toastId });
+       toast.success(t('receiving.messages.export_success'), { id: toastId });
     } catch (err) {
-       toast.error('حدث خطأ أثناء تحميل الـ PDF', { id: toastId });
+       toast.error(t('entry.messages.save_error'), { id: toastId });
        console.error(err);
     } finally {
        element.style.boxShadow = origBoxShadow;
@@ -427,10 +429,10 @@ const FactoryReceiving = () => {
         <div>
           <h1 style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '2.2rem', margin: 0 }}>
             <PackageCheck size={40} color="var(--accent-color)" />
-            استلام وفرز البضائع
+            {t('receiving.title')}
           </h1>
           <p style={{ color: 'var(--text-muted)', margin: '0.5rem 0 0', paddingRight: '3.5rem' }}>
-            نظام المطابقة الذكي لإدخال تفاصيل الكراتين الواردة والتأكد من توافقها مسبقاً.
+            {t('receiving.desc')}
           </p>
         </div>
       </div>
@@ -439,7 +441,7 @@ const FactoryReceiving = () => {
       <div className="card" style={{ marginBottom: '2rem', border: '1px solid var(--accent-color)', boxShadow: '0 8px 30px rgba(212, 175, 55, 0.1)' }}>
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end' }}>
           <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
-            <label className="form-label">بحث برقم الموديل (Enter Model NO.)</label>
+            <label className="form-label">{t('receiving.search.label')}</label>
             <div style={{ position: 'relative' }}>
               <input
                 type="text"
@@ -448,7 +450,7 @@ const FactoryReceiving = () => {
                 value={modelNo}
                 onChange={(e) => setModelNo(e.target.value)}
                 onKeyDown={handleF9Press}
-                placeholder="أدخل رقم الموديل هنا... (F9)"
+                placeholder={t('receiving.search.placeholder')}
                 style={{ fontSize: '1.2rem', padding: '14px 20px', paddingLeft: '50px', background: 'var(--surface-color)' }}
                 autoComplete="off"
               />
@@ -465,7 +467,7 @@ const FactoryReceiving = () => {
                   zIndex: 1000
                 }}>
                   <div style={{ padding: '0.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--surface-highlight)' }}>
-                      <span style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>اختر موديلاً محفوظاً:</span>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>{t('export.select_saved')}</span>
                       <button onClick={() => { setShowSerialsList(false); setSerialSearchQuery(''); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-color)', padding: 0, display: 'flex', alignItems: 'center' }}>
                          <X size={16} />
                       </button>
@@ -475,7 +477,7 @@ const FactoryReceiving = () => {
                     <input
                       ref={serialSearchRef}
                       type="text"
-                      placeholder="🔍 ابحث برقم الموديل..."
+                      placeholder={t('export.search_placeholder')}
                       value={serialSearchQuery}
                       onChange={(e) => setSerialSearchQuery(e.target.value)}
                       onKeyDown={(e) => {
@@ -511,7 +513,7 @@ const FactoryReceiving = () => {
                     />
                   </div>
                   {fetchingSerials ? (
-                      <div style={{ padding: '1rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)' }}>جاري التحميل...</div>
+                      <div style={{ padding: '1rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)' }}>{t('entry.actions.loading')}</div>
                   ) : (
                      (() => {
                        const filteredSerials = serialSearchQuery.trim()
@@ -519,7 +521,7 @@ const FactoryReceiving = () => {
                          : availableSerials;
                        return filteredSerials.length === 0 ? (
                          <div style={{ padding: '1rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                           {availableSerials.length === 0 ? 'لا توجد موديلات محفوظة' : 'لا توجد نتائج مطابقة للبحث'}
+                           {availableSerials.length === 0 ? t('entry.actions.no_saved_models') : t('entry.actions.no_match')}
                          </div>
                        ) : (
                         <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
@@ -560,7 +562,7 @@ const FactoryReceiving = () => {
             </div>
           </div>
           <button className="btn btn-primary" onClick={() => handleSearch()} disabled={isSearching} style={{ padding: '14px 30px', fontSize: '1.1rem' }}>
-            {isSearching ? <div className="spinner" style={{ width: '22px', height: '22px', border: '3px solid #fff', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} /> : 'بحث واسترداد'}
+            {isSearching ? <div className="spinner" style={{ width: '22px', height: '22px', border: '3px solid #fff', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} /> : t('receiving.search.btn')}
           </button>
         </div>
         
@@ -568,10 +570,10 @@ const FactoryReceiving = () => {
         {isFetched && (
           <div className="fade-in" style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border-color)', justifyContent: 'flex-end' }}>
             <button className="btn" onClick={exportToExcel} style={{ backgroundColor: '#10b981', color: 'white', boxShadow: '0 4px 15px rgba(16, 185, 129, 0.3)' }}>
-              <Download size={20} /> تصدير Excel
+              <Download size={20} /> {t('receiving.export.excel')}
             </button>
             <button className="btn" onClick={exportToPDF} style={{ backgroundColor: '#ef4444', color: 'white', boxShadow: '0 4px 15px rgba(239, 68, 68, 0.3)' }}>
-              <Printer size={20} /> طباعة PDF
+              <Printer size={20} /> {t('receiving.export.pdf')}
             </button>
           </div>
         )}
@@ -583,44 +585,44 @@ const FactoryReceiving = () => {
           {/* ─── PRODUCT INFO CARD ─── */}
           <div className="card">
             <div className="tab-section-header">
-              <h3><Info size={22} /> بيانات الطلبية والمصنع (Product & Factory Info)</h3>
+              <h3><Info size={22} /> {t('receiving.info.title')}</h3>
             </div>
             
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
               <div style={{ background: 'rgba(212,175,55,0.05)', padding: '12px 16px', borderRadius: '10px', border: '1px solid rgba(212,175,55,0.3)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>حالة المنتج (Status)</span>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('receiving.info.status')}</span>
                 <select 
                    className="form-control" 
                    value={productInfo.productStatus} 
                    onChange={e => setProductInfo({...productInfo, productStatus: e.target.value})} 
                    style={{ 
                      padding: '4px', marginTop: '4px', fontWeight: 'bold', border: 'none', background: 'transparent',
-                     color: productInfo.productStatus === 'مستلمة' ? '#16a34a' : '#dc2626',
+                     color: productInfo.productStatus === t('receiving.info.received') ? '#16a34a' : '#dc2626',
                      cursor: 'pointer'
                    }}
                 >
-                  <option value="غير مستلمة">غير مستلمة</option>
-                  <option value="مستلمة">مستلمة</option>
+                  <option value={t('receiving.info.not_received')}>{t('receiving.info.not_received')}</option>
+                  <option value={t('receiving.info.received')}>{t('receiving.info.received')}</option>
                 </select>
               </div>
-              <InfoBox label="رقم واسم المصنع (Factory)" value={`${productInfo.factoryId} - ${productInfo.factoryName}`} highlight />
-              <InfoBox label="الباركود الأساسي (Barcode N)" value={productInfo.mainBarcode} />
-              <InfoBox label="الاسم الكامل (Full Name)" value={productInfo.prodFullName} />
-              <InfoBox label="سعر المنتج (Prod Price)" value={`${productInfo.prodPrice} ${productInfo.priceCurrency}`} />
-              <InfoBox label="الطلبية الأصلية المشتراة" value={productInfo.reqCartons} />
+              <InfoBox label={t('receiving.info.factory')} value={`${productInfo.factoryId} - ${productInfo.factoryName}`} highlight />
+              <InfoBox label={t('receiving.info.barcode')} value={productInfo.mainBarcode} />
+              <InfoBox label={t('receiving.info.full_name')} value={productInfo.prodFullName} />
+              <InfoBox label={t('receiving.info.price')} value={`${productInfo.prodPrice} ${productInfo.priceCurrency}`} />
+              <InfoBox label={t('receiving.info.original_order')} value={productInfo.reqCartons} />
             </div>
           </div>
 
           {/* ─── PACKAGES ENTRY CARD ─── */}
           <div className="card">
             <div className="tab-section-header">
-              <h3><Box size={22} /> تفاصيل وتوزيع الكراتين المستلمة (Received Cartons Packages)</h3>
+              <h3><Box size={22} /> {t('receiving.packages.title')}</h3>
             </div>
             
             {factoryPackages.length > 0 && (
               <div style={{ marginBottom: '1.5rem', padding: '1rem', background: 'rgba(212,175,55,0.05)', borderRadius: '10px', border: '1px solid rgba(212,175,55,0.2)' }}>
                 <h4 style={{ fontSize: '1rem', color: 'var(--accent-color)', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <Factory size={18} /> مدخلات المصنع للكراتين (Factory Entries)
+                  <Factory size={18} /> {t('receiving.packages.factory_entries')}
                 </h4>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.75rem' }}>
                   {factoryPackages.map((pkg, idx) => {
@@ -637,12 +639,12 @@ const FactoryReceiving = () => {
                           <span style={{ color: 'var(--text-muted)' }}>{pkg.kind} • {pkg.status}</span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-main)' }}>
-                          <span>الكراتين: {from} - {to} ({totalCtn})</span>
-                          <span>الكمية: {units} / {pkg.kind}</span>
+                          <span>{t('receiving.packages.cartons')}: {from} - {to} ({totalCtn})</span>
+                          <span>{t('receiving.packages.qty')}: {units} / {pkg.kind}</span>
                         </div>
                         {totalProd > 0 && (
                           <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px solid rgba(255,255,255,0.05)', color: 'var(--accent-color)', fontWeight: 'bold' }}>
-                            إجمالي القطع: {totalProd}
+                            {t('receiving.packages.total_pcs')}: {totalProd}
                           </div>
                         )}
                       </div>
@@ -683,7 +685,7 @@ const FactoryReceiving = () => {
                                   onChange={(e) => handlePackageChange(idx, 'active', e.target.checked)}
                                   style={{ width: '18px', height: '18px', accentColor: 'var(--accent-color)', cursor: 'pointer' }}
                                 />
-                                {pkg.active ? 'مفعل (Active)' : 'إضافة بكج (Add Package)'}
+                                {pkg.active ? t('receiving.packages.active') : t('receiving.packages.add')}
                              </label>
                           )}
                        </div>
@@ -694,31 +696,31 @@ const FactoryReceiving = () => {
                     {pkg.active && (
                       <div className="fade-in" style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'flex-end', paddingTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
                         <div className="form-group" style={{ flex: 1, minWidth: '120px', marginBottom: 0 }}>
-                          <label className="form-label" style={{ fontSize: '0.75rem' }}>النوع (Kind)</label>
+                          <label className="form-label" style={{ fontSize: '0.75rem' }}>{t('receiving.packages.kind')}</label>
                           <select className="form-control" value={pkg.kind} onChange={e => handlePackageChange(idx, 'kind', e.target.value)}>
                             <option value=""></option>
-                            <option value="Pcs">قطع (Pcs)</option>
-                            <option value="Doz">درزن (Doz)</option>
+                            <option value="Pcs">{t('receiving.packages.pcs')}</option>
+                            <option value="Doz">{t('receiving.packages.doz')}</option>
                           </select>
                         </div>
                         <div className="form-group" style={{ flex: 1.5, minWidth: '150px', marginBottom: 0 }}>
-                          <label className="form-label" style={{ fontSize: '0.75rem' }}>حالة الكرتون</label>
+                          <label className="form-label" style={{ fontSize: '0.75rem' }}>{t('receiving.packages.carton_status')}</label>
                           <select className="form-control" value={pkg.status} onChange={e => handlePackageChange(idx, 'status', e.target.value)}>
                             <option value=""></option>
-                            <option value="Full">Full (ممتلئ)</option>
-                            <option value="Not Full">Not Full (ناقص)</option>
+                            <option value="Full">{t('receiving.packages.full')}</option>
+                            <option value="Not Full">{t('receiving.packages.not_full')}</option>
                           </select>
                         </div>
                         <div className="form-group" style={{ flex: 1, minWidth: '80px', marginBottom: 0 }}>
-                          <label className="form-label" style={{ fontSize: '0.75rem' }}>من (From)</label>
+                          <label className="form-label" style={{ fontSize: '0.75rem' }}>{t('receiving.packages.from')}</label>
                           <input type="number" className="form-control" value={pkg.fromCtn} onChange={e => handlePackageChange(idx, 'fromCtn', e.target.value)} />
                         </div>
                         <div className="form-group" style={{ flex: 1, minWidth: '80px', marginBottom: 0 }}>
-                          <label className="form-label" style={{ fontSize: '0.75rem' }}>إلى (To)</label>
+                          <label className="form-label" style={{ fontSize: '0.75rem' }}>{t('receiving.packages.to')}</label>
                           <input type="number" className="form-control" value={pkg.toCtn} onChange={e => handlePackageChange(idx, 'toCtn', e.target.value)} />
                         </div>
                         <div className="form-group" style={{ flex: 1.5, minWidth: '120px', marginBottom: 0 }}>
-                          <label className="form-label" style={{ fontSize: '0.75rem' }}>الكمية بالكرتون</label>
+                          <label className="form-label" style={{ fontSize: '0.75rem' }}>{t('receiving.packages.pcs_per_ctn')}</label>
                           <input type="number" className="form-control" value={pkg.pcsPerCtn} onChange={e => handlePackageChange(idx, 'pcsPerCtn', e.target.value)} />
                         </div>
 
@@ -734,12 +736,12 @@ const FactoryReceiving = () => {
                             marginBottom: '2px'
                           }}>
                             <div style={{ textAlign: 'center' }}>
-                              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>إجمالي الكراتين</span>
+                              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>{t('receiving.packages.total_ctns')}</span>
                               <strong style={{ fontSize: '1.2rem', color: '#4ade80' }}>{calc.totalCtnQty}</strong>
                             </div>
                             <div style={{ width: '1px', background: 'var(--border-color)' }}></div>
                             <div style={{ textAlign: 'center' }}>
-                              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>القطع المستلمة</span>
+                              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>{t('receiving.packages.received_pcs')}</span>
                               <strong style={{ fontSize: '1.2rem', color: '#4ade80' }}>{calc.totalProdQty}</strong>
                             </div>
                           </div>
@@ -755,7 +757,7 @@ const FactoryReceiving = () => {
           {/* ─── COLORS DISTRIBUTION CARD ─── */}
           <div className="card">
             <div className="tab-section-header">
-              <h3 style={{ margin: 0 }}><Palette size={22} /> ألوان وكميات الطلبية (Ordered Colors)</h3>
+              <h3 style={{ margin: 0 }}><Palette size={22} /> {t('receiving.colors.title')}</h3>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '1rem', marginTop: '1.5rem' }}>
@@ -767,11 +769,11 @@ const FactoryReceiving = () => {
                   </div>
                   <div style={{ padding: '10px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between' }}>
-                      <span>مطلوب:</span> <strong>{c.expected}</strong>
+                      <span>{t('receiving.colors.expected')}</span> <strong>{c.expected}</strong>
                     </div>
                     {c.factoryActual > 0 && (
                         <div style={{ fontSize: '0.8rem', color: '#d4af37', display: 'flex', justifyContent: 'space-between' }}>
-                          <span>صنع فعليا:</span> <strong>{c.factoryActual}</strong>
+                          <span>{t('receiving.colors.actual')}</span> <strong>{c.factoryActual}</strong>
                         </div>
                     )}
                     <input
@@ -779,7 +781,7 @@ const FactoryReceiving = () => {
                       className="form-control"
                       value={c.quantity}
                       onChange={(e) => handleColorChange(i, e.target.value)}
-                      placeholder="استلام"
+                      placeholder={t('receiving.colors.receive')}
                       style={{ textAlign: 'center', background: 'var(--bg-color)', padding: '6px', fontSize: '1.1rem' }}
                     />
                   </div>
@@ -787,7 +789,7 @@ const FactoryReceiving = () => {
               ))}
             </div>
             {colors.filter(c => c.colorName).length === 0 && (
-               <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2rem' }}>لا توجد ألوان محددة في هذا الموديل.</div>
+               <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2rem' }}>{t('receiving.colors.no_colors')}</div>
             )}
           </div>
 
@@ -807,21 +809,21 @@ const FactoryReceiving = () => {
           
           <div style={{ display: 'flex', gap: '3rem' }}>
             <div>
-              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>إجمالي الكراتين المستلمة</span>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>{t('receiving.summary.total_ctn')}</span>
               <div style={{ fontSize: '1.6rem', fontWeight: '900', color: '#fff', display: 'flex', gap: '4px', alignItems: 'baseline' }}>
-                <PackageCheck size={20} color="var(--accent-color)" /> {totals.totalCtn} <span style={{ fontSize: '1rem', color: 'var(--text-muted)', fontWeight: 'normal' }}>CTN</span>
+                <PackageCheck size={20} color="var(--accent-color)" /> {totals.totalCtn} <span style={{ fontSize: '1rem', color: 'var(--text-muted)', fontWeight: 'normal' }}>{t('receiving.packages.cartons')}</span>
               </div>
             </div>
             <div style={{ width: '1px', background: 'rgba(212, 175, 55, 0.3)' }}></div>
             <div>
-              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>إجمالي القطع المستلمة</span>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>{t('receiving.summary.total_qty')}</span>
               <div style={{ fontSize: '1.6rem', fontWeight: '900', color: '#fff', display: 'flex', gap: '4px', alignItems: 'baseline' }}>
-                <Box size={20} color="#4ade80" /> {totals.totalProd} <span style={{ fontSize: '1rem', color: 'var(--text-muted)', fontWeight: 'normal' }}>PCS</span>
+                <Box size={20} color="#4ade80" /> {totals.totalProd} <span style={{ fontSize: '1rem', color: 'var(--text-muted)', fontWeight: 'normal' }}>{t('receiving.packages.pcs')}</span>
               </div>
             </div>
             <div style={{ width: '1px', background: 'rgba(212, 175, 55, 0.3)' }}></div>
             <div>
-              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>القيمة الإجمالية (Amount)</span>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>{t('receiving.summary.total_amount')}</span>
               <div style={{ fontSize: '1.6rem', fontWeight: '900', color: 'var(--accent-color)', display: 'flex', gap: '4px', alignItems: 'baseline' }}>
                 <Calculator size={20} /> {totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })} <span style={{ fontSize: '1rem', color: 'var(--text-muted)', fontWeight: 'normal' }}>{productInfo.priceCurrency}</span>
               </div>
@@ -831,17 +833,17 @@ const FactoryReceiving = () => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
              {!isStatusReceived && isFetched && (
                 <div style={{ color: '#f87171', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold' }}>
-                   <AlertCircle size={14} /> قم بتغيير الحالة إلى "مستلمة" أولاً
+                   <AlertCircle size={14} /> {t('receiving.messages.received_status_required')}
                 </div>
              )}
              {!isQtyMatching && isFetched && totals.totalProd > 0 && (
                 <div style={{ color: '#eab308', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold' }}>
-                   <AlertCircle size={14} /> ملاحظة: الكمية مستلمة ({totals.totalProd}) لا تطابق الأصلية ({expectedTotalQty})
+                   <AlertCircle size={14} /> {t('receiving.messages.qty_mismatch_warning', { received: totals.totalProd, expected: expectedTotalQty })}
                 </div>
              )}
              {!isColorsQtyMatching && isFetched && totals.totalProd > 0 && (
                 <div style={{ color: '#eab308', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold' }}>
-                   <AlertCircle size={14} /> ملاحظة: كميات الألوان ({totalColorsQty}) لا تطابق إجمالي الكراتين ({totals.totalProd})
+                   <AlertCircle size={14} /> {t('receiving.messages.colors_mismatch_warning', { colors: totalColorsQty, total: totals.totalProd })}
                 </div>
              )}
              <button 
@@ -856,7 +858,7 @@ const FactoryReceiving = () => {
                }}
              >
                <Save size={24} />
-               اعتماد وحفظ الاستلام
+               {t('receiving.summary.save_btn')}
              </button>
           </div>
         </div>

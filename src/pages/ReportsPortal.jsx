@@ -3,6 +3,7 @@ import { supabase } from '../supabaseClient';
 import { useAppData } from '../context/AppDataContext';
 import { Filter, Download, FileText, ChevronDown, ChevronUp, Printer, Calendar, Factory, ArrowUpDown, Camera, X } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useTranslation } from 'react-i18next';
 import { CustomDateInput } from '../components/CustomDateInput';
 import * as XLSX from 'xlsx';
 import { englishOnly } from '../utils/textUtils';
@@ -10,6 +11,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 const ReportsPortal = () => {
+  const { t } = useTranslation();
   const { lookups } = useAppData();
   const [orders, setOrders] = useState([]);
   const [filteredOrders, setFilteredOrders] = useState([]);
@@ -92,7 +94,7 @@ const ReportsPortal = () => {
       setDataLoaded(true);
     } catch (err) {
       console.error(err);
-      toast.error('حدث خطأ أثناء جلب الطلبيات');
+      toast.error(t('reports.messages.fetch_error'));
     } finally {
       setIsLoading(false);
     }
@@ -163,7 +165,7 @@ const ReportsPortal = () => {
 
     setFilteredOrders(result);
     setExpandedRows([]);
-    toast.success(`تم العثور على ${result.length} طلبية`, { id: 'filter-toast' });
+    toast.success(t('reports.messages.found_orders', { count: result.length }), { id: 'filter-toast' });
   };
 
   const clearFilters = () => {
@@ -240,40 +242,40 @@ const ReportsPortal = () => {
   };
 
   const exportToExcel = () => {
-    if (filteredOrders.length === 0) return toast.error('لا توجد بيانات لتصديرها');
+    if (filteredOrders.length === 0) return toast.error(t('reports.messages.no_data_export'));
     
     const excelData = filteredOrders.map(o => {
       const d = o.order_data || {};
       const computedTotal = calculateTotalPiecesCount(d);
       return {
-        "رقم الموديل (Serial)": o.serial_number || '-',
-        "العميل / المشتري": d.buyerCompany || '-',
-        "المنتج": englishOnly(d.productName) || '-',
-        "المصنع": d.factoryId || '-',
-        "كود المصنع": getFactoryCode(d.factoryId) || '-',
-        "العلامة التجارية": d.tradeMark || '-',
-        "المقاسات": `${d.sizeFrom || '-'} ⟵ ${d.sizeTo || '-'}`,
-        "الكمية الإجمالية": computedTotal > 0 ? computedTotal : (d.totalQuantity || 0),
-        "سعر القطعة": d.productPrice || 0,
-        "العملة": d.currency || '-',
-        "إجمالي السعر": (parseFloat(d.productPrice || 0) * (computedTotal > 0 ? computedTotal : parseInt(d.totalQuantity || 0))) || 0,
-        "الملاحظات": d.remarks || '-',
-        "تاريخ الطلب": d.requestDate || o.created_at?.split('T')[0],
-        "تاريخ التسليم": d.deliveryDate || '-',
-        "تاريخ الإضافة بالنظام": new Date(o.created_at).toLocaleString('ar-EG'),
+        [t('reports.excel_headers.serial')]: o.serial_number || '-',
+        [t('reports.excel_headers.buyer')]: d.buyerCompany || '-',
+        [t('reports.excel_headers.product')]: englishOnly(d.productName) || '-',
+        [t('reports.excel_headers.factory')]: d.factoryId || '-',
+        [t('reports.excel_headers.factory_code')]: getFactoryCode(d.factoryId) || '-',
+        [t('reports.excel_headers.brand')]: d.tradeMark || '-',
+        [t('reports.excel_headers.sizes')]: `${d.sizeFrom || '-'} ⟵ ${d.sizeTo || '-'}`,
+        [t('reports.excel_headers.total_qty')]: computedTotal > 0 ? computedTotal : (d.totalQuantity || 0),
+        [t('reports.excel_headers.unit_price')]: d.productPrice || 0,
+        [t('reports.excel_headers.currency')]: d.currency || '-',
+        [t('reports.excel_headers.total_price')]: (parseFloat(d.productPrice || 0) * (computedTotal > 0 ? computedTotal : parseInt(d.totalQuantity || 0))) || 0,
+        [t('reports.excel_headers.remarks')]: d.remarks || '-',
+        [t('reports.excel_headers.order_date')]: d.requestDate || o.created_at?.split('T')[0],
+        [t('reports.excel_headers.delivery_date')]: d.deliveryDate || '-',
+        [t('reports.excel_headers.system_date')]: new Date(o.created_at).toLocaleString(),
       };
     });
 
     const worksheet = XLSX.utils.json_to_sheet(excelData);
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "تقرير الطلبيات");
+    XLSX.utils.book_append_sheet(workbook, worksheet, t('reports.excel_headers.sheet_name', { defaultValue: 'Orders Report' }));
     XLSX.writeFile(workbook, `Report_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   const exportToPDF = async () => {
-    if (filteredOrders.length === 0) return toast.error('لا توجد بيانات لتصديرها');
+    if (filteredOrders.length === 0) return toast.error(t('reports.messages.no_data_export'));
     
-    const toastId = toast.loading('جاري تجهيز وتصدير التقرير الشامل...');
+    const toastId = toast.loading(t('reports.messages.preparing_pdf'));
 
     try {
        const pdf = new jsPDF({
@@ -297,7 +299,21 @@ const ReportsPortal = () => {
        pdf.line(margin, 26, pageW - margin, 26);
 
        // === Data Table ===
-       const tblHead = [['#', 'Serial', 'Product Name', 'Buyer', 'Factory', 'Factory Code', 'Sizes', 'Total Qty', 'Unit Price', 'Currency', 'Total Price', 'Order Date', 'Delivery Date']];
+       const tblHead = [[
+         '#', 
+         t('reports.table.cols.serial'), 
+         t('reports.table.cols.product'), 
+         t('reports.table.cols.buyer'), 
+         t('reports.table.cols.factory'), 
+         t('reports.excel_headers.factory_code'), 
+         t('reports.excel_headers.sizes'), 
+         t('reports.table.cols.total_qty'), 
+         t('reports.excel_headers.unit_price'), 
+         t('reports.excel_headers.currency'), 
+         t('reports.excel_headers.total_price'), 
+         t('reports.table.cols.order_date'), 
+         t('reports.excel_headers.delivery_date')
+       ]];
 
        const tblBody = filteredOrders.map((order, idx) => {
          const d = order.order_data || {};
@@ -354,9 +370,9 @@ const ReportsPortal = () => {
 
        pdf.save(`Report_${new Date().toISOString().split('T')[0]}.pdf`);
        
-       toast.success('تم تحميل التقرير بنجاح!', { id: toastId });
+       toast.success(t('reports.messages.pdf_success'), { id: toastId });
     } catch (err) {
-       toast.error('حدث خطأ أثناء تحميل الـ PDF', { id: toastId });
+       toast.error(t('reports.messages.pdf_error'), { id: toastId });
        console.error(err);
     }
   };
@@ -387,7 +403,7 @@ const ReportsPortal = () => {
       animation: 'fadeIn 0.2s ease'
     }}>
       <div style={{ padding: '0.75rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--surface-highlight)' }}>
-          <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: 'var(--accent-color)' }}>اختر موديلاً:</span>
+          <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: 'var(--accent-color)' }}>{t('export.select_saved')}:</span>
           <button onClick={() => { setShowSerialsList(false); setSerialSearchQuery(''); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-main)', padding: 0, display: 'flex', alignItems: 'center' }}>
              <X size={18} />
           </button>
@@ -397,7 +413,7 @@ const ReportsPortal = () => {
         <input
           ref={serialSearchRef}
           type="text"
-          placeholder="🔍 ابحث..."
+          placeholder={t('export.search_placeholder')}
           value={serialSearchQuery}
           onChange={(e) => setSerialSearchQuery(e.target.value)}
           onKeyDown={(e) => {
@@ -430,14 +446,14 @@ const ReportsPortal = () => {
       </div>
       
       {fetchingSerials ? (
-          <div style={{ padding: '1.5rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)' }}>جاري التحميل...</div>
+          <div style={{ padding: '1.5rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)' }}>{t('print.search.loading')}</div>
       ) : (
          (() => {
            const filteredSerials = serialSearchQuery.trim()
              ? availableSerials.filter(s => s.toString().includes(serialSearchQuery.trim()))
              : availableSerials;
            return filteredSerials.length === 0 ? (
-             <div style={{ padding: '1.5rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)' }}>لا توجد نتائج</div>
+             <div style={{ padding: '1.5rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)' }}>{t('entry.actions.no_match')}</div>
            ) : (
             <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
                 {filteredSerials.map(serial => (
@@ -468,16 +484,16 @@ const ReportsPortal = () => {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
         <div>
           <h1 className="text-gradient" style={{ fontSize: '2.5rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <FileText size={40} color="var(--accent-color)" /> بـوابـة التقاريـر الذكيـة
+            <FileText size={40} color="var(--accent-color)" /> {t('reports.title')}
           </h1>
-          <p style={{ color: 'var(--text-muted)' }}>استعلام ديناميكي واستخراج التقارير وتصديرها</p>
+          <p style={{ color: 'var(--text-muted)' }}>{t('reports.subtitle')}</p>
         </div>
         <div style={{ display: 'flex', gap: '1rem' }}>
           <button className="btn" onClick={exportToExcel} style={{ backgroundColor: '#10b981', color: 'white', boxShadow: '0 4px 15px rgba(16, 185, 129, 0.3)' }}>
-            <Download size={20} /> تصدير Excel
+            <Download size={20} /> {t('reports.export_excel')}
           </button>
           <button className="btn" onClick={exportToPDF} style={{ backgroundColor: '#ef4444', color: 'white', boxShadow: '0 4px 15px rgba(239, 68, 68, 0.3)' }}>
-            <Printer size={20} /> تصدير PDF
+            <Printer size={20} /> {t('reports.export_pdf')}
           </button>
         </div>
       </div>
@@ -486,38 +502,38 @@ const ReportsPortal = () => {
       <div className="card glass-panel" style={{ marginBottom: '2rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem' }}>
           <Filter color="var(--accent-color)" />
-          <h3 style={{ margin: 0 }}>محددات الاستعلام (Filters)</h3>
+          <h3 style={{ margin: 0 }}>{t('reports.filters.title')}</h3>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.5rem' }}>
           <div className="form-group" style={{ position: 'relative' }}>
-            <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><FileText size={14}/> من رقم موديل (Serial)</label>
-            <input type="number" className="form-control" placeholder="مثال: 1000 (F9)" value={filters.fromSerial} onChange={(e) => updateFilter('fromSerial', e.target.value)} onKeyDown={(e) => handleF9Press(e, 'fromSerial')} />
+            <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><FileText size={14}/> {t('reports.filters.from_serial')}</label>
+            <input type="number" className="form-control" placeholder={t('print.search.placeholder')} value={filters.fromSerial} onChange={(e) => updateFilter('fromSerial', e.target.value)} onKeyDown={(e) => handleF9Press(e, 'fromSerial')} />
             {showSerialsList && activeSerialField === 'fromSerial' && renderSerialsLookup()}
           </div>
           
           <div className="form-group" style={{ position: 'relative' }}>
-            <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><FileText size={14}/> إلى رقم موديل</label>
-            <input type="number" className="form-control" placeholder="مثال: 1100 (F9)" value={filters.toSerial} onChange={(e) => updateFilter('toSerial', e.target.value)} onKeyDown={(e) => handleF9Press(e, 'toSerial')} />
+            <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><FileText size={14}/> {t('reports.filters.to_serial')}</label>
+            <input type="number" className="form-control" placeholder={t('print.search.placeholder')} value={filters.toSerial} onChange={(e) => updateFilter('toSerial', e.target.value)} onKeyDown={(e) => handleF9Press(e, 'toSerial')} />
             {showSerialsList && activeSerialField === 'toSerial' && renderSerialsLookup()}
           </div>
 
           <CustomDateInput 
-            label={<><Calendar size={14}/> من تاريخ</>}
+            label={<><Calendar size={14}/> {t('reports.filters.from_date')}</>}
             value={filters.fromDate}
             onChange={(val) => updateFilter('fromDate', val)}
           />
 
           <CustomDateInput 
-            label={<><Calendar size={14}/> إلى تاريخ</>}
+            label={<><Calendar size={14}/> {t('reports.filters.to_date')}</>}
             value={filters.toDate}
             onChange={(val) => updateFilter('toDate', val)}
           />
 
           <div className="form-group">
-            <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><Factory size={14}/> تحديد المصنع</label>
+            <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><Factory size={14}/> {t('reports.filters.select_factory')}</label>
             <select className="form-control" value={filters.factory} onChange={(e) => updateFilter('factory', e.target.value)}>
-              <option value="">-- جميع المصانع --</option>
+              <option value="">{t('reports.filters.all_factories')}</option>
               {lookups.factories?.map((f, i) => {
                 const factoryName = typeof f === 'object' ? f.name : f;
                 return <option key={i} value={factoryName}>{factoryName}</option>;
@@ -528,30 +544,30 @@ const ReportsPortal = () => {
         </div>
         
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '2rem' }}>
-          <button className="btn btn-outline" onClick={clearFilters}>إفراغ الفلاتر</button>
-          <button className="btn btn-accent" onClick={async () => { await fetchOrders(); toast.success('تم عرض جميع المنتجات', { id: 'filter-toast' }); }} style={{ backgroundColor: 'var(--accent-color)', color: '#000', fontWeight: 'bold', padding: '0.5rem 1.5rem' }}>إظهار كل المنتجات</button>
-          <button className="btn btn-primary" onClick={applyFilters} style={{ padding: '0.5rem 3rem' }}>بحث وعرض</button>
+          <button className="btn btn-outline" onClick={clearFilters}>{t('reports.filters.clear_btn')}</button>
+          <button className="btn btn-accent" onClick={async () => { await fetchOrders(); toast.success(t('reports.messages.all_shown'), { id: 'filter-toast' }); }} style={{ backgroundColor: 'var(--accent-color)', color: '#000', fontWeight: 'bold', padding: '0.5rem 1.5rem' }}>{t('reports.filters.show_all_btn')}</button>
+          <button className="btn btn-primary" onClick={applyFilters} style={{ padding: '0.5rem 3rem' }}>{t('reports.filters.search_btn')}</button>
         </div>
       </div>
 
       {/* Results Section */}
       <div className="card" id="report-print-area">
         <div style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 style={{ margin: 0, color: 'var(--primary-color)' }}>نتائج الاستعلام</h3>
+          <h3 style={{ margin: 0, color: 'var(--text-strong)' }}>{t('reports.results.title')}</h3>
           <span style={{ backgroundColor: 'var(--surface-highlight)', padding: '0.5rem 1rem', borderRadius: '50px', fontSize: '0.9rem', color: 'var(--accent-color)', fontWeight: 'bold' }}>
-            {filteredOrders.length} طلبية مطابقة
+            {t('reports.results.matching_orders', { count: filteredOrders.length })}
           </span>
         </div>
 
         {isLoading ? (
-          <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-muted)' }}>جاري تحميل البيانات...</div>
+          <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-muted)' }}>{t('reports.results.loading')}</div>
         ) : !dataLoaded ? (
           <div style={{ textAlign: 'center', padding: '4rem', backgroundColor: 'var(--surface-highlight)', borderRadius: 'var(--radius-md)' }}>
-            <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem' }}>الرجاء تحديد معايير البحث والضغط على "بحث وعرض"، أو الضغط على زر "إظهار كل المنتجات".</p>
+            <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem' }}>{t('reports.results.select_criteria')}</p>
           </div>
         ) : filteredOrders.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '4rem', backgroundColor: 'var(--surface-highlight)', borderRadius: 'var(--radius-md)' }}>
-            <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem' }}>لا توجد طلبيات تطابق الفلاتر الحالية.</p>
+            <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem' }}>{t('reports.results.no_results')}</p>
           </div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
@@ -559,24 +575,24 @@ const ReportsPortal = () => {
               <thead>
                 <tr style={{ backgroundColor: 'rgba(212, 175, 55, 0.1)', borderBottom: '2px solid var(--accent-color)' }}>
                   <th style={{ padding: '1rem', color: sortConfig.key === 'serial_number' ? 'var(--accent-color)' : 'inherit', cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('serial_number')}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'flex-start' }}>رقم الموديل <ArrowUpDown size={14} opacity={sortConfig.key === 'serial_number' ? 1 : 0.3}/></div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'flex-start' }}>{t('reports.table.cols.serial')} <ArrowUpDown size={14} opacity={sortConfig.key === 'serial_number' ? 1 : 0.3}/></div>
                   </th>
                   <th style={{ padding: '1rem', color: sortConfig.key === 'productName' ? 'var(--accent-color)' : 'inherit', cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('productName')}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'flex-start' }}>المنتج <ArrowUpDown size={14} opacity={sortConfig.key === 'productName' ? 1 : 0.3}/></div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'flex-start' }}>{t('reports.table.cols.product')} <ArrowUpDown size={14} opacity={sortConfig.key === 'productName' ? 1 : 0.3}/></div>
                   </th>
                   <th style={{ padding: '1rem', color: sortConfig.key === 'buyerCompany' ? 'var(--accent-color)' : 'inherit', cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('buyerCompany')}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'flex-start' }}>الشركة (المشتري) <ArrowUpDown size={14} opacity={sortConfig.key === 'buyerCompany' ? 1 : 0.3}/></div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'flex-start' }}>{t('reports.table.cols.buyer')} <ArrowUpDown size={14} opacity={sortConfig.key === 'buyerCompany' ? 1 : 0.3}/></div>
                   </th>
                   <th style={{ padding: '1rem', color: sortConfig.key === 'factoryId' ? 'var(--accent-color)' : 'inherit', cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('factoryId')}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'flex-start' }}>المصنع المستلم <ArrowUpDown size={14} opacity={sortConfig.key === 'factoryId' ? 1 : 0.3}/></div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'flex-start' }}>{t('reports.table.cols.factory')} <ArrowUpDown size={14} opacity={sortConfig.key === 'factoryId' ? 1 : 0.3}/></div>
                   </th>
                   <th style={{ padding: '1rem', color: sortConfig.key === 'totalQuantity' ? 'var(--accent-color)' : 'inherit', cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('totalQuantity')}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'center' }}>الكمية الإجمالية <ArrowUpDown size={14} opacity={sortConfig.key === 'totalQuantity' ? 1 : 0.3}/></div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'center' }}>{t('reports.table.cols.total_qty')} <ArrowUpDown size={14} opacity={sortConfig.key === 'totalQuantity' ? 1 : 0.3}/></div>
                   </th>
                   <th style={{ padding: '1rem', color: sortConfig.key === 'requestDate' ? 'var(--accent-color)' : 'inherit', cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('requestDate')}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'center' }}>تاريخ الطلب <ArrowUpDown size={14} opacity={sortConfig.key === 'requestDate' ? 1 : 0.3}/></div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'center' }}>{t('reports.table.cols.order_date')} <ArrowUpDown size={14} opacity={sortConfig.key === 'requestDate' ? 1 : 0.3}/></div>
                   </th>
-                  <th style={{ padding: '1rem', textAlign: 'center' }}>تفاصيل</th>
+                  <th style={{ padding: '1rem', textAlign: 'center' }}>{t('reports.table.cols.details')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -588,7 +604,7 @@ const ReportsPortal = () => {
                   return (
                     <React.Fragment key={idx}>
                       <tr style={{ borderBottom: '1px solid var(--border-color)', backgroundColor: idx % 2 === 0 ? 'transparent' : 'var(--surface-highlight)', transition: 'background-color 0.2s' }}>
-                        <td style={{ padding: '1rem', fontWeight: 'bold', color: 'var(--primary-color)', fontSize: '1.2rem' }}>{order.serial_number || '-'}</td>
+                        <td style={{ padding: '1rem', fontWeight: 'bold', color: 'var(--text-strong)', fontSize: '1.2rem' }}>{order.serial_number || '-'}</td>
                         <td style={{ padding: '1rem' }}>{englishOnly(d.productName) || '-'}</td>
                         <td style={{ padding: '1rem' }}>{d.buyerCompany || '-'}</td>
                         <td style={{ padding: '1rem' }}>
@@ -621,7 +637,7 @@ const ReportsPortal = () => {
                              
                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem', padding: '1.5rem', background: 'rgba(255,255,255,0.03)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(255,255,255,0.05)' }}>
                                 <div>
-                                   <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem', display: 'block', marginBottom: '0.4rem' }}>المقاسات المحددة:</span>
+                                   <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem', display: 'block', marginBottom: '0.4rem' }}>{t('reports.details.sizes')}</span>
                                    <div style={{ fontWeight: 'bold', color: '#fff', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                       <span>{d.sizeFrom || '-'}</span>
                                       <span style={{ color: 'var(--accent-color)' }}>⟵</span>
@@ -629,15 +645,15 @@ const ReportsPortal = () => {
                                    </div>
                                 </div>
                                 <div>
-                                   <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem', display: 'block', marginBottom: '0.2rem' }}>تاريخ الاستلام (التسليم):</span>
+                                   <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem', display: 'block', marginBottom: '0.2rem' }}>{t('reports.details.delivery_date')}</span>
                                    <div style={{ fontWeight: 'bold', color: '#fff' }}>{d.deliveryDate || '-'}</div>
                                 </div>
                                 <div>
-                                   <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem', display: 'block', marginBottom: '0.2rem' }}>سعر القطعة (الحبة):</span>
+                                   <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem', display: 'block', marginBottom: '0.2rem' }}>{t('reports.details.unit_price')}</span>
                                    <div style={{ fontWeight: 'bold', color: '#fff' }}>{d.productPrice || '0'} {d.currency || ''}</div>
                                 </div>
                                 <div>
-                                   <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem', display: 'block', marginBottom: '0.2rem' }}>إجمالي السعر:</span>
+                                   <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem', display: 'block', marginBottom: '0.2rem' }}>{t('reports.details.total_price')}</span>
                                    <div style={{ fontWeight: '900', color: 'var(--accent-color)', fontSize: '1.1rem' }}>
                                      {(parseFloat(d.productPrice || 0) * (computedTotal > 0 ? computedTotal : parseInt(d.totalQuantity || 0))).toLocaleString()} {d.currency || ''}
                                    </div>
@@ -670,7 +686,7 @@ const ReportsPortal = () => {
 
                              {d.remarks && (
                                <div style={{ marginTop: '1rem', padding: '1.2rem', backgroundColor: 'var(--surface-highlight)', borderRadius: 'var(--radius-md)', borderRight: '4px solid var(--accent-color)' }}>
-                                 <strong style={{ color: 'var(--accent-color)', display: 'block', marginBottom: '0.5rem' }}>ملاحظات الطلبية: </strong> 
+                                 <strong style={{ color: 'var(--accent-color)', display: 'block', marginBottom: '0.5rem' }}>{t('reports.details.remarks')} </strong> 
                                  <span style={{ lineHeight: '1.6' }}>{d.remarks}</span>
                                </div>
                              )}
@@ -678,8 +694,8 @@ const ReportsPortal = () => {
                              {/* Product Images Details */}
                              {d.productImages && d.productImages.length > 0 && (
                                <div style={{ marginTop: '2rem' }}>
-                                 <h4 style={{ color: 'var(--primary-color)', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
-                                   <Camera size={18} color="var(--accent-color)" /> صور المنتج
+                                 <h4 style={{ color: 'var(--text-strong)', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
+                                   <Camera size={18} color="var(--accent-color)" /> {t('reports.details.images')}
                                  </h4>
                                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '1rem' }}>
                                    {d.productImages.map((img, idx) => (

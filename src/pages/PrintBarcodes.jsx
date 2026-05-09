@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useAppData } from '../context/AppDataContext';
 import { supabase } from '../supabaseClient';
 import toast from 'react-hot-toast';
+import { useTranslation } from 'react-i18next';
 import { Search, Printer, ArrowRight, Barcode as BarcodeIcon, Hash, Package, Layers, Palette, Ruler, BarChart3, Sparkles, X, Settings, Save, RotateCcw } from 'lucide-react';
 import { englishOnly } from '../utils/textUtils';
 import { Link } from 'react-router-dom';
@@ -44,6 +45,7 @@ const IntField = ({ label, fieldKey, unit = '', settings, onUpdate }) => (
 );
 
 const PrintBarcodes = () => {
+  const { t } = useTranslation();
   const { lookups } = useAppData();
   const [serialInput, setSerialInput] = useState('');
   const [order, setOrder] = useState(null);
@@ -64,12 +66,12 @@ const PrintBarcodes = () => {
   const handleFetchOrder = async (overrideSerial) => {
     const termToSearch = typeof overrideSerial === 'string' ? overrideSerial : serialInput;
     if (!termToSearch.trim()) {
-      toast.error('الرجاء إدخال رقم الموديل (Serial Number)');
+      toast.error(t('print.messages.enter_serial'));
       return;
     }
     setSerialInput(termToSearch);
     setLoading(true);
-    const toastId = toast.loading('جاري استرداد الموديل...');
+    const toastId = toast.loading(t('print.messages.fetching'));
     try {
       const { data, error } = await supabase
         .from('orders')
@@ -78,15 +80,15 @@ const PrintBarcodes = () => {
         .single();
         
       if (error || !data) {
-        toast.error('لم يتم العثور على الطلبية!', { id: toastId });
+        toast.error(t('print.messages.not_found'), { id: toastId });
         setOrder(null);
         setRows([]);
       } else {
-        toast.success(`تم العثور على الموديل! جاري توليد الجدول...`, { id: toastId });
+        toast.success(t('print.messages.found'), { id: toastId });
         generateRows(data.order_data, termToSearch.trim());
       }
     } catch (err) {
-      toast.error('خطأ في الاتصال!', { id: toastId });
+      toast.error(t('print.messages.conn_error'), { id: toastId });
     }
     setLoading(false);
   };
@@ -178,7 +180,7 @@ const PrintBarcodes = () => {
     setTempSettings(parsed);
     localStorage.setItem(LS_KEY, JSON.stringify(parsed));
     setShowPageSetup(false);
-    toast.success('تم حفظ إعدادات الطباعة بنجاح!');
+    toast.success(t('print.messages.save_success'));
   };
 
   const handleOpenSetup = () => {
@@ -189,7 +191,7 @@ const PrintBarcodes = () => {
 
   const handleResetSettings = () => {
     setTempSettings({ ...DEFAULT_PRINT_SETTINGS });
-    toast('تم إعادة التعيين للقيم الافتراضية', { icon: '🔄' });
+    toast(t('print.messages.reset_success'), { icon: '🔄' });
   };
 
   const updateTemp = (key, val) => {
@@ -237,7 +239,7 @@ const PrintBarcodes = () => {
           align-items: center;
           justify-content: space-between;
           padding: 1.5rem 2rem;
-          background: linear-gradient(135deg, rgba(22, 27, 34, 0.97), rgba(13, 17, 23, 0.99));
+          background: linear-gradient(135deg, var(--surface-color), var(--bg-color));
           border-radius: 20px;
           border: 1px solid rgba(212, 175, 55, 0.15);
           box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255,255,255,0.04);
@@ -299,7 +301,7 @@ const PrintBarcodes = () => {
         .bc-back-btn:hover {
           background: rgba(255,255,255,0.08);
           border-color: rgba(212, 175, 55, 0.3);
-          color: var(--primary-color);
+          color: var(--text-strong);
           transform: translateY(-1px);
         }
 
@@ -460,7 +462,7 @@ const PrintBarcodes = () => {
         .bc-stat-value {
           font-size: 1.4rem;
           font-weight: 800;
-          color: var(--primary-color);
+          color: var(--text-strong);
           font-family: 'Outfit', sans-serif;
           line-height: 1.1;
         }
@@ -496,7 +498,7 @@ const PrintBarcodes = () => {
           gap: 0.6rem;
           font-size: 1rem;
           font-weight: 600;
-          color: var(--primary-color);
+          color: var(--text-strong);
         }
 
         .bc-table-badge {
@@ -573,7 +575,7 @@ const PrintBarcodes = () => {
         .bc-cell-serial {
           font-weight: 700;
           font-size: 0.95rem;
-          color: var(--primary-color);
+          color: var(--text-strong);
           font-family: 'Outfit', sans-serif;
           letter-spacing: 0.5px;
         }
@@ -632,7 +634,7 @@ const PrintBarcodes = () => {
           border: 1px solid rgba(255,255,255,0.08);
           font-weight: 700;
           font-size: 0.95rem;
-          color: var(--primary-color);
+          color: var(--text-strong);
           font-family: 'Outfit', sans-serif;
         }
 
@@ -665,7 +667,7 @@ const PrintBarcodes = () => {
         .bc-total-label {
           font-weight: 700;
           font-size: 1rem;
-          color: var(--primary-color);
+          color: var(--text-strong);
           display: flex;
           align-items: center;
           gap: 0.5rem;
@@ -867,12 +869,12 @@ const PrintBarcodes = () => {
               <BarcodeIcon size={26} color="#000" />
             </div>
             <div>
-              <h1>نظام تخصيص الباركود</h1>
-              <p>استعرض الدفعات وعند الطباعة سيقوم النظام بتوليد ملصقات باركود فعلية للمصنع</p>
+              <h1>{t('print.title')}</h1>
+              <p>{t('print.subtitle')}</p>
             </div>
           </div>
           <Link to="/" className="bc-back-btn">
-            <ArrowRight size={18} /> العودة للبوابة
+            <ArrowRight size={18} /> {t('print.back_btn')}
           </Link>
         </header>
 
@@ -880,7 +882,7 @@ const PrintBarcodes = () => {
         <div className="bc-search-card hide-on-print">
           <div className="bc-search-label">
             <Search size={14} />
-            أدخل رقم الموديل لاستخراج بيانات الدفعات
+            {t('print.search.label')}
           </div>
           <div className="bc-search-row">
             <div className="bc-search-input-wrap">
@@ -889,7 +891,7 @@ const PrintBarcodes = () => {
                 type="text"
                 id="fetchSerialInput"
                 className="bc-search-input"
-                placeholder="مثال: 22890 (F9)"
+                placeholder={t('print.search.placeholder')}
                 value={serialInput}
                 onChange={(e) => setSerialInput(e.target.value)}
                 onKeyDown={handleF9Press}
@@ -907,7 +909,7 @@ const PrintBarcodes = () => {
                   zIndex: 1000
                 }}>
                   <div style={{ padding: '0.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--surface-highlight)' }}>
-                      <span style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>اختر موديلاً محفوظاً:</span>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>{t('export.select_saved')}</span>
                       <button onClick={() => { setShowSerialsList(false); setSerialSearchQuery(''); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-color)', padding: 0, display: 'flex', alignItems: 'center' }}>
                          <X size={16} />
                       </button>
@@ -917,7 +919,7 @@ const PrintBarcodes = () => {
                     <input
                       ref={serialSearchRef}
                       type="text"
-                      placeholder="🔍 ابحث برقم الموديل..."
+                      placeholder={t('export.search_placeholder')}
                       value={serialSearchQuery}
                       onChange={(e) => setSerialSearchQuery(e.target.value)}
                       onKeyDown={(e) => {
@@ -953,7 +955,7 @@ const PrintBarcodes = () => {
                     />
                   </div>
                   {fetchingSerials ? (
-                      <div style={{ padding: '1rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)' }}>جاري التحميل...</div>
+                      <div style={{ padding: '1rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)' }}>{t('print.search.loading')}</div>
                   ) : (
                      (() => {
                        const filteredSerials = serialSearchQuery.trim()
@@ -961,7 +963,7 @@ const PrintBarcodes = () => {
                          : availableSerials;
                        return filteredSerials.length === 0 ? (
                          <div style={{ padding: '1rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                           {availableSerials.length === 0 ? 'لا توجد موديلات محفوظة' : 'لا توجد نتائج مطابقة للبحث'}
+                           {availableSerials.length === 0 ? t('entry.actions.no_saved_models') : t('entry.actions.no_match')}
                          </div>
                        ) : (
                         <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
@@ -1002,18 +1004,18 @@ const PrintBarcodes = () => {
             </div>
             <button className="bc-generate-btn" onClick={() => handleFetchOrder()} disabled={loading}>
               <Sparkles size={18} />
-              {loading ? 'جاري السحب...' : 'توليد الجدول'}
+              {loading ? t('print.search.loading') : t('print.search.generate_btn')}
             </button>
 
             {rows.length > 0 && (
               <>
                 <button className="bc-print-btn" onClick={handleOpenSetup} style={{ background: 'linear-gradient(135deg, #6366f1, #4f46e5)', boxShadow: '0 4px 16px rgba(99,102,241,0.25)' }}>
                   <Settings size={18} />
-                  إعدادات الصفحة
+                  {t('print.search.setup_btn')}
                 </button>
                 <button className="bc-print-btn" onClick={handlePrint}>
                   <Printer size={18} />
-                  التوجه للطباعة
+                  {t('print.search.print_btn')}
                 </button>
               </>
             )}
@@ -1029,7 +1031,7 @@ const PrintBarcodes = () => {
               </div>
               <div>
                 <div className="bc-stat-value">{totalQty}</div>
-                <div className="bc-stat-label">إجمالي القطع</div>
+                <div className="bc-stat-label">{t('print.stats.total_pcs')}</div>
               </div>
             </div>
             <div className="bc-stat-card">
@@ -1038,7 +1040,7 @@ const PrintBarcodes = () => {
               </div>
               <div>
                 <div className="bc-stat-value">{rows.length}</div>
-                <div className="bc-stat-label">عدد الأسطر</div>
+                <div className="bc-stat-label">{t('print.stats.total_lines')}</div>
               </div>
             </div>
             <div className="bc-stat-card">
@@ -1047,7 +1049,7 @@ const PrintBarcodes = () => {
               </div>
               <div>
                 <div className="bc-stat-value">{uniqueColors.length}</div>
-                <div className="bc-stat-label">ألوان مختلفة</div>
+                <div className="bc-stat-label">{t('print.stats.unique_colors')}</div>
               </div>
             </div>
             <div className="bc-stat-card">
@@ -1056,7 +1058,7 @@ const PrintBarcodes = () => {
               </div>
               <div>
                 <div className="bc-stat-value">{uniqueSizes.length}</div>
-                <div className="bc-stat-label">مقاسات مختلفة</div>
+                <div className="bc-stat-label">{t('print.stats.unique_sizes')}</div>
               </div>
             </div>
           </div>
@@ -1068,21 +1070,21 @@ const PrintBarcodes = () => {
             <div className="bc-table-header hide-on-print">
               <div className="bc-table-title">
                 <BarChart3 size={18} color="var(--accent-color)" />
-                جدول دفعات الباركود
+                {t('print.table.title')}
               </div>
               <span className="bc-table-badge">
-                {rows.length} سطر
+                {rows.length} {t('print.table.rows')}
               </span>
             </div>
             <div className="bc-table-scroll">
               <table className="bc-table">
                 <thead>
                   <tr>
-                    <th>الصنف (Item)</th>
-                    <th>الباركود (Batch Barcode)</th>
-                    <th>اللون (Color)</th>
-                    <th>المقاس (Size)</th>
-                    <th>الكمية (Qty)</th>
+                    <th>{t('print.table.cols.item')}</th>
+                    <th>{t('print.table.cols.barcode')}</th>
+                    <th>{t('print.table.cols.color')}</th>
+                    <th>{t('print.table.cols.size')}</th>
+                    <th>{t('print.table.cols.qty')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1110,7 +1112,7 @@ const PrintBarcodes = () => {
                         <span className="bc-cell-size">{row.size}</span>
                       </td>
                       <td>
-                        <span className="bc-cell-qty">{row.quantity} قطعة</span>
+                        <span className="bc-cell-qty">{row.quantity} {t('print.table.pcs')}</span>
                       </td>
                     </tr>
                   ))}
@@ -1120,12 +1122,12 @@ const PrintBarcodes = () => {
                     <td colSpan="4" style={{ textAlign: 'left' }}>
                       <span className="bc-total-label">
                         <Package size={18} color="var(--accent-color)" />
-                        إجمالي القطع المصدرة (Total Qty):
+                        {t('print.table.total_exported')}
                       </span>
                     </td>
                     <td>
                       <span className="bc-total-value">
-                        {totalQty} قطعة
+                        {totalQty} {t('print.table.pcs')}
                       </span>
                     </td>
                   </tr>
@@ -1140,7 +1142,7 @@ const PrintBarcodes = () => {
                 <BarcodeIcon size={32} color="rgba(212, 175, 55, 0.35)" />
               </div>
               <p className="bc-empty-text">
-                أدخل رقم الموديل في الأعلى واضغط "توليد الجدول" لاستعراض بيانات الدفعات والباركود
+                {t('print.empty.title')}
               </p>
             </div>
           </div>
@@ -1211,8 +1213,8 @@ const PrintBarcodes = () => {
                   <Settings size={20} color="#fff" />
                 </div>
                 <div>
-                  <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#fff' }}>Page Setup</h2>
-                  <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-muted)' }}>إعدادات صفحة الطباعة — مثل BarTender</p>
+                  <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#fff' }}>{t('print.setup.title')}</h2>
+                  <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-muted)' }}>{t('print.setup.desc')}</p>
                 </div>
               </div>
               <button onClick={() => setShowPageSetup(false)} style={{ background: 'rgba(255,255,255,0.06)', border: 'none', borderRadius: 10, width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#fff', transition: 'all 0.2s' }}>
@@ -1263,10 +1265,10 @@ const PrintBarcodes = () => {
             <div style={{ padding: '0.75rem 1.75rem 0' }}>
               <div style={{ display: 'flex', gap: '0.25rem', background: 'rgba(255,255,255,0.03)', borderRadius: 12, padding: '0.3rem', border: '1px solid rgba(255,255,255,0.05)' }}>
                 {[
-                  { id: 'paper', label: '📄 Paper', labelAr: 'الورقة' },
-                  { id: 'margins', label: '📐 Margins', labelAr: 'الهوامش' },
-                  { id: 'label', label: '🏷️ Label', labelAr: 'الملصق' },
-                  { id: 'layout', label: '📊 Layout', labelAr: 'التخطيط' },
+                  { id: 'paper', label: `📄 ${t('print.setup.paper_label')}` },
+                  { id: 'margins', label: `📐 ${t('print.setup.margins_label')}` },
+                  { id: 'label', label: `🏷️ ${t('print.setup.label_label')}` },
+                  { id: 'layout', label: `📊 ${t('print.setup.layout_label')}` },
                 ].map(t => (
                   <button key={t.id} onClick={() => setSetupTab(t.id)} style={{
                     flex: 1, padding: '0.6rem 0.5rem', border: 'none', borderRadius: 10, cursor: 'pointer',
@@ -1285,10 +1287,10 @@ const PrintBarcodes = () => {
             <div style={{ padding: '1.25rem 1.75rem' }}>
               {setupTab === 'paper' && (
                 <div>
-                  <FieldRow label="Width — العرض" fieldKey="paperWidth" settings={tempSettings} onUpdate={updateTemp} />
-                  <FieldRow label="Height — الارتفاع" fieldKey="paperHeight" settings={tempSettings} onUpdate={updateTemp} />
+                  <FieldRow label={t('print.setup.width')} fieldKey="paperWidth" settings={tempSettings} onUpdate={updateTemp} />
+                  <FieldRow label={t('print.setup.height')} fieldKey="paperHeight" settings={tempSettings} onUpdate={updateTemp} />
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.85rem 0' }}>
-                    <label style={{ fontSize: '0.9rem', fontWeight: 500, color: 'var(--text-main)' }}>Orientation — الاتجاه</label>
+                    <label style={{ fontSize: '0.9rem', fontWeight: 500, color: 'var(--text-main)' }}>{t('print.setup.orientation')}</label>
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
                       {['portrait', 'landscape'].map(o => (
                         <button key={o} onClick={() => updateTemp('orientation', o)} style={{
@@ -1298,7 +1300,7 @@ const PrintBarcodes = () => {
                           borderColor: tempSettings.orientation === o ? 'var(--accent-color)' : 'var(--border-color)',
                           color: tempSettings.orientation === o ? '#fff' : 'var(--text-muted)',
                         }}>
-                          {o === 'portrait' ? '📄 Portrait' : '📃 Landscape'}
+                          {o === 'portrait' ? `📄 ${t('print.setup.portrait')}` : `📃 ${t('print.setup.landscape')}`}
                         </button>
                       ))}
                     </div>
@@ -1307,24 +1309,24 @@ const PrintBarcodes = () => {
               )}
               {setupTab === 'margins' && (
                 <div>
-                  <FieldRow label="Top — أعلى" fieldKey="marginTop" settings={tempSettings} onUpdate={updateTemp} />
-                  <FieldRow label="Bottom — أسفل" fieldKey="marginBottom" settings={tempSettings} onUpdate={updateTemp} />
-                  <FieldRow label="Left — يسار" fieldKey="marginLeft" settings={tempSettings} onUpdate={updateTemp} />
-                  <FieldRow label="Right — يمين" fieldKey="marginRight" settings={tempSettings} onUpdate={updateTemp} />
+                  <FieldRow label={t('print.setup.top')} fieldKey="marginTop" settings={tempSettings} onUpdate={updateTemp} />
+                  <FieldRow label={t('print.setup.bottom')} fieldKey="marginBottom" settings={tempSettings} onUpdate={updateTemp} />
+                  <FieldRow label={t('print.setup.left')} fieldKey="marginLeft" settings={tempSettings} onUpdate={updateTemp} />
+                  <FieldRow label={t('print.setup.right')} fieldKey="marginRight" settings={tempSettings} onUpdate={updateTemp} />
                 </div>
               )}
               {setupTab === 'label' && (
                 <div>
-                  <FieldRow label="Width — عرض الملصق" fieldKey="labelWidth" settings={tempSettings} onUpdate={updateTemp} />
-                  <FieldRow label="Height — ارتفاع الملصق" fieldKey="labelHeight" settings={tempSettings} onUpdate={updateTemp} />
+                  <FieldRow label={t('print.setup.label_width')} fieldKey="labelWidth" settings={tempSettings} onUpdate={updateTemp} />
+                  <FieldRow label={t('print.setup.label_height')} fieldKey="labelHeight" settings={tempSettings} onUpdate={updateTemp} />
                 </div>
               )}
               {setupTab === 'layout' && (
                 <div>
-                  <IntField label="Columns — عدد الأعمدة" fieldKey="columns" unit="across" settings={tempSettings} onUpdate={updateTemp} />
-                  <IntField label="Rows — عدد الصفوف" fieldKey="rows" unit="down" settings={tempSettings} onUpdate={updateTemp} />
-                  <FieldRow label="Column Gap — فراغ الأعمدة" fieldKey="columnGap" settings={tempSettings} onUpdate={updateTemp} />
-                  <FieldRow label="Row Gap — فراغ الصفوف" fieldKey="rowGap" settings={tempSettings} onUpdate={updateTemp} />
+                  <IntField label={t('print.setup.columns')} fieldKey="columns" unit={t('print.setup.across')} settings={tempSettings} onUpdate={updateTemp} />
+                  <IntField label={t('print.setup.rows')} fieldKey="rows" unit={t('print.setup.down')} settings={tempSettings} onUpdate={updateTemp} />
+                  <FieldRow label={t('print.setup.col_gap')} fieldKey="columnGap" settings={tempSettings} onUpdate={updateTemp} />
+                  <FieldRow label={t('print.setup.row_gap')} fieldKey="rowGap" settings={tempSettings} onUpdate={updateTemp} />
                 </div>
               )}
             </div>
@@ -1336,14 +1338,14 @@ const PrintBarcodes = () => {
                 background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-color)', borderRadius: 12,
                 color: 'var(--text-muted)', cursor: 'pointer', fontFamily: "'Tajawal', sans-serif", fontWeight: 600, fontSize: '0.85rem', transition: 'all 0.2s'
               }}>
-                <RotateCcw size={15} /> إعادة تعيين
+                <RotateCcw size={15} /> {t('print.setup.reset')}
               </button>
               <div style={{ display: 'flex', gap: '0.6rem' }}>
                 <button onClick={() => setShowPageSetup(false)} style={{
                   padding: '0.6rem 1.25rem', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-color)',
                   borderRadius: 12, color: 'var(--text-muted)', cursor: 'pointer', fontFamily: "'Tajawal', sans-serif", fontWeight: 600, fontSize: '0.85rem', transition: 'all 0.2s'
                 }}>
-                  إلغاء
+                  {t('print.setup.cancel')}
                 </button>
                 <button onClick={handleSaveSettings} style={{
                   display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.6rem 1.5rem',
@@ -1351,7 +1353,7 @@ const PrintBarcodes = () => {
                   color: '#000', cursor: 'pointer', fontFamily: "'Tajawal', sans-serif", fontWeight: 700, fontSize: '0.9rem',
                   boxShadow: '0 4px 16px rgba(212,175,55,0.3)', transition: 'all 0.2s'
                 }}>
-                  <Save size={16} /> حفظ الإعدادات
+                  <Save size={16} /> {t('print.setup.save')}
                 </button>
               </div>
             </div>

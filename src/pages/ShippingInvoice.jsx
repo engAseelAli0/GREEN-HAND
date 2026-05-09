@@ -4,6 +4,7 @@ import { useAppData } from '../context/AppDataContext';
 import { englishOnly } from '../utils/textUtils';
 import { Printer, Plus, Trash2, Search, FileText, Settings, LayoutGrid, AlertCircle, X } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useTranslation } from 'react-i18next';
 import { CustomDateInput } from '../components/CustomDateInput';
 
 const toEnglishNumbers = (str) => {
@@ -12,6 +13,7 @@ const toEnglishNumbers = (str) => {
 };
 
 const ShippingInvoice = () => {
+  const { t } = useTranslation();
   const today = new Date();
   const localDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
@@ -64,7 +66,7 @@ const ShippingInvoice = () => {
     setRows([{ id: Date.now(), serial: '', desc: '', arabicName: '', qty: '', currency: '¥ RMB', unitPrice: '', totalAmount: 0, details: '', image: '' }]);
     setHeaderInfo(prev => ({ ...prev, buyer: '', invoiceNo: '', branch: '' }));
     setShowClearConfirm(false);
-    toast.success('تم تفريغ الجدول بنجاح');
+    toast.success(t('shipping.messages.clear_success'));
   };
 
   // Auto-calculate Total Amount for each row when Qty or Unit Price changes
@@ -163,10 +165,10 @@ const ShippingInvoice = () => {
       const serialsToCheck = rows.map(r => r.serial.trim()).filter(Boolean);
       
       if (serialsToCheck.length === 0) {
-          return toast.error('الرجاء إدخال أرقام موديلات أولاً');
+          return toast.error(t('shipping.messages.enter_serials_first'));
       }
 
-      const toastId = toast.loading('جاري التحقق من حالة الموديلات في قاعدة البيانات...');
+      const toastId = toast.loading(t('shipping.messages.checking_status'));
       let invalidItems = [];
 
       try {
@@ -185,9 +187,9 @@ const ShippingInvoice = () => {
               const s = r.serial.trim();
               if (s) {
                   if (!existingOrders.has(s)) {
-                      invalidItems.push({ id: r.id, serial: s, reason: 'غير موجود في قاعدة البيانات' });
+                      invalidItems.push({ id: r.id, serial: s, reason: t('shipping.validation.reasons.not_found') });
                   } else if (!receivedMap.has(s)) {
-                      invalidItems.push({ id: r.id, serial: s, reason: 'غير مستلم من المصنع' });
+                      invalidItems.push({ id: r.id, serial: s, reason: t('shipping.validation.reasons.not_received') });
                   }
               }
           });
@@ -204,13 +206,13 @@ const ShippingInvoice = () => {
           }
       } catch (err) {
           toast.dismiss(toastId);
-          toast.error('حدث خطأ أثناء التحقق من الموديلات');
+          toast.error(t('shipping.messages.check_error'));
       }
   };
 
   const fetchAllData = async (withImage, badSerialsToSkip = [], removeBadRows = false) => {
     setShowImageColumn(withImage);
-    const toastId = toast.loading('جاري التحقق من الموديلات وجلب البيانات...');
+    const toastId = toast.loading(t('shipping.messages.fetching_data'));
     let successCount = 0;
     
     // Create a copy of rows
@@ -267,9 +269,9 @@ const ShippingInvoice = () => {
     }
 
     if (successCount > 0) {
-        toast.success(`تم جلب بيانات ${successCount} موديل بنجاح!`, { id: toastId });
+        toast.success(t('shipping.messages.fetch_success', { count: successCount }), { id: toastId });
     } else {
-        toast.error('لم يتم العثور على بيانات جديدة أو جميع الأصناف مجلوبة مسبقاً', { id: toastId });
+        toast.error(t('shipping.messages.fetch_no_data'), { id: toastId });
     }
   };
 
@@ -298,16 +300,16 @@ const ShippingInvoice = () => {
     <div className="fade-in" style={{ paddingBottom: '4rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
         <div>
-          <h1 style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '2.2rem', margin: 0, color: 'var(--primary-color)' }}>
+          <h1 style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '2.2rem', margin: 0, color: 'var(--text-strong)' }}>
             <FileText size={40} color="var(--accent-color)" />
-            فاتورة الشحن والتقارير المجمعة
+            {t('shipping.title')}
           </h1>
           <p style={{ color: 'var(--text-muted)', margin: '0.5rem 0 0', paddingRight: '3.5rem' }}>
-            إنشاء فواتير شحن مجمعة، إدخال الأرقام التسلسلية وجلب البيانات آلياً بضغطة زر.
+            {t('shipping.subtitle')}
           </p>
         </div>
         <button className="btn btn-primary no-print" onClick={exportToPDF} disabled={isExporting} style={{ padding: '12px 24px', fontSize: '1.1rem' }}>
-          {isExporting ? <div className="spinner" style={{ width: '20px', height: '20px' }}/> : <><Printer size={20} /> طباعة الفاتورة (Print)</>}
+          {isExporting ? <div className="spinner" style={{ width: '20px', height: '20px' }}/> : <><Printer size={20} /> {t('shipping.print_btn')}</>}
         </button>
       </div>
 
@@ -442,19 +444,19 @@ const ShippingInvoice = () => {
            
            <div className="inv-meta-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', background: 'rgba(212, 175, 55, 0.05)', padding: '1rem', borderRadius: '8px', border: '1px solid rgba(212, 175, 55, 0.2)' }}>
               <div>
-                 <label style={{ fontSize: '0.85rem', color: 'var(--accent-color)', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>Buyer (المشتري):</label>
+                 <label style={{ fontSize: '0.85rem', color: 'var(--accent-color)', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>{t('shipping.header.buyer')}</label>
                  <input type="text" className="form-control" value={headerInfo.buyer} onChange={e => setHeaderInfo({...headerInfo, buyer: e.target.value})} style={{ background: 'var(--bg-color)' }} />
               </div>
               <div>
-                 <label style={{ fontSize: '0.85rem', color: 'var(--accent-color)', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>Invoice No. (رقم الفاتورة):</label>
+                 <label style={{ fontSize: '0.85rem', color: 'var(--accent-color)', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>{t('shipping.header.invoice_no')}</label>
                  <input type="text" className="form-control" value={headerInfo.invoiceNo} onChange={e => setHeaderInfo({...headerInfo, invoiceNo: toEnglishNumbers(e.target.value)})} style={{ background: 'var(--bg-color)' }} />
               </div>
               <div>
-                 <label style={{ fontSize: '0.85rem', color: 'var(--accent-color)', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>Branch (الفرع):</label>
+                 <label style={{ fontSize: '0.85rem', color: 'var(--accent-color)', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>{t('shipping.header.branch')}</label>
                  <input type="text" className="form-control" value={headerInfo.branch} onChange={e => setHeaderInfo({...headerInfo, branch: e.target.value})} style={{ background: 'var(--bg-color)' }} />
               </div>
                  <div style={{ position: 'relative' }}>
-                    <label style={{ fontSize: '0.85rem', color: 'var(--accent-color)', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>Date (التاريخ):</label>
+                    <label style={{ fontSize: '0.85rem', color: 'var(--accent-color)', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>{t('shipping.header.date')}</label>
                     <CustomDateInput 
                       value={headerInfo.date} 
                       onChange={val => setHeaderInfo({...headerInfo, date: val})}
@@ -462,25 +464,25 @@ const ShippingInvoice = () => {
                  </div>
            </div>
 
-           <h2 className="inv-title-h2" style={{ textAlign: 'center', margin: '1rem 0', fontSize: '1.8rem', color: 'var(--primary-color)' }}>Invoice List</h2>
+           <h2 className="inv-title-h2" style={{ textAlign: 'center', margin: '1rem 0', fontSize: '1.8rem', color: 'var(--text-strong)' }}>{t('shipping.header.list_title')}</h2>
 
            {/* ─── INVOICE TABLE ─── */}
            <div style={{ overflowX: 'auto' }}>
              <table className="inv-main-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center', fontSize: '0.9rem' }}>
                <thead>
                  <tr style={{ background: 'var(--surface-highlight)', borderBottom: '2px solid var(--accent-color)' }}>
-                   <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '40px' }}>No</th>
-                   <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '140px' }}>Items No<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>رقم الصنف</span></th>
-                   <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)' }}>Items Description<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>الوصف بالانجليزي</span></th>
-                   <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)' }}>اسم الصنف<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>Arabic Name</span></th>
-                   <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '80px' }}>Total Qty<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>الكمية</span></th>
-                   <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '80px' }}>Price CCY<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>العملة</span></th>
-                   <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '90px' }}>UNIT PRICE<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>سعر الوحدة</span></th>
-                   <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '120px' }}>Total Amount<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>الإجمالي</span></th>
+                   <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '40px' }}>{t('shipping.table.cols.no')}</th>
+                   <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '140px' }}>{t('shipping.table.cols.item_no')}<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>{t('shipping.table.cols.item_no_ar')}</span></th>
+                   <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)' }}>{t('shipping.table.cols.desc')}<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>{t('shipping.table.cols.desc_ar')}</span></th>
+                   <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)' }}>{t('shipping.table.cols.arabic_name')}<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>{t('shipping.table.cols.arabic_name_en')}</span></th>
+                   <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '80px' }}>{t('shipping.table.cols.qty')}<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>{t('shipping.table.cols.qty_ar')}</span></th>
+                   <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '80px' }}>{t('shipping.table.cols.currency')}<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>{t('shipping.table.cols.currency_ar')}</span></th>
+                   <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '90px' }}>{t('shipping.table.cols.unit_price')}<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>{t('shipping.table.cols.unit_price_ar')}</span></th>
+                   <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '120px' }}>{t('shipping.table.cols.total_amount')}<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>{t('shipping.table.cols.total_amount_ar')}</span></th>
                    {showImageColumn ? (
-                       <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '90px' }}>Item Image<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>صورة الصنف</span></th>
+                       <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '90px' }}>{t('shipping.table.cols.item_image')}<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>{t('shipping.table.cols.item_image_ar')}</span></th>
                    ) : (
-                       <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)' }}>Other Details<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>تفاصيل أخرى</span></th>
+                       <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)' }}>{t('shipping.table.cols.other_details')}<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>{t('shipping.table.cols.other_details_ar')}</span></th>
                    )}
                    <th className="no-print" style={{ padding: '10px 5px', width: '40px', border: '1px solid var(--border-color)' }}></th>
                  </tr>
@@ -497,7 +499,7 @@ const ShippingInvoice = () => {
                           value={row.serial} 
                           onChange={e => handleRowChange(row.id, 'serial', e.target.value)}
                           onKeyDown={e => handleSerialKeyDown(e, row.id)}
-                          placeholder="أدخل الموديلF9"
+                          placeholder={t('shipping.table.serial_placeholder')}
                           style={{ width: '100%', background: 'transparent', border: 'none', color: highlightedSerials.includes(row.serial.trim()) ? '#ef4444' : 'var(--text-main)', textAlign: 'center', fontWeight: 'bold' }}
                         />
                         {activeF9RowId === row.id && showSerialsList && (
@@ -512,7 +514,7 @@ const ShippingInvoice = () => {
                             textAlign: 'right'
                           }}>
                             <div style={{ padding: '0.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--surface-highlight)' }}>
-                                <span style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>اختر موديلاً:</span>
+                                <span style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>{t('print.search.title')}</span>
                                 <button onClick={() => { setShowSerialsList(false); setSerialSearchQuery(''); setActiveF9RowId(null); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-color)', padding: 0, display: 'flex', alignItems: 'center' }}>
                                    <X size={16} />
                                 </button>
@@ -521,7 +523,7 @@ const ShippingInvoice = () => {
                               <input
                                 ref={serialSearchRef}
                                 type="text"
-                                placeholder="🔍 ابحث..."
+                                placeholder={t('print.search.placeholder')}
                                 value={serialSearchQuery}
                                 onChange={(e) => setSerialSearchQuery(e.target.value)}
                                 onKeyDown={(e) => {
@@ -545,14 +547,14 @@ const ShippingInvoice = () => {
                               />
                             </div>
                             {fetchingSerials ? (
-                                <div style={{ padding: '1rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)' }}>جاري التحميل...</div>
+                                <div style={{ padding: '1rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)' }}>{t('print.search.loading')}</div>
                             ) : (
                                (() => {
                                  const filteredSerials = serialSearchQuery.trim()
                                    ? availableSerials.filter(s => s.toString().includes(serialSearchQuery.trim()))
                                    : availableSerials;
                                  return filteredSerials.length === 0 ? (
-                                   <div style={{ padding: '1rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)' }}>لا توجد نتائج</div>
+                                   <div style={{ padding: '1rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)' }}>{t('entry.actions.no_match')}</div>
                                  ) : (
                                   <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
                                       {filteredSerials.map(serial => {
@@ -627,7 +629,7 @@ const ShippingInvoice = () => {
                             {row.image ? (
                                 <img src={row.image} alt="Product" style={{ width: '60px', height: '80px', objectFit: 'contain', borderRadius: '4px' }} />
                             ) : (
-                                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>لا توجد صورة</span>
+                                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('shipping.table.no_image')}</span>
                             )}
                         </td>
                      ) : (
@@ -656,13 +658,13 @@ const ShippingInvoice = () => {
            {!isExporting && (
              <div className="no-print" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginTop: '1rem', gap: '1rem' }}>
                 <button onClick={addRow} className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--accent-color)', borderColor: 'var(--accent-color)' }}>
-                   <Plus size={18} /> إضافة صف فارغ
+                   <Plus size={18} /> {t('shipping.actions.add_row')}
                 </button>
                 <button onClick={() => setShowFetchDialog(true)} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'linear-gradient(to right, #10b981, #059669)', border: 'none', padding: '10px 24px' }}>
-                   <Search size={18} /> جلب بيانات كل الأصناف المدخلة
+                   <Search size={18} /> {t('shipping.actions.fetch_all')}
                 </button>
                 <button onClick={() => setShowClearConfirm(true)} className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#ef4444', borderColor: '#ef4444' }}>
-                   <Trash2 size={18} /> تفريغ كافة البيانات
+                   <Trash2 size={18} /> {t('shipping.actions.clear_all')}
                 </button>
              </div>
            )}
@@ -671,22 +673,22 @@ const ShippingInvoice = () => {
            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '2rem' }}>
               <table className="inv-footer-table" style={{ width: '60%', minWidth: '600px', borderCollapse: 'collapse', textAlign: 'center', fontWeight: 'bold' }} dir="ltr">
                  <tbody>
-                    {/* Row 1: Totals */}
+                    {/* Row 1: {t('shipping.footer.total')}s */}
                     <tr>
-                       <td style={{ padding: '12px', background: 'rgba(212, 175, 55, 0.1)', border: '1px solid var(--border-color)', color: 'var(--primary-color)', fontSize: '1.2rem' }} className="highlight-cell">Total</td>
-                       <td style={{ padding: '12px', border: '1px solid var(--border-color)' }}>{totalItemsCount} Items</td>
-                       <td style={{ padding: '12px', border: '1px solid var(--border-color)' }}>{totalPcs} PCS</td>
+                       <td style={{ padding: '12px', background: 'rgba(212, 175, 55, 0.1)', border: '1px solid var(--border-color)', color: 'var(--text-strong)', fontSize: '1.2rem' }} className="highlight-cell">{t('shipping.footer.total')}</td>
+                       <td style={{ padding: '12px', border: '1px solid var(--border-color)' }}>{totalItemsCount} {t('shipping.footer.items')}</td>
+                       <td style={{ padding: '12px', border: '1px solid var(--border-color)' }}>{totalPcs} {t('shipping.footer.pcs')}</td>
                        <td style={{ padding: '12px', background: 'rgba(212, 175, 55, 0.1)', border: '1px solid var(--border-color)', fontSize: '1.2rem', color: 'var(--accent-color)' }} className="highlight-cell">
                           {subTotalAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })} {primaryCurrency}
                        </td>
                     </tr>
                     
-                    {/* Row 2: Commission */}
+                    {/* Row 2: {t('shipping.footer.commission')} */}
                     <tr>
                        <td colSpan={2} style={{ border: 'none' }}></td>
                        <td style={{ padding: '12px', background: 'rgba(212, 175, 55, 0.05)', border: '1px solid var(--border-color)' }}>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                             Commission <input type="number" value={footerInfo.commissionPercent} onChange={e => setFooterInfo({...footerInfo, commissionPercent: e.target.value})} style={{ width: '40px', background: 'var(--bg-color)', border: '1px solid var(--border-color)', color: 'var(--text-main)', textAlign: 'center', borderRadius: '4px' }} /> %
+                             {t('shipping.footer.commission')} <input type="number" value={footerInfo.commissionPercent} onChange={e => setFooterInfo({...footerInfo, commissionPercent: e.target.value})} style={{ width: '40px', background: 'var(--bg-color)', border: '1px solid var(--border-color)', color: 'var(--text-main)', textAlign: 'center', borderRadius: '4px' }} /> %
                           </div>
                        </td>
                        <td style={{ padding: '12px', border: '1px solid var(--border-color)' }}>
@@ -694,28 +696,28 @@ const ShippingInvoice = () => {
                        </td>
                     </tr>
 
-                    {/* Row 3: Container Fee */}
+                    {/* Row 3: {t('shipping.footer.container_fee')} */}
                     <tr>
                        <td colSpan={2} style={{ border: 'none' }}></td>
-                       <td style={{ padding: '12px', background: 'rgba(212, 175, 55, 0.05)', border: '1px solid var(--border-color)' }}>Container Fee</td>
+                       <td style={{ padding: '12px', background: 'rgba(212, 175, 55, 0.05)', border: '1px solid var(--border-color)' }}>{t('shipping.footer.container_fee')}</td>
                        <td style={{ padding: '8px', border: '1px solid var(--border-color)' }}>
                           <input type="number" value={footerInfo.containerFee} onChange={e => setFooterInfo({...footerInfo, containerFee: e.target.value})} placeholder="0.00" style={{ width: '100%', background: 'transparent', border: 'none', color: 'var(--text-main)', textAlign: 'center', fontWeight: 'bold', fontSize: '1rem' }} />
                        </td>
                     </tr>
 
-                    {/* Row 4: Insurance */}
+                    {/* Row 4: {t('shipping.footer.insurance')} */}
                     <tr>
                        <td colSpan={2} style={{ border: 'none' }}></td>
-                       <td style={{ padding: '12px', background: 'rgba(212, 175, 55, 0.05)', border: '1px solid var(--border-color)' }}>Insurance</td>
+                       <td style={{ padding: '12px', background: 'rgba(212, 175, 55, 0.05)', border: '1px solid var(--border-color)' }}>{t('shipping.footer.insurance')}</td>
                        <td style={{ padding: '8px', border: '1px solid var(--border-color)' }}>
                           <input type="number" value={footerInfo.insurance} onChange={e => setFooterInfo({...footerInfo, insurance: e.target.value})} placeholder="0.00" style={{ width: '100%', background: 'transparent', border: 'none', color: 'var(--text-main)', textAlign: 'center', fontWeight: 'bold', fontSize: '1rem' }} />
                        </td>
                     </tr>
 
-                    {/* Row 5: Internal Shipping */}
+                    {/* Row 5: {t('shipping.footer.internal_shipping')} */}
                     <tr>
                        <td colSpan={2} style={{ border: 'none' }}></td>
-                       <td style={{ padding: '12px', background: 'rgba(212, 175, 55, 0.05)', border: '1px solid var(--border-color)' }}>Internal Shipping</td>
+                       <td style={{ padding: '12px', background: 'rgba(212, 175, 55, 0.05)', border: '1px solid var(--border-color)' }}>{t('shipping.footer.internal_shipping')}</td>
                        <td style={{ padding: '8px', border: '1px solid var(--border-color)' }}>
                           <input type="number" value={footerInfo.internalShipping} onChange={e => setFooterInfo({...footerInfo, internalShipping: e.target.value})} placeholder="0.00" style={{ width: '100%', background: 'transparent', border: 'none', color: 'var(--text-main)', textAlign: 'center', fontWeight: 'bold', fontSize: '1rem' }} />
                        </td>
@@ -724,7 +726,7 @@ const ShippingInvoice = () => {
                     {/* Row 6: Final Total */}
                     <tr>
                        <td colSpan={2} style={{ border: 'none' }}></td>
-                       <td style={{ padding: '12px', background: 'var(--accent-color)', color: '#000', border: '1px solid var(--border-color)' }} className="total-cell">Invoice Total</td>
+                       <td style={{ padding: '12px', background: 'var(--accent-color)', color: '#000', border: '1px solid var(--border-color)' }} className="total-cell">{t('shipping.footer.invoice_total')}</td>
                        <td style={{ padding: '12px', background: 'rgba(212, 175, 55, 0.5)', border: '1px solid var(--border-color)', color: 'var(--accent-color)', fontSize: '1.4rem' }} className="total-cell">
                           {invoiceTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })} {primaryCurrency}
                        </td>
@@ -736,17 +738,17 @@ const ShippingInvoice = () => {
            {/* ─── BOTTOM DETAILS ─── */}
            <div className="inv-bottom-details" style={{ marginTop: '2rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', fontWeight: 'bold', fontSize: '1.1rem' }} dir="ltr">
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: 'var(--surface-highlight)', padding: '10px 15px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                 <span style={{ width: '200px' }}>SAY TOTAL AMOUNT IS</span>
+                 <span style={{ width: '200px' }}>{t('shipping.footer.say_total')}</span>
                  <span style={{ color: 'var(--accent-color)' }}>{invoiceTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })} {primaryCurrency}</span>
                  <span style={{ margin: '0 1rem' }}>&</span>
-                 <span style={{ color: 'var(--accent-color)' }}>{totalPcs} PCS</span>
+                 <span style={{ color: 'var(--accent-color)' }}>{totalPcs} {t('shipping.footer.pcs')}</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: 'var(--surface-highlight)', padding: '10px 15px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                 <span style={{ width: '200px' }}>CONTAINER NO :</span>
+                 <span style={{ width: '200px' }}>{t('shipping.footer.container_no')}</span>
                  <input type="text" value={footerInfo.containerNo} onChange={e => setFooterInfo({...footerInfo, containerNo: e.target.value})} style={{ flex: 1, background: 'transparent', border: 'none', borderBottom: '1px dashed var(--accent-color)', color: 'var(--text-main)', fontSize: '1.1rem', fontWeight: 'bold', padding: '0 10px' }} />
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: 'var(--surface-highlight)', padding: '10px 15px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                 <span style={{ width: '200px' }}>SEAL NO :</span>
+                 <span style={{ width: '200px' }}>{t('shipping.footer.seal_no')}</span>
                  <input type="text" value={footerInfo.sealNo} onChange={e => setFooterInfo({...footerInfo, sealNo: e.target.value})} style={{ width: '300px', background: 'transparent', border: 'none', borderBottom: '1px dashed var(--accent-color)', color: 'var(--text-main)', fontSize: '1.1rem', fontWeight: 'bold', padding: '0 10px' }} />
               </div>
            </div>
@@ -758,18 +760,18 @@ const ShippingInvoice = () => {
       {showFetchDialog && (
          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', zIndex: 9999, display: 'flex', justifyContent: 'center', alignItems: 'center', backdropFilter: 'blur(5px)' }}>
             <div className="card fade-in" style={{ width: '450px', textAlign: 'center', border: '2px solid var(--accent-color)', boxShadow: '0 10px 40px rgba(212,175,55,0.2)' }}>
-               <h3 style={{ marginBottom: '1rem', color: 'var(--accent-color)' }}>جلب بيانات المنتجات</h3>
-               <p style={{ marginBottom: '2rem', fontSize: '1.2rem' }}>هل تريد جلب البيانات مع صور المنتجات؟</p>
+               <h3 style={{ marginBottom: '1rem', color: 'var(--accent-color)' }}>{t('shipping.fetch_dialog.title')}</h3>
+               <p style={{ marginBottom: '2rem', fontSize: '1.2rem' }}>{t('shipping.fetch_dialog.question')}</p>
                <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
                   <button onClick={() => validateBeforeFetch(true)} className="btn btn-primary" style={{ flex: 1, background: 'linear-gradient(135deg, var(--accent-color), #b58d27)', color: '#000', padding: '12px', fontSize: '1.1rem' }}>
-                     مع الصور
+                     {t('shipping.fetch_dialog.with_images')}
                   </button>
                   <button onClick={() => validateBeforeFetch(false)} className="btn btn-outline" style={{ flex: 1, padding: '12px', fontSize: '1.1rem', color: 'var(--text-main)', borderColor: 'var(--border-color)' }}>
-                     بدون الصور
+                     {t('shipping.fetch_dialog.without_images')}
                   </button>
                </div>
                <button onClick={() => setShowFetchDialog(false)} style={{ marginTop: '1.5rem', background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', textDecoration: 'underline', fontSize: '1rem' }}>
-                  إلغاء
+                  {t('shipping.fetch_dialog.cancel')}
                </button>
             </div>
          </div>
@@ -788,10 +790,10 @@ const ShippingInvoice = () => {
          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', zIndex: 9999, display: 'flex', justifyContent: 'center', alignItems: 'center', backdropFilter: 'blur(5px)' }}>
             <div className="card fade-in" style={{ width: '550px', border: '2px solid #ef4444', boxShadow: '0 10px 40px rgba(239, 68, 68, 0.2)' }}>
                <h3 style={{ marginBottom: '1rem', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <AlertCircle size={24} /> تنبيه: موديلات غير صالحة!
+                  <AlertCircle size={24} /> {t('shipping.validation.title')}
                </h3>
                <p style={{ marginBottom: '1rem', fontSize: '1.1rem', color: 'var(--text-main)' }}>
-                 اكتشف النظام أن الموديلات التالية غير موجودة أو غير مستلمة من المصنع. هل تريد حذفها من حقول الإدخال؟
+                 {t('shipping.validation.desc')}
                </p>
                <ul style={{ background: 'var(--surface-color)', padding: '1rem', borderRadius: '8px', maxHeight: '150px', overflowY: 'auto', marginBottom: '1.5rem', listStyle: 'none' }}>
                   {invalidSerials.map((inv, idx) => (
@@ -808,7 +810,7 @@ const ShippingInvoice = () => {
                       setShowValidationModal(false);
                       setTimeout(() => fetchAllData(pendingFetchOptions, badSerials, true), 0);
                   }} className="btn btn-primary" style={{ flex: 1, background: '#ef4444', color: '#fff', border: 'none', padding: '12px', fontSize: '1.1rem' }}>
-                     نعم، احذف الأرقام الغلط
+                     {t('shipping.validation.remove_invalid')}
                   </button>
                   <button onClick={() => {
                       const badSerials = invalidSerials.map(inv => inv.serial);
@@ -816,7 +818,7 @@ const ShippingInvoice = () => {
                       setShowValidationModal(false);
                       setTimeout(() => fetchAllData(pendingFetchOptions, badSerials, false), 0);
                   }} className="btn btn-outline" style={{ flex: 1, padding: '12px', fontSize: '1.1rem', color: 'var(--text-main)', borderColor: 'var(--border-color)' }}>
-                     لا، أبقهم في الجدول
+                     {t('shipping.validation.keep_all')}
                   </button>
                </div>
             </div>
@@ -828,17 +830,17 @@ const ShippingInvoice = () => {
          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', zIndex: 9999, display: 'flex', justifyContent: 'center', alignItems: 'center', backdropFilter: 'blur(5px)' }}>
             <div className="card fade-in" style={{ width: '400px', border: '2px solid #ef4444', boxShadow: '0 10px 40px rgba(239, 68, 68, 0.2)', textAlign: 'center' }}>
                <h3 style={{ marginBottom: '1rem', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                  <AlertCircle size={32} /> تأكيد التفريغ
+                  <AlertCircle size={32} /> {t('shipping.clear_confirm.title')}
                </h3>
                <p style={{ marginBottom: '2rem', fontSize: '1.1rem', color: 'var(--text-main)' }}>
-                 هل أنت متأكد من رغبتك في تفريغ كافة حقول الجدول والبدء من جديد؟ سيتم مسح كافة البيانات الحالية.
+                 {t('shipping.clear_confirm.desc')}
                </p>
                <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
                   <button onClick={clearAllData} className="btn btn-primary" style={{ flex: 1, background: '#ef4444', color: '#fff', border: 'none', padding: '10px', fontSize: '1.1rem' }}>
-                     نعم، إفراغ الجدول
+                     {t('shipping.clear_confirm.confirm')}
                   </button>
                   <button onClick={() => setShowClearConfirm(false)} className="btn btn-outline" style={{ flex: 1, padding: '10px', fontSize: '1.1rem', color: 'var(--text-main)', borderColor: 'var(--border-color)' }}>
-                     تراجع
+                     {t('shipping.fetch_dialog.cancel')}
                   </button>
                </div>
             </div>

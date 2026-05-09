@@ -2,21 +2,25 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { Settings, Edit3, Printer, Truck, Factory, Barcode, FileSpreadsheet, Package, ChevronDown } from 'lucide-react';
 import { Toaster } from 'react-hot-toast';
+import { useTranslation } from 'react-i18next';
+import LanguageSelector from './components/LanguageSelector';
+import ThemeToggle from './components/ThemeToggle';
 
 const NAV_PAGES = [
-  { path: '/entry', label: 'أوامر الإنتاج وتوثيق الطلبات', icon: Edit3, color: 'var(--accent-color)' },
-  { path: '/export', label: 'مستندات وفواتير التصدير', icon: Printer, color: '#60a5fa' },
-  { path: '/admin', label: 'لوحة الإدارة والإعدادات', icon: Settings, color: '#a78bfa' },
-  { path: '/receiving', label: 'استلام البضائع الخاصه بالشركة', icon: Truck, color: '#4ade80' },
-  { path: '/factory-portal', label: 'استلام البضائع الخاصه بالمصانع', icon: Factory, color: '#d4af37' },
-  { path: '/barcodes', label: 'استخراج الباركود', icon: Barcode, color: '#fb923c' },
-  { path: '/reports', label: 'التقارير والإحصائيات', icon: Printer, color: '#ec4899' },
-  { path: '/shipping-invoice', label: 'فاتورة الشحن', icon: FileSpreadsheet, color: '#06b6d4' },
-  { path: '/packing-list', label: 'فاتورة الجمارك (Packing List)', icon: Package, color: '#10b981' },
-  { path: '/warehouse-receipt', label: 'تقرير استلام البضائع (Warehouse Receipt)', icon: FileSpreadsheet, color: '#f59e0b' },
+  { path: '/entry', labelKey: 'nav.entry', icon: Edit3, color: 'var(--accent-color)' },
+  { path: '/export', labelKey: 'nav.export', icon: Printer, color: '#60a5fa' },
+  { path: '/admin', labelKey: 'nav.admin', icon: Settings, color: '#a78bfa' },
+  { path: '/receiving', labelKey: 'nav.receiving', icon: Truck, color: '#4ade80' },
+  { path: '/factory-portal', labelKey: 'nav.factory_portal', icon: Factory, color: '#d4af37' },
+  { path: '/barcodes', labelKey: 'nav.barcodes', icon: Barcode, color: '#fb923c' },
+  { path: '/reports', labelKey: 'nav.reports', icon: Printer, color: '#ec4899' },
+  { path: '/shipping-invoice', labelKey: 'nav.shipping_invoice', icon: FileSpreadsheet, color: '#06b6d4' },
+  { path: '/packing-list', labelKey: 'nav.packing_list', icon: Package, color: '#10b981' },
+  { path: '/warehouse-receipt', labelKey: 'nav.warehouse_receipt', icon: FileSpreadsheet, color: '#f59e0b' },
 ];
 
 const AppLayout = () => {
+  const { t, i18n } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
   const [showNavDropdown, setShowNavDropdown] = useState(false);
@@ -54,15 +58,17 @@ const AppLayout = () => {
           </div>
           <div>
             <h1 style={{ fontSize: '1.5rem', marginBottom: '0.2rem' }} className="text-gradient">
-              نظام إدارة الطلبيات
+              {t('app_title')}
             </h1>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-              إدخال وتتبع بيانات المنتجات والمصانع
+              {t('app_subtitle')}
             </p>
           </div>
         </div>
 
         <nav className="no-print" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+          <ThemeToggle />
+          <LanguageSelector />
           {location.pathname !== '/' && (
             <>
               {/* Go To... Dropdown */}
@@ -81,7 +87,7 @@ const AppLayout = () => {
                   }}
                 >
                   <span style={{ fontSize: '1rem' }}>📌</span>
-                  الذهاب إلى...
+                  {t('go_to')}
                   <ChevronDown size={15} style={{ 
                     transform: showNavDropdown ? 'rotate(180deg)' : 'rotate(0deg)', 
                     transition: 'transform 0.2s', 
@@ -95,12 +101,12 @@ const AppLayout = () => {
                     backgroundColor: 'var(--surface-color)',
                     border: '2px solid var(--accent-color)',
                     borderRadius: 'var(--radius-md)',
-                    boxShadow: '0 12px 40px rgba(0,0,0,0.6)',
+                    boxShadow: 'var(--shadow-lg)',
                     zIndex: 9999, overflow: 'hidden',
                     animation: 'fadeIn 0.15s ease'
                   }}>
                     <div style={{ padding: '0.6rem 1rem', borderBottom: '1px solid var(--border-color)', backgroundColor: 'var(--surface-highlight)', fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>
-                      انتقل سريعاً إلى:
+                      {t('quick_jump')}
                     </div>
                     {NAV_PAGES.map((page) => {
                       const Icon = page.icon;
@@ -137,8 +143,8 @@ const AppLayout = () => {
                             fontSize: '0.88rem', fontWeight: isActive ? 'bold' : '500', 
                             color: isActive ? 'var(--accent-color)' : 'var(--text-main)' 
                           }}>
-                            {page.label}
-                            {isActive && <span style={{ fontSize: '0.75rem', marginRight: '0.4rem', opacity: 0.7 }}>(أنت هنا)</span>}
+                            {t(page.labelKey)}
+                            {isActive && <span style={{ fontSize: '0.75rem', marginRight: '0.4rem', opacity: 0.7 }}> {t('you_are_here')}</span>}
                           </span>
                         </div>
                       );
@@ -154,7 +160,7 @@ const AppLayout = () => {
                 style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', borderColor: 'var(--accent-color)', color: 'var(--accent-color)' }}
               >
                 <span style={{ fontSize: '1.2rem' }}>🏠</span>
-                عودة للرئيسية
+                {t('back_to_home')}
               </Link>
             </>
           )}

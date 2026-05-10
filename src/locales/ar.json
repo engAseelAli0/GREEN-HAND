@@ -46,7 +46,7 @@
     "buyer": {
       "section_title": "بيانات المشتري والمنتج",
       "order_no": "رقم الأوردر:",
-      "serial_no_manual": "الرقم التسلسلي (إدخال يدوي)",
+      "serial_no_manual": "رقم الموديل",
       "serial_placeholder": "أدخل الرقم واضغط Enter لجلبه...",
       "checking": "جاري التحقق...",
       "used": "⚠️ مستخدمة مسبقاً!",
@@ -55,7 +55,7 @@
       "generated_barcode": "الباركود المولد:",
       "buyer_code": "رقم أو رمز المشتري",
       "buyer_code_placeholder": "اختر رقم أو رمز المشتري...",
-      "buyer_number": "رقم المشتري",
+      "buyer_number": "رقم جوال المشتري",
       "model_number": "رقم الموديل (Product Number)",
       "company_name": "اسم شركة المشتري",
       "product_name": "اسم المنتج",
@@ -97,7 +97,7 @@
        "section_title": "تفاصيل الأقمشة والمواد",
        "fabric_type": "نوع القماش (Product Fabrics)",
        "trade_mark": "العلامة التجارية (Trade Mark)",
-       "material": "المادة"
+       "material": "مادة القماش"
     },
     "factory": {
        "section_title": "المصنع والتعبئة والتغليف",
@@ -156,7 +156,7 @@
        "cancel_edit": "إلغاء وضع التعديل وتفريغ الحقول",
        "select_saved_model": "اختر موديلاً محفوظاً:",
        "search_serial_placeholder": "🔍 ابحث برقم الموديل...",
-       "loading": "اضغط لاختيار منتج",
+       "loading": "اضغط للاختيار",
        "no_saved_models": "لا توجد موديلات محفوظة",
        "no_match": "لا توجد نتائج مطابقة للبحث",
        "view_full_page": "صفحة كاملة",

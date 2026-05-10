@@ -461,7 +461,11 @@ const DataEntryWizard = () => {
 
     const toastId = toast.loading(t('entry.messages.saving'));
     try {
-      const { error } = await supabase.from('orders').insert([currentOrder]);
+      const payload = {
+        serial_number: currentOrder.serialNumber,
+        order_data: currentOrder
+      };
+      const { error } = await supabase.from('orders').insert([payload]);
       if (error) throw error;
       toast.success(t('entry.messages.save_success', { serial: currentOrder.serialNumber }), { id: toastId });
       handleClear();
@@ -474,11 +478,14 @@ const DataEntryWizard = () => {
     if (!validateForm()) return;
     const toastId = toast.loading(t('entry.messages.updating'));
     try {
-      const { error } = await supabase.from('orders').update(currentOrder).eq('serial_number', originalSerial);
+      const payload = {
+        serial_number: currentOrder.serialNumber,
+        order_data: currentOrder
+      };
+      const { error } = await supabase.from('orders').update(payload).eq('serial_number', originalSerial);
       if (error) throw error;
       toast.success(t('entry.messages.update_success', { serial: currentOrder.serialNumber }), { id: toastId });
-      setIsEditMode(false);
-      setOriginalSerial('');
+      setOriginalSerial(currentOrder.serialNumber);
     } catch (err) {
       toast.error(t('entry.messages.save_error'), { id: toastId });
     }
@@ -498,10 +505,17 @@ const DataEntryWizard = () => {
           return;
        }
 
-       const newOrder = { ...currentOrder, serial_number: newSerial, order_number: null };
-       const { error } = await supabase.from('orders').insert([newOrder]);
+       const newOrderData = { ...currentOrder, serialNumber: newSerial, orderNumber: null };
+       const payload = {
+         serial_number: newSerial,
+         order_data: newOrderData
+       };
+       const { error } = await supabase.from('orders').insert([payload]);
        if (error) throw error;
        toast.success(t('entry.messages.copy_success', { serial: newSerial }), { id: toastId });
+       setCurrentOrder(newOrderData);
+       setOriginalSerial(newSerial);
+       setIsEditMode(true);
      } catch (err) {
        toast.error(t('entry.messages.save_error'), { id: toastId });
      }
@@ -566,10 +580,14 @@ const DataEntryWizard = () => {
         toast.error(t('entry.messages.not_found'), { id: toastId });
         return;
       }
-      setCurrentOrder(data);
+      const fetchedOrder = data.order_data || data;
+      const finalOrder = { ...defaultOrderState, ...fetchedOrder, serialNumber: data.serial_number || fetchedOrder.serialNumber };
+      setCurrentOrder(finalOrder);
+      setSelectedColorsArr(Object.keys(finalOrder.colorDistribution || {}));
+      setProductImages(finalOrder.productImages?.map(img => ({ ...img, preview: img.preview || img.url })) || []);
       setIsEditMode(true);
-      setOriginalSerial(data.serial_number);
-      toast.success(t('entry.messages.fetch_success', { serial: data.serial_number }), { id: toastId });
+      setOriginalSerial(finalOrder.serialNumber);
+      toast.success(t('entry.messages.fetch_success', { serial: finalOrder.serialNumber }), { id: toastId });
       if (document.getElementById('fetchSerialInput')) document.getElementById('fetchSerialInput').value = '';
     } catch (err) {
       toast.error(t('entry.messages.save_error'), { id: toastId });
@@ -579,6 +597,7 @@ const DataEntryWizard = () => {
   const handleClear = () => {
     setCurrentOrder(defaultOrderState);
     setProductImages([]);
+    setSelectedColorsArr([]);
     setIsEditMode(false);
     setOriginalSerial('');
     setSerialStatus(null);
@@ -758,10 +777,7 @@ const DataEntryWizard = () => {
                    <label className="form-label">{t('entry.buyer.buyer_number')}</label>
                   <input type="text" className="form-control" value={currentOrder.buyerNumber || ''} onChange={(e) => updateOrder('buyerNumber', e.target.value)} />
                 </div>
-                <div className="form-group">
-                   <label className="form-label">{t('entry.buyer.model_number')}</label>
-                  <input type="text" className="form-control" value={currentOrder.serialNumber || ''} readOnly style={{ backgroundColor: 'var(--bg-color)', opacity: 0.8, cursor: 'not-allowed', color: 'var(--text-muted)' }} />
-                </div>
+
                 <div className="form-group">
                    <label className="form-label">{t('entry.buyer.company_name')}</label>
                   <input type="text" className="form-control" value={currentOrder.buyerCompany || ''} onChange={(e) => updateOrder('buyerCompany', e.target.value)} />
@@ -779,7 +795,7 @@ const DataEntryWizard = () => {
                 <div className="form-group">
                    <label className="form-label">{t('entry.buyer.price_currency')}</label>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
-                     <input type="number" className="form-control" placeholder={t('entry.buyer.price_placeholder')} style={{ flex: 2 }} value={currentOrder.productPrice || ''} onChange={(e) => updateOrder('productPrice', e.target.value)} />
+                     <input type="text" inputMode="decimal" dir="rtl" className="form-control" placeholder={t('entry.buyer.price_placeholder')} style={{ flex: 2, textAlign: 'right' }} value={currentOrder.productPrice || ''} onChange={(e) => updateOrder('productPrice', e.target.value.replace(/[^0-9.]/g, ''))} />
                      <ClearableSelect className="form-control" style={{ flex: 1 }} value={currentOrder.currency || ''} onChange={(e) => updateOrder('currency', e.target.value)} clearTitle={t('entry.actions.clear_btn')}>
                        <option value="">{t('entry.buyer.currency_placeholder')}</option>
                       {lookups.currencies?.map((c, i) => <option key={i} value={c}>{c}</option>)}
@@ -1027,7 +1043,7 @@ const DataEntryWizard = () => {
                 />
                 <div className="form-group" style={{ gridColumn: '1 / -1' }}>
                   <label className="form-label">{t('entry.dates.total_quantity')}</label>
-                  <input type="number" className="form-control" value={currentOrder.totalQuantity} onChange={(e) => updateOrder('totalQuantity', e.target.value)} />
+                  <input type="text" inputMode="numeric" dir="rtl" className="form-control" style={{ textAlign: 'right' }} value={currentOrder.totalQuantity || ''} onChange={(e) => updateOrder('totalQuantity', e.target.value.replace(/[^0-9]/g, ''))} />
                 </div>
                 <div className="form-group" style={{ gridColumn: '1 / -1' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>

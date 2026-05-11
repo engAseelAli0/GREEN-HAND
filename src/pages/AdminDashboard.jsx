@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { useAppData } from '../context/AppDataContext';
-import { Plus, Trash2, Edit, Edit2, Check, X, ImagePlus, ShoppingBag, Banknote, Scissors, Palette, Factory, Ruler, Package, Box, ShoppingCart, Stamp, SlidersHorizontal, ListChecks, Search, Sparkles, GripVertical, Tag, Layers, Puzzle, ChevronDown } from 'lucide-react';
+import { Plus, Trash2, Edit, Edit2, Check, X, ImagePlus, ShoppingBag, Banknote, Scissors, Palette, Factory, Ruler, Package, Box, ShoppingCart, Stamp, SlidersHorizontal, ListChecks, Search, Sparkles, GripVertical, Tag, Layers, Puzzle, ChevronDown, Building } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import toast from 'react-hot-toast';
 import { compressImage } from '../utils/imageUtils';
@@ -14,6 +14,7 @@ const AdminDashboard = () => {
   const [newValuePartAssignment, setNewValuePartAssignment] = useState('');
   const [newValueHex, setNewValueHex] = useState('#000000');
   const [newValueMobile, setNewValueMobile] = useState('');
+  const [newValueFax, setNewValueFax] = useState('');
   const [newValueAddress, setNewValueAddress] = useState('');
   const [newValueFactoryCode, setNewValueFactoryCode] = useState('');
   const [newValueAbbr, setNewValueAbbr] = useState('');
@@ -45,6 +46,7 @@ const AdminDashboard = () => {
     { id: 'materials', name: 'مواد القماش', icon: Layers },
     { id: 'colors', name: 'الألوان', icon: Palette },
     { id: 'factories', name: 'المصانع (Factories)', icon: Factory },
+    { id: 'companies', name: 'أسماء الشركات', icon: Building },
     { id: 'sizes', name: 'المقاسات', icon: Ruler },
     { id: 'cartonPackages', name: 'تعبئة الكرتون', icon: Package },
     { id: 'cartonSizes', name: 'أحجام الكراتين', icon: Box },
@@ -86,6 +88,16 @@ const AdminDashboard = () => {
         address: newValueAddress.trim(),
         code: newValueFactoryCode.trim()
       };
+    } else if (activeTab === 'companies') {
+      if (!newValueMobile.trim() || !newValueFax.trim()) {
+        toast.error('الرجاء تعبئة رقم الفاكس والجوال للشركة');
+        return;
+      }
+      newItem = {
+        name: newValue.trim(),
+        fax: newValueFax.trim(),
+        mobile: newValueMobile.trim()
+      };
     } else if (activeTab === 'tradeMarks') {
       newItem = { 
         name: newValue.trim(), 
@@ -110,6 +122,7 @@ const AdminDashboard = () => {
     setNewValuePartAssignment('');
     setNewValueHex('#000000');
     setNewValueMobile('');
+    setNewValueFax('');
     setNewValueAddress('');
     setNewValueFactoryCode('');
     setNewValueAbbr('');
@@ -141,6 +154,10 @@ const AdminDashboard = () => {
       setNewValueMobile(item.mobile || '');
       setNewValueAddress(item.address || '');
       setNewValueFactoryCode(item.code || '');
+    } else if (activeTab === 'companies') {
+      setNewValue(item.name || item);
+      setNewValueFax(item.fax || '');
+      setNewValueMobile(item.mobile || '');
     } else if (activeTab === 'tradeMarks' && typeof item === 'object') {
       setNewValue(item.name || '');
       setTradeMarkImageUrl(item.imageUrl || '');
@@ -162,6 +179,7 @@ const AdminDashboard = () => {
     setNewValuePartAssignment('');
     setNewValueHex('#000000');
     setNewValueMobile('');
+    setNewValueFax('');
     setNewValueAddress('');
     setNewValueFactoryCode('');
     setNewValueAbbr('');
@@ -698,7 +716,7 @@ const AdminDashboard = () => {
               {/* Main Name Field */}
               <div style={styles.formField}>
                 <label style={styles.formLabel}>
-                  {activeTab === 'factories' ? 'اسم المصنع' : 'اسم العنصر'}
+                  {activeTab === 'factories' ? 'اسم المصنع' : activeTab === 'companies' ? 'اسم الشركة (الترويسة)' : 'اسم العنصر'}
                 </label>
                 <input
                   type="text"
@@ -915,7 +933,35 @@ const AdminDashboard = () => {
                 </div>
               )}
 
-              {/* Factories extra fields */}
+              {/* Companies extra fields */}
+              {activeTab === 'companies' && (
+                <>
+                  <div style={styles.formField}>
+                    <label style={styles.formLabel}>رقم الفاكس (Fax)</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      placeholder="مثلاً: (8620)-83265204"
+                      value={newValueFax}
+                      onChange={(e) => setNewValueFax(e.target.value)}
+                      style={{ backgroundColor: 'var(--bg-color)' }}
+                    />
+                  </div>
+                  <div style={styles.formField}>
+                    <label style={styles.formLabel}>رقم الجوال (Tel/Mobile)</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      placeholder="مثلاً: (8620)-83265754"
+                      value={newValueMobile}
+                      onChange={(e) => setNewValueMobile(e.target.value)}
+                      style={{ backgroundColor: 'var(--bg-color)' }}
+                    />
+                  </div>
+                </>
+              )}
+
+              {/* Factory extra fields */}
               {activeTab === 'factories' && (
                 <>
                   <div style={styles.formField}>
@@ -1175,6 +1221,13 @@ const AdminDashboard = () => {
                         <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.1rem', display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
                           {item.mobile && <span>{item.mobile} • {item.address}</span>}
                           {item.code && <span style={{ color: 'var(--accent-color)' }}>كود المصنع: {item.code}</span>}
+                        </div>
+                      )}
+
+                      {activeTab === 'companies' && (
+                        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.1rem', display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
+                          {item.fax && <span>فاكس: {item.fax}</span>}
+                          {item.mobile && <span>هاتف: {item.mobile}</span>}
                         </div>
                       )}
                     </div>

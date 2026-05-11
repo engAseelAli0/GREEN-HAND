@@ -22,7 +22,7 @@ export const CustomDateInput = ({ label, value, onChange, min }) => {
           value={formatDateForDisplay(value)} 
           placeholder="DD/MM/YYYY"
           readOnly
-          style={{ cursor: 'pointer', backgroundColor: 'var(--bg-color)' }}
+          style={{ cursor: 'pointer', backgroundColor: 'var(--bg-color)', paddingRight: '36px' }}
           onClick={(e) => {
              const picker = e.currentTarget.nextSibling;
              if (picker && picker.showPicker) picker.showPicker();
@@ -48,9 +48,9 @@ export const CustomDateInput = ({ label, value, onChange, min }) => {
             if (e.target.showPicker) e.target.showPicker();
           }}
         />
-        <div style={{ 
+        <div className="no-print" style={{ 
           position: 'absolute', 
-          left: '12px', 
+          right: '12px', 
           top: '50%', 
           transform: 'translateY(-50%)', 
           pointerEvents: 'none',

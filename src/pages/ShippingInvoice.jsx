@@ -21,14 +21,18 @@ const ShippingInvoice = () => {
     companyName: 'ARABIAN FRIENDSHIP TRADING CO.,LIMITED',
     tel: 'Tel:(8620)-83265754',
     fax: 'FAX:(8620)-83265204',
-    buyer: '',
     invoiceNo: '',
     branch: '',
     date: localDate
   });
 
+  const { lookups } = useAppData();
+  const companies = lookups?.companies || [];
+  const factories = lookups?.factories || [];
+  const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
+
   const [rows, setRows] = useState([
-    { id: Date.now(), serial: '', desc: '', arabicName: '', qty: '', currency: '¥ RMB', unitPrice: '', totalAmount: 0, details: '', image: '' }
+    { id: Date.now(), serial: '', desc: '', arabicName: '', qty: '', currency: '¥ RMB', unitPrice: '', totalAmount: 0, details: '', image: '', factoryCode: '' }
   ]);
 
   const [footerInfo, setFooterInfo] = useState({
@@ -63,8 +67,8 @@ const ShippingInvoice = () => {
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   const clearAllData = () => {
-    setRows([{ id: Date.now(), serial: '', desc: '', arabicName: '', qty: '', currency: '¥ RMB', unitPrice: '', totalAmount: 0, details: '', image: '' }]);
-    setHeaderInfo(prev => ({ ...prev, buyer: '', invoiceNo: '', branch: '' }));
+    setRows([{ id: Date.now(), serial: '', desc: '', arabicName: '', qty: '', currency: '¥ RMB', unitPrice: '', totalAmount: 0, details: '', image: '', factoryCode: '' }]);
+    setHeaderInfo(prev => ({ ...prev, invoiceNo: '', branch: '' }));
     setShowClearConfirm(false);
     toast.success(t('shipping.messages.clear_success'));
   };
@@ -85,7 +89,7 @@ const ShippingInvoice = () => {
   }, [rows]);
 
   const addRow = () => {
-    setRows([...rows, { id: Date.now(), serial: '', desc: '', arabicName: '', qty: '', currency: '¥ RMB', unitPrice: '', totalAmount: 0, details: '', image: '' }]);
+    setRows([...rows, { id: Date.now(), serial: '', desc: '', arabicName: '', qty: '', currency: '¥ RMB', unitPrice: '', totalAmount: 0, details: '', image: '', factoryCode: '' }]);
   };
 
   const removeRow = (id) => {
@@ -242,6 +246,10 @@ const ShippingInvoice = () => {
                         imageUrl = typeof firstImage === 'object' ? firstImage.url : firstImage;
                     }
 
+                    const factName = d.factoryId || '';
+                    const factoryObj = factories.find(f => (f.name || f) === factName);
+                    const factoryCode = typeof factoryObj === 'object' ? factoryObj.code : (d.factoryCode || '');
+
                     updatedRows[i] = {
                         ...r,
                         desc: englishOnly(d.productName) || '',
@@ -249,13 +257,10 @@ const ShippingInvoice = () => {
                         qty: totalPieces.toString(),
                         currency: d.currency || '¥ RMB',
                         unitPrice: d.productPrice || '',
-                        image: imageUrl
+                        image: imageUrl,
+                        factoryCode: factoryCode || ''
                     };
                     successCount++;
-                    
-                    if (!newBuyer && d.buyerCompany) {
-                        newBuyer = d.buyerCompany;
-                    }
                 }
             } catch (err) {
                 // ignore
@@ -264,9 +269,6 @@ const ShippingInvoice = () => {
     }
     
     setRows(updatedRows);
-    if (!headerInfo.buyer && newBuyer) {
-        setHeaderInfo(prev => ({ ...prev, buyer: newBuyer }));
-    }
 
     if (successCount > 0) {
         toast.success(t('shipping.messages.fetch_success', { count: successCount }), { id: toastId });
@@ -319,7 +321,8 @@ const ShippingInvoice = () => {
           borderRadius: '16px', 
           overflow: 'hidden',
           boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
-          color: 'var(--text-main)'
+          color: 'var(--text-main)',
+          direction: 'ltr'
       }}>
         
         {/* Print Styles */}
@@ -345,68 +348,70 @@ const ShippingInvoice = () => {
               }
               .no-print { display: none !important; }
               .inv-header-section {
-                border-bottom: 2px solid #000 !important;
-                padding: 6px 10px !important;
+                border-bottom: 3px solid #1a5276 !important;
+                padding: 12px !important;
                 background: #fff !important;
               }
               .inv-header-section input {
-                font-size: 13px !important; color: #000 !important;
+                font-size: 15px !important; color: #1a5276 !important; font-family: 'Arial', sans-serif !important; font-weight: bold !important;
               }
               .inv-header-section .company-tel input {
-                font-size: 10px !important;
+                font-size: 11px !important; color: #555 !important; font-family: sans-serif !important;
               }
               .inv-meta-grid {
-                padding: 4px 10px !important; gap: 6px !important;
-                background: #fff !important; border: none !important;
+                padding: 8px 12px !important; gap: 8px !important;
+                background: #f8fafc !important; border: 1px solid #cbd5e1 !important;
+                border-radius: 4px !important; margin-top: 8px !important;
               }
-              .inv-meta-grid label { font-size: 8px !important; color: #000 !important; margin-bottom: 1px !important; }
+              .inv-meta-grid label { font-size: 9px !important; color: #64748b !important; margin-bottom: 2px !important; text-transform: uppercase !important; letter-spacing: 0.5px !important; }
               .inv-meta-grid input, .inv-meta-grid .form-control {
-                font-size: 10px !important; padding: 2px 4px !important;
-                border: 1px solid #000 !important; color: #000 !important;
+                font-size: 11px !important; padding: 4px 6px !important;
+                border: 1px solid #94a3b8 !important; color: #0f172a !important; font-weight: bold !important;
                 background: #fff !important; min-height: unset !important;
                 height: auto !important;
               }
-              .inv-title-h2 { font-size: 14px !important; margin: 4px 0 !important; }
+              .inv-title-h2 { font-size: 16px !important; margin: 12px 0 8px !important; text-transform: uppercase !important; letter-spacing: 1.5px !important; color: #1a5276 !important; font-weight: 900 !important; }
               /* Table compact */
-              .inv-main-table { font-size: 9px !important; table-layout: auto !important; }
+              .inv-main-table { font-size: 10px !important; table-layout: auto !important; border-collapse: collapse !important; border: 2px solid #1a5276 !important; }
               .inv-main-table th {
-                padding: 3px 2px !important; font-size: 8px !important;
-                background: #e8e8e8 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
-                border: 1px solid #000 !important; color: #000 !important;
-                white-space: normal !important;
+                padding: 6px 4px !important; font-size: 9px !important;
+                background: #1a5276 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+                border: 1px solid #1a5276 !important; color: #fff !important;
+                white-space: normal !important; text-transform: uppercase !important; letter-spacing: 0.5px !important;
               }
               .inv-main-table td {
-                padding: 2px 3px !important; border: 1px solid #000 !important;
-                color: #000 !important; white-space: normal !important;
+                padding: 4px !important; border: 1px solid #94a3b8 !important;
+                color: #0f172a !important; white-space: normal !important;
                 word-wrap: break-word !important; overflow-wrap: break-word !important;
               }
+              .inv-main-table td span { color: #0f172a !important; }
               .inv-main-table input {
-                font-size: 9px !important; color: #000 !important;
+                font-size: 10px !important; color: #0f172a !important; font-weight: bold !important;
                 padding: 0 !important; height: auto !important;
                 min-height: unset !important;
                 display: none !important;
               }
               .inv-main-table .print-val {
-                display: inline !important; font-size: 9px !important;
-                color: #000 !important; font-weight: bold !important;
+                display: inline !important; font-size: 10px !important;
+                color: #0f172a !important; font-weight: bold !important;
               }
-              .inv-main-table img { width: 35px !important; height: 45px !important; }
+              .inv-main-table img { width: 35px !important; height: 45px !important; border-radius: 2px !important; border: 1px solid #ccc !important; }
               /* Footer table */
-              .inv-footer-table { font-size: 10px !important; }
+              .inv-footer-table { font-size: 11px !important; border-collapse: collapse !important; border: 2px solid #1a5276 !important; }
               .inv-footer-table td {
-                padding: 3px 6px !important; border: 1px solid #000 !important;
-                color: #000 !important;
+                padding: 6px 8px !important; border: 1px solid #94a3b8 !important;
+                color: #0f172a !important; font-weight: bold !important;
               }
               .inv-footer-table input {
-                font-size: 10px !important; color: #000 !important;
+                font-size: 11px !important; color: #0f172a !important; font-weight: bold !important;
                 padding: 0 !important;
               }
               .inv-footer-table .highlight-cell {
-                background: #e8e8e8 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+                background: #f8fafc !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
               }
               .inv-footer-table .total-cell {
-                background: #d0d0d0 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
-                font-weight: 900 !important;
+                background: #eaf2f8 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+                font-weight: 900 !important; border-top: 2px solid #1a5276 !important; border-bottom: 2px solid #1a5276 !important; color: #1a5276 !important;
               }
               /* Bottom details */
               .inv-bottom-details { font-size: 10px !important; gap: 2px !important; margin-top: 6px !important; }
@@ -426,27 +431,69 @@ const ShippingInvoice = () => {
             background: 'var(--surface-highlight)', 
             borderBottom: '2px solid var(--accent-color)',
             padding: '1.5rem',
-            textAlign: 'center'
+            textAlign: 'center',
+            position: 'relative'
         }}>
-           <input 
-             type="text" 
-             value={headerInfo.companyName} 
-             onChange={e => setHeaderInfo({...headerInfo, companyName: e.target.value})}
-             style={{ width: '100%', textAlign: 'center', background: 'transparent', border: 'none', fontSize: '1.6rem', fontWeight: '900', color: 'var(--text-main)', marginBottom: '0.5rem' }}
-           />
-           <div className="company-tel" style={{ display: 'flex', justifyContent: 'center', gap: '2rem' }}>
-             <input type="text" value={headerInfo.tel} onChange={e => setHeaderInfo({...headerInfo, tel: e.target.value})} style={{ textAlign: 'center', background: 'transparent', border: 'none', color: 'var(--text-muted)', fontWeight: 'bold', direction: 'ltr' }} />
-             <input type="text" value={headerInfo.fax} onChange={e => setHeaderInfo({...headerInfo, fax: e.target.value})} style={{ textAlign: 'center', background: 'transparent', border: 'none', color: 'var(--text-muted)', fontWeight: 'bold', direction: 'ltr' }} />
+           <div 
+             onClick={() => setShowCompanyDropdown(!showCompanyDropdown)}
+             style={{ cursor: 'pointer', display: 'inline-block', width: '100%', padding: '0.5rem', borderRadius: '8px', transition: 'background-color 0.2s' }}
+             onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(212, 175, 55, 0.05)'}
+             onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+           >
+             <div style={{ fontSize: '1.6rem', fontWeight: '900', color: 'var(--text-main)', marginBottom: '0.5rem', textTransform: 'uppercase' }}>
+               {headerInfo.companyName}
+             </div>
+             <div className="company-tel" style={{ display: 'flex', justifyContent: 'center', gap: '2rem', color: 'var(--text-muted)', fontWeight: 'bold', direction: 'ltr' }}>
+               <span>{headerInfo.fax}</span>
+               <span>{headerInfo.tel}</span>
+             </div>
            </div>
+
+           {/* Dropdown for Companies */}
+           {showCompanyDropdown && (
+             <div className="no-print" style={{
+               position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)',
+               width: '400px', backgroundColor: 'var(--surface-color)', border: '2px solid var(--accent-color)',
+               borderRadius: 'var(--radius-md)', boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+               zIndex: 100, maxHeight: '300px', overflowY: 'auto', marginTop: '0.5rem'
+             }}>
+               {companies.length === 0 ? (
+                 <div style={{ padding: '1rem', color: 'var(--text-muted)' }}>لا توجد شركات مضافة، يرجى إضافتها من لوحة الإدارة.</div>
+               ) : (
+                 companies.map((comp, idx) => (
+                   <div 
+                     key={idx}
+                     onClick={() => {
+                       setHeaderInfo({
+                         ...headerInfo,
+                         companyName: comp.name || '',
+                         fax: comp.fax ? `FAX:${comp.fax} :FAX` : '',
+                         tel: comp.mobile ? `Tel:${comp.mobile} :Tel` : ''
+                       });
+                       setShowCompanyDropdown(false);
+                     }}
+                     style={{
+                       padding: '1rem', borderBottom: '1px solid var(--border-color)',
+                       cursor: 'pointer', textAlign: 'center', transition: 'background-color 0.2s'
+                     }}
+                     onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(212, 175, 55, 0.1)'}
+                     onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                   >
+                     <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: 'var(--text-main)', textTransform: 'uppercase' }}>{comp.name}</div>
+                     <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '0.25rem', direction: 'ltr' }}>
+                       {comp.fax && <span>FAX: {comp.fax} | </span>}
+                       {comp.mobile && <span>Tel: {comp.mobile}</span>}
+                     </div>
+                   </div>
+                 ))
+               )}
+             </div>
+           )}
         </div>
 
         <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
            
-           <div className="inv-meta-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', background: 'rgba(212, 175, 55, 0.05)', padding: '1rem', borderRadius: '8px', border: '1px solid rgba(212, 175, 55, 0.2)' }}>
-              <div>
-                 <label style={{ fontSize: '0.85rem', color: 'var(--accent-color)', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>{t('shipping.header.buyer')}</label>
-                 <input type="text" className="form-control" value={headerInfo.buyer} onChange={e => setHeaderInfo({...headerInfo, buyer: e.target.value})} style={{ background: 'var(--bg-color)' }} />
-              </div>
+           <div className="inv-meta-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', background: 'rgba(212, 175, 55, 0.05)', padding: '1rem', borderRadius: '8px', border: '1px solid rgba(212, 175, 55, 0.2)' }}>
               <div>
                  <label style={{ fontSize: '0.85rem', color: 'var(--accent-color)', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>{t('shipping.header.invoice_no')}</label>
                  <input type="text" className="form-control" value={headerInfo.invoiceNo} onChange={e => setHeaderInfo({...headerInfo, invoiceNo: toEnglishNumbers(e.target.value)})} style={{ background: 'var(--bg-color)' }} />
@@ -479,11 +526,10 @@ const ShippingInvoice = () => {
                    <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '80px' }}>{t('shipping.table.cols.currency')}<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>{t('shipping.table.cols.currency_ar')}</span></th>
                    <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '90px' }}>{t('shipping.table.cols.unit_price')}<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>{t('shipping.table.cols.unit_price_ar')}</span></th>
                    <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '120px' }}>{t('shipping.table.cols.total_amount')}<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>{t('shipping.table.cols.total_amount_ar')}</span></th>
-                   {showImageColumn ? (
+                   {showImageColumn && (
                        <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '90px' }}>{t('shipping.table.cols.item_image')}<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>{t('shipping.table.cols.item_image_ar')}</span></th>
-                   ) : (
-                       <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)' }}>{t('shipping.table.cols.other_details')}<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>{t('shipping.table.cols.other_details_ar')}</span></th>
                    )}
+                   <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '90px' }}>تفاصيل أخرى<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>Other Details</span></th>
                    <th className="no-print" style={{ padding: '10px 5px', width: '40px', border: '1px solid var(--border-color)' }}></th>
                  </tr>
                </thead>
@@ -624,7 +670,7 @@ const ShippingInvoice = () => {
                         {row.totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                      </td>
                      
-                     {showImageColumn ? (
+                     {showImageColumn && (
                         <td style={{ border: '1px solid var(--border-color)', padding: '5px', textAlign: 'center' }}>
                             {row.image ? (
                                 <img src={row.image} alt="Product" style={{ width: '60px', height: '80px', objectFit: 'contain', borderRadius: '4px' }} />
@@ -632,11 +678,12 @@ const ShippingInvoice = () => {
                                 <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('shipping.table.no_image')}</span>
                             )}
                         </td>
-                     ) : (
-                        <td style={{ border: '1px solid var(--border-color)', padding: '5px' }}>
-                           <input type="text" value={row.details} onChange={e => handleRowChange(row.id, 'details', e.target.value)} style={{ width: '100%', background: 'transparent', border: 'none', color: 'var(--text-main)', textAlign: 'center' }} />
-                        </td>
                      )}
+                     
+                     <td style={{ border: '1px solid var(--border-color)', padding: '5px', fontWeight: 'bold' }}>
+                        <input type="text" value={row.factoryCode || row.details} onChange={e => handleRowChange(row.id, 'factoryCode', e.target.value)} style={{ width: '100%', background: 'transparent', border: 'none', color: 'var(--text-main)', textAlign: 'center' }} placeholder="-" />
+                        <span className="print-val" style={{ display: 'none' }}>{row.factoryCode || row.details || '-'}</span>
+                     </td>
 
                         <td className="no-print" style={{ border: '1px solid var(--border-color)', padding: '5px', textAlign: 'center' }}>
                             <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>

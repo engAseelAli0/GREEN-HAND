@@ -485,7 +485,7 @@ const DataEntryWizard = () => {
       const { error } = await supabase.from('orders').update(payload).eq('serial_number', originalSerial);
       if (error) throw error;
       toast.success(t('entry.messages.update_success', { serial: currentOrder.serialNumber }), { id: toastId });
-      setOriginalSerial(currentOrder.serialNumber);
+      handleClear();
     } catch (err) {
       toast.error(t('entry.messages.save_error'), { id: toastId });
     }
@@ -516,6 +516,7 @@ const DataEntryWizard = () => {
        setCurrentOrder(newOrderData);
        setOriginalSerial(newSerial);
        setIsEditMode(true);
+       window.scrollTo({ top: 0, behavior: 'smooth' });
      } catch (err) {
        toast.error(t('entry.messages.save_error'), { id: toastId });
      }
@@ -594,13 +595,21 @@ const DataEntryWizard = () => {
     }
   };
 
-  const handleClear = () => {
-    setCurrentOrder(defaultOrderState);
+  const handleClear = async () => {
     setProductImages([]);
     setSelectedColorsArr([]);
     setIsEditMode(false);
     setOriginalSerial('');
-    setSerialStatus(null);
+    setSerialStatus('checking');
+    setActiveTab('buyer');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    
+    const nextSerial = await fetchNextAvailableSerial();
+    const nextOrder = await fetchNextOrderNumber();
+    
+    setCurrentOrder({ ...defaultOrderState, serialNumber: nextSerial, orderNumber: nextOrder });
+    setSerialStatus('available');
+    
     toast.success(t('entry.messages.cleared_success'));
   };
 

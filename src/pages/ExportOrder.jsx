@@ -192,26 +192,26 @@ const ExportOrder = () => {
         .print-doc {
           background:#fff; color:#111; padding:10px 14px; border-radius:8px;
           max-width:1200px; margin:0 auto; box-shadow:0 8px 30px rgba(0,0,0,0.45);
-          font-family:'Inter','Tajawal',sans-serif; font-size:9px; line-height:1.3;
+          font-family:'Inter','Tajawal',sans-serif; font-size:11.5px; line-height:1.3;
           border:1px solid #ccc;
         }
 
         /* ---- Compact Invoice Table Cells ---- */
         .inv-table { width:100%; border-collapse:collapse; border:1.5px solid #333; table-layout:auto; }
         .inv-table th, .inv-table td { border:1px solid #999; padding:2px 4px; vertical-align:middle; word-wrap:break-word; overflow-wrap:break-word; white-space:normal; }
-        .inv-table th { font-size:8px; font-weight:700; }
-        .inv-table td { font-size:8.5px; }
+        .inv-table th { font-size:11.5px; font-weight:700; padding:4px 2px; }
+        .inv-table td { font-size:12px; }
 
         .sec-hdr {
-          background:#1a5276; color:#fff; font-weight:700; font-size:8.5px;
+          background:#1a5276; color:#fff; font-weight:700; font-size:12px;
           padding:3px 6px; text-align:center; letter-spacing:0.5px;
         }
-        .sec-hdr-green { background:#1e8449; color:#fff; font-weight:700; font-size:8.5px; padding:3px 6px; text-align:center; }
+        .sec-hdr-green { background:#1e8449; color:#fff; font-weight:700; font-size:12px; padding:3px 6px; text-align:center; }
 
         .val-bold { font-weight:700; color:#111; }
-        .val-lg { font-size:12px; font-weight:900; }
-        .val-md { font-size:10px; font-weight:700; }
-        .label-cn { font-size:7.5px; color:#555; display:block; }
+        .val-lg { font-size:14.5px; font-weight:900; }
+        .val-md { font-size:13px; font-weight:700; }
+        .label-cn { font-size:10px; color:#555; display:block; }
 
         .kp-row-c { display:flex; justify-content:space-between; padding:1px 0; border-bottom:1px dotted #ddd; }
         .kp-row-c:last-child { border-bottom:none; }
@@ -219,14 +219,14 @@ const ExportOrder = () => {
         .sign-row { display:flex; justify-content:space-around; margin-top:4px; padding-top:3px; border-top:1.5px solid #333; }
         .sign-box-c { text-align:center; min-width:120px; }
         .sign-box-c .sign-line-c { border-top:1px solid #000; margin-top:20px; margin-bottom:2px; }
-        .sign-box-c .sign-label-c { font-size:7.5px; font-weight:600; color:#555; text-transform:uppercase; }
+        .sign-box-c .sign-label-c { font-size:8.5px; font-weight:600; color:#555; text-transform:uppercase; }
 
-        .color-dot-c { width:10px;height:10px;border-radius:50%;display:inline-block;margin-left:3px;border:1px solid #aaa;vertical-align:middle; }
-        .material-pill-c { background:#eee;padding:1px 5px;border-radius:99px;font-size:7.5px;font-weight:600;display:inline-flex;align-items:center;gap:3px;margin:1px 2px; }
-        .material-pct-c { background:#1a5276;color:#fff;padding:0 4px;border-radius:99px;font-size:7px; }
+        .color-dot-c { width:10px;height:10px;border-radius:50%;display:inline-block;margin-left:3px;margin-right:3px;border:1px solid #aaa;vertical-align:middle; }
+        .material-pill-c { background:#eee;padding:1px 5px;border-radius:99px;font-size:8.5px;font-weight:600;display:inline-flex;align-items:center;gap:3px;margin:1px 2px; }
+        .material-pct-c { background:#1a5276;color:#fff;padding:0 4px;border-radius:99px;font-size:8px; }
 
-        .remarks-box { background:#fef9c3;border:1px solid #fde047;padding:3px 6px;border-radius:4px;font-size:8px;color:#713f12;margin-top:3px; }
-        .cond-item { display:flex; gap:3px; align-items:flex-start; font-size:7.5px; color:#c0392b; font-weight:600; margin-bottom:1px; }
+        .remarks-box { background:#fef9c3;border:1px solid #fde047;padding:3px 6px;border-radius:4px;font-size:10px;color:#713f12;margin-top:3px; }
+        .cond-item { display:flex; gap:3px; align-items:flex-start; font-size:9px; color:#c0392b; font-weight:600; margin-bottom:1px; }
 
         .img-thumb { width:80px;height:90px;object-fit:cover;border:1px solid #ccc;border-radius:3px; }
         .barcode-box { border:1px solid #999; padding:3px; text-align:center; font-size:7px; background:#fafafa; border-radius:3px; }
@@ -383,13 +383,24 @@ const ExportOrder = () => {
       )}
 
       {order && (
-        <div className="print-doc" id="export-doc">
+        <div className="print-doc" id="export-doc" dir="ltr">
+          {/* ═══ TOP LOGO HEADER ═══ */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, paddingBottom: 6, borderBottom: '2px solid #1a5276' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <div style={{ padding: '4px 12px', border: '2px solid #1e8449', borderRadius: 6, textAlign: 'center', background: '#eafaf1' }}>
+                <div style={{ fontSize: 18, fontWeight: 900, color: '#1e8449', letterSpacing: 3 }}>Green Hand</div>
+                <div style={{ fontSize: 9, color: '#1e8449', fontStyle: 'italic', fontWeight: 600 }}>Where elegance begins</div>
+              </div>
+            </div>
+            <div style={{ fontSize: 20, fontWeight: 900, color: '#1a5276', letterSpacing: 1 }}>{t('export.doc.export_invoice', 'EXPORT INVOICE / 出口发票')}</div>
+          </div>
+
           {/* ═══ ROW 1: HEADER ═══ */}
           <table className="inv-table" style={{ marginBottom: 4 }}>
             <tbody>
               <tr>
-                <td colSpan={2} className="sec-hdr" style={{ fontSize: 9 }}>{t('export.doc.order_no')}</td>
-                <td style={{ textAlign: 'center' }}><span className="val-md">{order.serialNumber || '-'}</span></td>
+                <td colSpan={2} className="sec-hdr" style={{ fontSize: 11 }}>{t('export.doc.order_no')}</td>
+                <td style={{ textAlign: 'center' }}><span className="val-md">{order.orderNumber || '-'}</span></td>
                 <td className="sec-hdr">{t('export.doc.request_date')}</td>
                 <td style={{ textAlign: 'center' }}><span className="val-bold">{formatDate(order.requestDate)}</span></td>
                 <td className="sec-hdr">{t('export.doc.delivery_date')}</td>
@@ -397,27 +408,27 @@ const ExportOrder = () => {
               </tr>
               <tr>
                 <td rowSpan={3} colSpan={2} style={{ textAlign: 'center', padding: '4px 6px' }}>
-                  <div style={{ fontSize: 14, fontWeight: 900, color: '#111', lineHeight: 1.1 }}>{t('export.doc.product_order_en')}</div>
-                  <div style={{ fontSize: 12, fontWeight: 800, color: '#1a5276' }}>{t('export.doc.product_order_zh')}</div>
+                  <div style={{ fontSize: 15, fontWeight: 900, color: '#111', lineHeight: 1.1 }}>{t('export.doc.product_order_en')}</div>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: '#1a5276' }}>{t('export.doc.product_order_zh')}</div>
                 </td>
-                <td style={{ fontSize: 7.5 }}>{t('export.doc.buyer_name')}</td>
+                <td style={{ fontSize: 10 }}>{t('export.doc.buyer_name')}</td>
                 <td colSpan={2} className="val-bold">{order.buyerCompany || '-'}</td>
-                <td style={{ fontSize: 7.5 }}>{t('export.doc.factory_name')}</td>
+                <td style={{ fontSize: 10 }}>{t('export.doc.factory_name')}</td>
                 <td className="val-bold">
                   {factoryInfo.name || '-'} 
                   {factoryInfo.code ? <span style={{ color: '#1a5276', marginLeft: '4px' }}>[{factoryInfo.code}]</span> : null}
                 </td>
               </tr>
               <tr>
-                <td style={{ fontSize: 7.5 }}>{t('export.doc.buyer_mobile')}</td>
+                <td style={{ fontSize: 10 }}>{t('export.doc.buyer_mobile')}</td>
                 <td colSpan={2} className="val-bold">{order.buyerMobile || '-'}</td>
-                <td style={{ fontSize: 7.5 }}>{t('export.doc.factory_mobile')}</td>
+                <td style={{ fontSize: 10 }}>{t('export.doc.factory_mobile')}</td>
                 <td className="val-bold">{factoryInfo.mobile || '-'}</td>
               </tr>
               <tr>
-                <td style={{ fontSize: 7.5 }}>{t('export.doc.customer_id')}</td>
-                <td colSpan={2} className="val-bold">{order.serialNumber || '-'}</td>
-                <td style={{ fontSize: 7.5 }}>{t('export.doc.factory_address')}</td>
+                <td style={{ fontSize: 10 }}>{t('export.doc.customer_id')}</td>
+                <td colSpan={2} className="val-bold">{order.buyerNumber || order.buyerCode || '-'}</td>
+                <td style={{ fontSize: 10 }}>{t('export.doc.factory_address')}</td>
                 <td className="val-bold">{factoryInfo.address || '-'}</td>
               </tr>
             </tbody>
@@ -433,30 +444,13 @@ const ExportOrder = () => {
                 <th style={{ textAlign: 'center', width: '8%' }}>{t('export.doc.price')}</th>
                 <th style={{ textAlign: 'center', width: '7%' }}>{t('export.doc.qty')}</th>
                 <th style={{ textAlign: 'center', width: '7%' }}>{t('export.doc.size_qty')}</th>
-                <th style={{ textAlign: 'center', width: '10%' }}>{t('export.doc.size_range')}</th>
-                <th rowSpan={2 + sizesToRender.length + 1} style={{ width: '18%', textAlign: 'center', verticalAlign: 'top', padding: 4 }}>
-                  {/* Product Images + Logo area */}
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                    {order.productImages && order.productImages.length > 0 ? (
-                      order.productImages.slice(0, 2).map((img, idx) => (
-                        <img key={idx} src={img.url} alt={img.name || `Product ${idx+1}`} className="img-thumb" crossOrigin="anonymous" />
-                      ))
-                    ) : (
-                      <div style={{ width: 80, height: 90, border: '1px dashed #ccc', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 7, color: '#aaa', borderRadius: 3 }}>{t('export.doc.no_image')}</div>
-                    )}
-                    <div style={{ marginTop: 4, padding: '2px 6px', border: '1px solid #1e8449', borderRadius: 4, textAlign: 'center' }}>
-                      <div style={{ fontSize: 10, fontWeight: 900, color: '#1e8449', letterSpacing: 2 }}>Green</div>
-                      <div style={{ fontSize: 10, fontWeight: 900, color: '#1e8449', letterSpacing: 2 }}>Hand</div>
-                      <div style={{ fontSize: 6, color: '#555', fontStyle: 'italic' }}>Where elegance begins</div>
-                    </div>
-                  </div>
-                </th>
+                <th style={{ textAlign: 'center', width: '15%' }}>{t('export.doc.size_range')}</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td className="val-bold" style={{ fontSize: 10 }}>{englishOnly(order.productName) || '-'}
-                  {order.tradeMark && <div style={{ fontSize: 7, color: '#555', fontWeight: 'normal' }}>TM: {order.tradeMark}</div>}
+                <td className="val-bold" style={{ fontSize: 11 }}>{englishOnly(order.productName) || '-'}
+                  {order.tradeMark && <div style={{ fontSize: 8.5, color: '#555', fontWeight: 'normal' }}>TM: {order.tradeMark}</div>}
                 </td>
                 <td style={{ textAlign: 'center' }}><span className="val-lg">{order.barcode || '-'}</span></td>
                 <td style={{ textAlign: 'center' }}><span className="val-md">{order.barcode ? `100${order.barcode}` : '-'}</span></td>
@@ -468,7 +462,7 @@ const ExportOrder = () => {
               {/* SIZE ROW HEADER */}
               {sizesToRender.length > 0 && (
                 <tr>
-                  <td colSpan={1} style={{ fontWeight: 700, fontSize: 7.5, background: '#eaf2f8' }}>
+                  <td colSpan={1} style={{ fontWeight: 700, fontSize: 8.5, background: '#eaf2f8' }}>
                     {englishOnly(order.productName) || 'Product'}_Size<br/><span className="label-cn">{t('export.doc.dress_size')}</span>
                   </td>
                   {sizesToRender.map((size, i) => (
@@ -481,31 +475,44 @@ const ExportOrder = () => {
               )}
               {/* MEASUREMENTS */}
               {(() => {
-                const allMeasurements = [];
-                if (order.groupedMeasurements) {
+                const rows = [];
+                if (order.groupedMeasurements && Object.keys(order.groupedMeasurements).length > 0) {
                   Object.keys(order.groupedMeasurements).forEach(part => {
-                    Object.keys(order.groupedMeasurements[part]).forEach(mName => {
-                      allMeasurements.push({ name: mName, data: order.groupedMeasurements[part][mName] });
+                    rows.push(
+                      <tr key={`header-${part}`}>
+                        <td colSpan={7} style={{ background: '#d5dbdb', fontWeight: 800, fontSize: 11, textAlign: 'center', color: '#111', padding: '2px 0' }}>{part}</td>
+                      </tr>
+                    );
+                    Object.keys(order.groupedMeasurements[part]).forEach((mName, i) => {
+                      rows.push(
+                        <tr key={`m-${part}-${i}`}>
+                          <td style={{ fontWeight: 600, fontSize: 10 }}>{mName}</td>
+                          {sizesToRender.map((s, idx) => (
+                            <td key={s} colSpan={idx === sizesToRender.length - 1 ? (7 - sizesToRender.length) || 1 : 1} style={{ textAlign: 'center', fontWeight: order.groupedMeasurements[part][mName]?.[s] ? 600 : 400, color: order.groupedMeasurements[part][mName]?.[s] ? '#111' : '#bbb' }}>
+                              {order.groupedMeasurements[part][mName]?.[s] || ''}
+                            </td>
+                          ))}
+                          {sizesToRender.length < 6 && Array.from({ length: Math.max(0, 6 - sizesToRender.length) }).map((_, idx) => <td key={`emp-${part}-${idx}`}></td>)}
+                        </tr>
+                      );
                     });
                   });
                 } else if (order.measurements) {
-                  Object.keys(order.measurements).forEach(mName => {
-                    allMeasurements.push({ name: mName, data: order.measurements[mName] });
+                  Object.keys(order.measurements).forEach((mName, i) => {
+                    rows.push(
+                      <tr key={`legacy-${i}`}>
+                        <td style={{ fontWeight: 600, fontSize: 10 }}>{mName}</td>
+                        {sizesToRender.map((s, idx) => (
+                          <td key={s} colSpan={idx === sizesToRender.length - 1 ? (7 - sizesToRender.length) || 1 : 1} style={{ textAlign: 'center', fontWeight: order.measurements[mName]?.[s] ? 600 : 400, color: order.measurements[mName]?.[s] ? '#111' : '#bbb' }}>
+                            {order.measurements[mName]?.[s] || ''}
+                          </td>
+                        ))}
+                        {sizesToRender.length < 6 && Array.from({ length: Math.max(0, 6 - sizesToRender.length) }).map((_, idx) => <td key={`emp-legacy-${idx}`}></td>)}
+                      </tr>
+                    );
                   });
                 }
-                return allMeasurements.map((m, idx) => (
-                  <tr key={idx}>
-                    <td style={{ fontWeight: 600, fontSize: 7.5 }}>{m.name}</td>
-                    {sizesToRender.map((s, i) => (
-                      <td key={s} colSpan={i === sizesToRender.length - 1 ? (7 - sizesToRender.length) || 1 : 1} style={{ textAlign: 'center', fontWeight: m.data?.[s] ? 600 : 400, color: m.data?.[s] ? '#111' : '#bbb' }}>
-                        {m.data?.[s] || ''}
-                      </td>
-                    ))}
-                    {sizesToRender.length < 6 && Array.from({ length: Math.max(0, 6 - sizesToRender.length) }).map((_, i) => (
-                      <td key={`me-${i}`}></td>
-                    ))}
-                  </tr>
-                ));
+                return rows;
               })()}
             </tbody>
           </table>
@@ -528,22 +535,33 @@ const ExportOrder = () => {
                           <td style={{ textAlign: 'center', fontWeight: 700 }}>{mat.percentage}%</td>
                         </tr>
                       ))}
-                      {/* Barcode Label */}
-                      <tr><td colSpan={2} className="sec-hdr" style={{ background: '#555' }}>{t('export.doc.barcode_label')}</td></tr>
+                      {/* Barcode Label section removed as requested */}
+                      {/* Packaging Conditions */}
+                      <tr><td colSpan={2} className="sec-hdr" style={{ background: '#555' }}>{t('entry.tabs.packaging') || 'Packaging Conditions'}</td></tr>
                       <tr>
-                        <td colSpan={2} className="barcode-box">
-                          <div style={{ fontWeight: 700, fontSize: 9 }}>Model: {order.barcode || '-'}</div>
-                          <div style={{ fontSize: 7.5 }}>Size: {order.sizeFrom} - {order.sizeTo}</div>
-                          <div style={{ fontFamily: 'monospace', fontSize: 10, letterSpacing: 2, margin: '2px 0' }}>|||||||||||||||||||</div>
-                          <div style={{ fontSize: 7 }}>{order.barcode ? `100${order.barcode}` : '-'}</div>
-                          <div style={{ fontSize: 7 }}>{englishOnly(order.productName)}</div>
+                        <td colSpan={2}>
+                          {order.packagingConditions && Object.keys(order.packagingConditions).length > 0 ? (
+                            <div style={{ padding: '4px' }}>
+                              {order.packagingConditions.cond1 && (
+                                <div className="cond-item">{t('export.doc.cond1_text', { val1: order.packagingConditions.cond1_val1 || '-', val2: order.packagingConditions.cond1_val2 || '-' })}</div>
+                              )}
+                              {order.packagingConditions.cond2 && (
+                                <div className="cond-item">{t('export.doc.cond2_text', { val1: order.packagingConditions.cond2_val1 || '-', val2: order.packagingConditions.cond2_val2 || '-' })}</div>
+                              )}
+                              {lookups.packagingConditionsList?.filter(c => order.packagingConditions[c]).map((c, i) => (
+                                <div key={i} className="cond-item">✓ {c}</div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div style={{ textAlign: 'center', color: '#999', fontSize: 9 }}>-</div>
+                          )}
                         </td>
                       </tr>
                       {/* CTN Packaging */}
                       <tr><td colSpan={2} className="sec-hdr-green">{t('export.doc.ctn_packaging')}</td></tr>
-                      <tr><td style={{ fontSize: 7.5 }}>{t('export.doc.carton_details')}</td><td className="val-bold">{order.cartonQty || '-'} pcs / {order.cartonPackage || '-'}</td></tr>
-                      <tr><td style={{ fontSize: 7.5 }}>{t('export.doc.carton_size')}</td><td className="val-bold">{order.cartonSize || '0'}</td></tr>
-                      <tr><td style={{ fontSize: 7.5 }}>{t('export.doc.plastic_bag')}</td><td className="val-bold">{order.plasticBagSize || '0'}</td></tr>
+                      <tr><td style={{ fontSize: 8.5 }}>{t('export.doc.carton_details')}</td><td className="val-bold">{order.cartonQty || '-'} pcs / {order.cartonPackage || '-'}</td></tr>
+                      <tr><td style={{ fontSize: 8.5 }}>{t('export.doc.carton_size')}</td><td className="val-bold">{order.cartonSize || '0'}</td></tr>
+                      <tr><td style={{ fontSize: 8.5 }}>{t('export.doc.plastic_bag')}</td><td className="val-bold">{order.plasticBagSize || '0'}</td></tr>
                     </tbody>
                   </table>
                 </td>
@@ -568,7 +586,7 @@ const ExportOrder = () => {
                             {idx === 0 && <td rowSpan={activeColors.length} style={{ textAlign: 'center', fontWeight: 900, fontSize: 14 }}>{activeColors.length}</td>}
                             <td><span className="color-dot-c" style={{ backgroundColor: hex }}></span> {colorName}</td>
                             <td style={{ textAlign: 'center', fontWeight: 700 }}>{rowSum}</td>
-                            <td style={{ textAlign: 'center', fontFamily: 'monospace', fontSize: 8 }}>{order.barcode ? `100${order.barcode}-${colorCode}` : '-'}</td>
+                            <td style={{ textAlign: 'center', fontFamily: 'monospace', fontSize: 9 }}>{order.barcode ? `100${order.barcode}-${colorCode}` : '-'}</td>
                           </tr>
                         );
                       }) : (
@@ -580,27 +598,21 @@ const ExportOrder = () => {
 
                 {/* RIGHT: Conditions & Remarks */}
                 <td style={{ width: '28%', verticalAlign: 'top', padding: 3 }}>
-                  {/* Packaging Conditions */}
-                  {order.packagingConditions && Object.keys(order.packagingConditions).length > 0 && (
-                    <div>
-                      {order.packagingConditions.cond1 && (
-                        <div className="cond-item">{t('export.doc.cond1_text', { val1: order.packagingConditions.cond1_val1 || '-', val2: order.packagingConditions.cond1_val2 || '-' })}</div>
-                      )}
-                      {order.packagingConditions.cond2 && (
-                        <div className="cond-item">{t('export.doc.cond2_text', { val1: order.packagingConditions.cond2_val1 || '-', val2: order.packagingConditions.cond2_val2 || '-' })}</div>
-                      )}
-                      {lookups.packagingConditionsList?.filter(c => order.packagingConditions[c]).map((c, i) => (
-                        <div key={i} className="cond-item">✓ {c}</div>
+                  {/* Product Images */}
+                  {order.productImages && order.productImages.length > 0 && (
+                    <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginBottom: 6 }}>
+                      {order.productImages.slice(0, 2).map((img, idx) => (
+                        <img key={idx} src={img.url} alt={img.name || `Product ${idx+1}`} crossOrigin="anonymous" style={{ width: 110, height: 130, objectFit: 'cover', borderRadius: 4, border: '1px solid #ccc' }} />
                       ))}
                     </div>
                   )}
                   {/* Fabric Samples Label */}
-                  <div style={{ marginTop: 4, padding: '3px 6px', background: '#eaf2f8', border: '1px solid #1a5276', borderRadius: 3, textAlign: 'center', fontSize: 8, fontWeight: 700, color: '#1a5276' }}>
+                  <div style={{ padding: '3px 6px', background: '#eaf2f8', border: '1px solid #1a5276', borderRadius: 3, textAlign: 'center', fontSize: 11, fontWeight: 700, color: '#1a5276' }}>
                     {t('export.doc.fabric_samples')}
                   </div>
                   {/* Sale Type */}
                   {order.saleType && (
-                    <div style={{ marginTop: 3, fontSize: 7.5, background: '#f3f4f6', padding: '2px 4px', borderRadius: 3, fontWeight: 600 }}>
+                    <div style={{ marginTop: 6, fontSize: 9, background: '#f3f4f6', padding: '4px', borderRadius: 3, fontWeight: 600, textAlign: 'center' }}>
                       {t('export.doc.sale_type')} {order.saleType}
                       {order.saleType === 'جملة وتجزئة' && ` (${order.wholesalePercentage}%/${order.retailPercentage}%)`}
                     </div>

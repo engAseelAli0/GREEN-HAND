@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { supabase } from '../supabaseClient';
+import { useAppData } from '../context/AppDataContext';
 import { useTranslation } from 'react-i18next';
 import { Printer, Plus, Trash2, Search, Package, Layers, AlertCircle, X } from 'lucide-react';
 import { englishOnly } from '../utils/textUtils';
@@ -20,14 +21,18 @@ const PackingList = () => {
     companyName: 'ARABIAN FRIENDSHIP TRADING CO.,LIMITED',
     tel: 'Tel:(8620)-83265754',
     fax: 'FAX:(8620)-83265204',
-    buyer: '',
     invoiceNo: '',
     branch: '',
     date: localDate
   });
 
+  const { lookups } = useAppData();
+  const companies = lookups?.companies || [];
+  const factories = lookups?.factories || [];
+  const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
+
   const [rows, setRows] = useState([
-    { id: Date.now(), serial: '', desc: '', details: '', image: '', packages: [{ id: Date.now() + 1, cartonNo: '', cartonQty: '', packingKind: 'Pcs', qtyPerCarton: '' }] }
+    { id: Date.now(), serial: '', desc: '', details: '', image: '', packages: [{ id: Date.now() + 1, cartonNo: '', cartonQty: '', packingKind: 'Pcs', qtyPerCarton: '' }], factoryCode: '' }
   ]);
 
   const [mixedGroups, setMixedGroups] = useState([]);
@@ -60,16 +65,16 @@ const PackingList = () => {
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   const clearAllData = () => {
-    setRows([{ id: Date.now(), serial: '', desc: '', packages: [{ id: Date.now() + 1, cartonNo: '', cartonQty: '', packingKind: 'Pcs', qtyPerCarton: '' }], details: '', image: '' }]);
+    setRows([{ id: Date.now(), serial: '', desc: '', packages: [{ id: Date.now() + 1, cartonNo: '', cartonQty: '', packingKind: 'Pcs', qtyPerCarton: '' }], details: '', image: '', factoryCode: '' }]);
     setMixedGroups([]);
-    setHeaderInfo(prev => ({ ...prev, buyer: '', invoiceNo: '', branch: '' }));
+    setHeaderInfo(prev => ({ ...prev, invoiceNo: '', branch: '' }));
     setShowClearConfirm(false);
     toast.success(t('shipping.messages.clear_success'));
   };
 
   // Auto-calculate Totals Handlers
   const addRow = () => {
-    setRows([...rows, { id: Date.now(), serial: '', desc: '', details: '', image: '', packages: [{ id: Date.now() + 1, cartonNo: '', cartonQty: '', packingKind: 'Pcs', qtyPerCarton: '' }] }]);
+    setRows([...rows, { id: Date.now(), serial: '', desc: '', details: '', image: '', packages: [{ id: Date.now() + 1, cartonNo: '', cartonQty: '', packingKind: 'Pcs', qtyPerCarton: '' }], factoryCode: '' }]);
   };
 
   const removeRow = (id) => {
@@ -194,14 +199,13 @@ const PackingList = () => {
       }
   };
 
-   const fetchAllData = async (withImage, badSerialsToSkip = [], removeBadRows = false) => {
+    const fetchAllData = async (withImage, badSerialsToSkip = [], removeBadRows = false) => {
     setShowImageColumn(withImage);
     const toastId = toast.loading(t('shipping.messages.fetching_data'));
     let successCount = 0;
     let newBuyer = headerInfo.buyer;
-    let newRows = [];
 
-    // Map: serial -> { factoryId, receivedAt, cartonNumbers[], desc, image, packages[] }
+    // Map: serial -> { rowId, serial, factoryId, receivedAt, expandedCartons[], originalPackages[], desc, image, details, factoryCode }
     const serialCartonMap = [];
     
     // Determine the working rows
@@ -210,9 +214,13 @@ const PackingList = () => {
         workingRows = workingRows.filter(r => !badSerialsToSkip.includes(r.serial.trim()));
     }
 
+    // First pass
     for (let i = 0; i < workingRows.length; i++) {
         let row = workingRows[i];
-        if (!row.serial.trim() || badSerialsToSkip.includes(row.serial.trim())) { newRows.push(row); continue; }
+        if (!row.serial.trim() || badSerialsToSkip.includes(row.serial.trim())) { 
+            serialCartonMap.push({ isSkipped: true, row });
+            continue; 
+        }
         
         try {
             const { data: orderData } = await supabase.from('orders').select('order_data').eq('serial_number', row.serial.trim()).single();
@@ -223,9 +231,16 @@ const PackingList = () => {
             let factoryId = '';
             let receivedAt = '';
             
+            let factoryCode = '';
+            
             if (orderData) {
                 const d = orderData.order_data;
                 factoryId = d.factoryId || '';
+                
+                const factName = d.factoryId || '';
+                const factoryObj = factories.find(f => (f.name || f) === factName);
+                factoryCode = typeof factoryObj === 'object' ? factoryObj.code : (d.factoryCode || '');
+
                 if (withImage && d.productImages && Array.isArray(d.productImages) && d.productImages.length > 0) {
                     const firstImage = d.productImages[0];
                     imageUrl = typeof firstImage === 'object' ? firstImage.url : firstImage;
@@ -238,15 +253,15 @@ const PackingList = () => {
                 receivedAt = recData.receive_data.receivedAt ? recData.receive_data.receivedAt.split('T')[0] : '';
             }
 
-            let generatedPackages = [];
-            let expandedCartons = []; // individual carton numbers for this serial
+            let originalPackages = [];
+            let expandedCartons = [];
             if (recData && recData.receive_data && recData.receive_data.packages && Array.isArray(recData.receive_data.packages)) {
                 const validPkgs = recData.receive_data.packages.filter(p => p.fromCtn && p.toCtn && p.pcsPerCtn);
                 validPkgs.forEach((pkg, index) => {
                     const from = parseInt(pkg.fromCtn) || 0;
                     const to = parseInt(pkg.toCtn) || 0;
                     const qty = from <= to ? (to - from + 1) : 0;
-                    generatedPackages.push({
+                    originalPackages.push({
                         id: Date.now() + Math.random() + index,
                         cartonNo: `${from}-${to}`,
                         cartonQty: qty > 0 ? qty.toString() : '',
@@ -260,25 +275,23 @@ const PackingList = () => {
             }
 
             serialCartonMap.push({
+                isSkipped: false,
+                rowId: row.id,
                 serial: row.serial.trim(),
                 factoryId,
                 receivedAt,
                 expandedCartons,
+                originalPackages,
                 desc,
-                imageUrl
-            });
-
-            newRows.push({
-                id: row.id,
-                serial: row.serial,
-                desc: desc,
+                imageUrl,
                 details: row.details,
-                image: imageUrl,
-                packages: generatedPackages.length > 0 ? generatedPackages : row.packages
+                factoryCode,
+                orderDataFound: !!orderData
             });
+            
             if (orderData) successCount++;
         } catch (err) {
-            newRows.push(row);
+            serialCartonMap.push({ isSkipped: true, row });
         }
     }
 
@@ -287,13 +300,15 @@ const PackingList = () => {
     const groupKey = (item) => `${item.factoryId}__${item.receivedAt}`;
     const factoryGroups = {};
     serialCartonMap.forEach(item => {
-        if (!item.factoryId || !item.receivedAt) return;
+        if (item.isSkipped || !item.factoryId || !item.receivedAt) return;
         const key = groupKey(item);
         if (!factoryGroups[key]) factoryGroups[key] = [];
         factoryGroups[key].push(item);
     });
 
     const detectedMixedGroups = [];
+    const mixedCartonSet = new Set(); // Store strings of carton numbers
+
     Object.values(factoryGroups).forEach(items => {
         if (items.length < 2) return; // need at least 2 serials to have a mix
         // Build map: cartonNumber -> [{ serial, desc, image, pcsPerCtn, kind }]
@@ -306,7 +321,8 @@ const PackingList = () => {
                     desc: item.desc,
                     imageUrl: item.imageUrl,
                     pcsPerCtn: ec.pcsPerCtn,
-                    kind: ec.kind
+                    kind: ec.kind,
+                    factoryCode: item.factoryCode
                 });
             });
         });
@@ -316,6 +332,9 @@ const PackingList = () => {
             // Check it's actually different serials (not duplicates)
             const uniqueSerials = [...new Set(entries.map(e => e.serial))];
             if (uniqueSerials.length < 2) return;
+            
+            mixedCartonSet.add(ctnNo.toString());
+            
             detectedMixedGroups.push({
                 id: Date.now() + Math.random() + parseInt(ctnNo),
                 cartonNo: ctnNo,
@@ -327,18 +346,74 @@ const PackingList = () => {
                     packingKind: e.kind || 'Pcs',
                     qtyPerCarton: e.pcsPerCtn || '',
                     details: '',
-                    image: e.imageUrl || ''
+                    image: e.imageUrl || '',
+                    factoryCode: e.factoryCode || ''
                 }))
             });
         });
     });
 
+    // ─── SECOND PASS: BUILD newRows FILTERING OUT MIXED CARTONS ───
+    let newRows = [];
+    serialCartonMap.forEach(item => {
+        if (item.isSkipped) {
+            newRows.push(item.row);
+            return;
+        }
+
+        let packagesToUse = item.originalPackages;
+        
+        // If there are generated packages, filter out mixed cartons and rebuild ranges
+        if (item.expandedCartons.length > 0) {
+            const nonMixedCartons = item.expandedCartons.filter(c => !mixedCartonSet.has(c.ctn.toString()));
+            
+            if (nonMixedCartons.length === 0) {
+                // All cartons were mixed! No non-mixed cartons.
+                // We leave packagesToUse empty so the row uses a fallback empty structure in render.
+                packagesToUse = []; 
+            } else {
+                // Rebuild contiguous ranges from nonMixedCartons
+                nonMixedCartons.sort((a, b) => a.ctn - b.ctn);
+                const rebuiltPkgs = [];
+                let currentGroup = { ...nonMixedCartons[0], startCtn: nonMixedCartons[0].ctn, endCtn: nonMixedCartons[0].ctn, count: 1 };
+                
+                for (let i = 1; i < nonMixedCartons.length; i++) {
+                    const c = nonMixedCartons[i];
+                    if (c.ctn === currentGroup.endCtn + 1 && c.pcsPerCtn === currentGroup.pcsPerCtn && c.kind === currentGroup.kind) {
+                        currentGroup.endCtn = c.ctn;
+                        currentGroup.count++;
+                    } else {
+                        rebuiltPkgs.push(currentGroup);
+                        currentGroup = { ...c, startCtn: c.ctn, endCtn: c.ctn, count: 1 };
+                    }
+                }
+                rebuiltPkgs.push(currentGroup);
+                
+                packagesToUse = rebuiltPkgs.map((g, idx) => ({
+                    id: Date.now() + Math.random() + idx,
+                    cartonNo: `${g.startCtn}-${g.endCtn}`,
+                    cartonQty: g.count.toString(),
+                    packingKind: g.kind || 'Pcs',
+                    qtyPerCarton: g.pcsPerCtn
+                }));
+            }
+        } else if (!item.orderDataFound) {
+            packagesToUse = item.row.packages;
+        }
+
+        newRows.push({
+            id: item.rowId,
+            serial: item.serial,
+            desc: item.desc,
+            details: item.details,
+            image: item.imageUrl,
+            packages: packagesToUse.length > 0 ? packagesToUse : item.row.packages, 
+            factoryCode: item.factoryCode || ''
+        });
+    });
+
     setRows(newRows);
     setMixedGroups(detectedMixedGroups);
-    
-    if (!headerInfo.buyer && newBuyer) {
-        setHeaderInfo(prev => ({ ...prev, buyer: newBuyer }));
-    }
 
     if (successCount > 0) {
         const mixMsg = detectedMixedGroups.length > 0 ? ` | ${t('packing.messages.mix_detected', { count: detectedMixedGroups.length })}` : '';
@@ -432,47 +507,50 @@ const PackingList = () => {
               }
               .no-print { display: none !important; }
               .pl-header {
-                border-bottom: 2px solid #000 !important;
-                padding: 6px 10px !important;
+                border-bottom: 3px solid #1a5276 !important;
+                padding: 12px !important;
                 background: #fff !important;
               }
-              .pl-header input { font-size: 13px !important; color: #000 !important; }
-              .pl-header .pl-tel input { font-size: 10px !important; }
+              .pl-header input { font-size: 15px !important; color: #1a5276 !important; font-family: 'Arial', sans-serif !important; font-weight: bold !important; }
+              .pl-header .pl-tel input { font-size: 11px !important; color: #555 !important; font-family: sans-serif !important; }
               .pl-meta {
-                padding: 4px 10px !important; gap: 6px !important;
-                background: #fff !important; border: none !important;
+                padding: 8px 12px !important; gap: 8px !important;
+                background: #f8fafc !important; border: 1px solid #cbd5e1 !important; border-radius: 4px !important;
+                margin-top: 8px !important;
               }
-              .pl-meta label { font-size: 8px !important; color: #000 !important; margin-bottom: 1px !important; }
+              .pl-meta label { font-size: 9px !important; color: #64748b !important; margin-bottom: 2px !important; text-transform: uppercase !important; letter-spacing: 0.5px !important; }
               .pl-meta input, .pl-meta .form-control {
-                font-size: 10px !important; padding: 2px 4px !important;
-                border: 1px solid #000 !important; color: #000 !important;
+                font-size: 11px !important; padding: 4px 6px !important;
+                border: 1px solid #94a3b8 !important; color: #0f172a !important; font-weight: bold !important;
                 background: #fff !important; min-height: unset !important; height: auto !important;
               }
-              .pl-title { font-size: 14px !important; margin: 4px 0 !important; }
-              .pl-table { font-size: 9px !important; table-layout: auto !important; }
+              .pl-title { font-size: 16px !important; margin: 12px 0 8px !important; text-transform: uppercase !important; letter-spacing: 1.5px !important; color: #1a5276 !important; font-weight: 900 !important; }
+              .pl-table { font-size: 10px !important; table-layout: auto !important; border-collapse: collapse !important; border: 2px solid #1a5276 !important; }
               .pl-table th {
-                padding: 3px 2px !important; font-size: 7.5px !important;
-                background: #d9e6f0 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
-                border: 1px solid #000 !important; color: #000 !important;
-                white-space: normal !important;
+                padding: 6px 4px !important; font-size: 9px !important;
+                background: #1a5276 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+                border: 1px solid #1a5276 !important; color: #fff !important;
+                white-space: normal !important; text-transform: uppercase !important; letter-spacing: 0.5px !important;
               }
               .pl-table td {
-                padding: 2px 3px !important; border: 1px solid #000 !important; color: #000 !important;
+                padding: 4px !important; border: 1px solid #94a3b8 !important; color: #0f172a !important;
                 white-space: normal !important; word-wrap: break-word !important; overflow-wrap: break-word !important;
               }
+              .pl-table td span { color: #0f172a !important; }
               .pl-table input {
-                font-size: 9px !important; color: #000 !important;
+                font-size: 10px !important; color: #0f172a !important; font-weight: bold !important;
                 padding: 0 !important; height: auto !important; min-height: unset !important;
                 white-space: normal !important; overflow: visible !important;
               }
-              .pl-table img { width: 35px !important; height: 45px !important; }
+              .pl-table img { width: 35px !important; height: 45px !important; border-radius: 2px !important; border: 1px solid #ccc !important; }
               .pl-table .pl-total-row td {
-                padding: 4px 6px !important; font-size: 10px !important;
-                background: #d9e6f0 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+                padding: 6px 8px !important; font-size: 11px !important;
+                background: #eaf2f8 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+                font-weight: 900 !important; border-top: 2px solid #1a5276 !important; border-bottom: 2px solid #1a5276 !important; color: #1a5276 !important;
               }
               .pl-table .pl-mixed-hdr td {
-                background: #a8d5f2 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
-                font-size: 8px !important; padding: 3px !important;
+                background: #2980b9 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+                font-size: 9px !important; padding: 5px !important; font-style: italic !important; color: #fff !important; font-weight: bold !important; letter-spacing: 1px !important;
               }
               .pl-bottom { font-size: 10px !important; gap: 2px !important; margin-top: 6px !important; }
               .pl-bottom > div {
@@ -490,7 +568,8 @@ const PackingList = () => {
           borderRadius: '16px', 
           overflow: 'hidden',
           boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
-          color: 'var(--text-main)'
+          color: 'var(--text-main)',
+          direction: 'ltr'
       }}>
            
            {/* ─── HEADER ─── */}
@@ -498,26 +577,68 @@ const PackingList = () => {
                background: 'var(--surface-highlight)', 
                borderBottom: '2px solid var(--accent-color)',
                padding: '1.5rem',
-               textAlign: 'center'
+               textAlign: 'center',
+               position: 'relative'
            }}>
-              <input 
-                type="text" 
-                value={headerInfo.companyName} 
-                onChange={e => setHeaderInfo({...headerInfo, companyName: e.target.value})}
-                style={{ width: '100%', textAlign: 'center', background: 'transparent', border: 'none', fontSize: '1.6rem', fontWeight: '900', color: 'var(--text-main)', marginBottom: '0.5rem' }}
-              />
-              <div className="pl-tel" style={{ display: 'flex', justifyContent: 'center', gap: '2rem' }}>
-                 <div style={{ color: 'var(--text-muted)', fontWeight: 'bold' }}>{t('packing.header.tel')} <input type="text" value={headerInfo.tel} onChange={e => setHeaderInfo({...headerInfo, tel: e.target.value})} style={{ background: 'transparent', border: 'none', color: 'inherit', fontWeight: 'inherit', direction: 'ltr', outline: 'none', width: '140px' }} /></div>
-                 <div style={{ color: 'var(--text-muted)', fontWeight: 'bold' }}>{t('packing.header.fax')} <input type="text" value={headerInfo.fax} onChange={e => setHeaderInfo({...headerInfo, fax: e.target.value})} style={{ background: 'transparent', border: 'none', color: 'inherit', fontWeight: 'inherit', direction: 'ltr', outline: 'none', width: '140px' }} /></div>
+              <div 
+                onClick={() => setShowCompanyDropdown(!showCompanyDropdown)}
+                style={{ cursor: 'pointer', display: 'inline-block', width: '100%', padding: '0.5rem', borderRadius: '8px', transition: 'background-color 0.2s' }}
+                onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(212, 175, 55, 0.05)'}
+                onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+              >
+                <div style={{ fontSize: '1.6rem', fontWeight: '900', color: 'var(--text-main)', marginBottom: '0.5rem', textTransform: 'uppercase' }}>
+                  {headerInfo.companyName}
+                </div>
+                <div className="pl-tel" style={{ display: 'flex', justifyContent: 'center', gap: '2rem', color: 'var(--text-muted)', fontWeight: 'bold', direction: 'ltr' }}>
+                  <span>{headerInfo.fax}</span>
+                  <span>{headerInfo.tel}</span>
+                </div>
               </div>
+
+              {/* Dropdown for Companies */}
+              {showCompanyDropdown && (
+                <div className="no-print" style={{
+                  position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)',
+                  width: '400px', backgroundColor: 'var(--surface-color)', border: '2px solid var(--accent-color)',
+                  borderRadius: 'var(--radius-md)', boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+                  zIndex: 100, maxHeight: '300px', overflowY: 'auto', marginTop: '0.5rem'
+                }}>
+                  {companies.length === 0 ? (
+                    <div style={{ padding: '1rem', color: 'var(--text-muted)' }}>لا توجد شركات مضافة، يرجى إضافتها من لوحة الإدارة.</div>
+                  ) : (
+                    companies.map((comp, idx) => (
+                      <div 
+                        key={idx}
+                        onClick={() => {
+                          setHeaderInfo({
+                            ...headerInfo,
+                            companyName: comp.name || '',
+                            fax: comp.fax ? `FAX:${comp.fax}` : '',
+                            tel: comp.mobile ? `Tel:${comp.mobile}` : ''
+                          });
+                          setShowCompanyDropdown(false);
+                        }}
+                        style={{
+                          padding: '1rem', borderBottom: '1px solid var(--border-color)',
+                          cursor: 'pointer', textAlign: 'center', transition: 'background-color 0.2s'
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(212, 175, 55, 0.1)'}
+                        onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                      >
+                        <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: 'var(--text-main)', textTransform: 'uppercase' }}>{comp.name}</div>
+                        <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '0.25rem', direction: 'ltr' }}>
+                          {comp.fax && <span>FAX: {comp.fax} | </span>}
+                          {comp.mobile && <span>Tel: {comp.mobile}</span>}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
            </div>
 
            <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div className="pl-meta" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', background: 'rgba(212, 175, 55, 0.05)', padding: '1rem', borderRadius: '8px', border: '1px solid rgba(212, 175, 55, 0.2)' }}>
-                 <div>
-                    <label style={{ fontSize: '0.85rem', color: 'var(--accent-color)', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>{t('packing.header.buyer')}</label>
-                    <input type="text" className="form-control" value={headerInfo.buyer} onChange={e => setHeaderInfo({...headerInfo, buyer: e.target.value})} style={{ background: 'var(--bg-color)' }} />
-                 </div>
+              <div className="pl-meta" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', background: 'rgba(212, 175, 55, 0.05)', padding: '1rem', borderRadius: '8px', border: '1px solid rgba(212, 175, 55, 0.2)' }}>
                  <div>
                     <label style={{ fontSize: '0.85rem', color: 'var(--accent-color)', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>{t('packing.header.invoice_no')}</label>
                     <input type="text" className="form-control" value={headerInfo.invoiceNo} onChange={e => setHeaderInfo({...headerInfo, invoiceNo: toEnglishNumbers(e.target.value)})} style={{ background: 'var(--bg-color)' }} />
@@ -551,11 +672,10 @@ const PackingList = () => {
                    <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '60px' }}>{t('packing.table.cols.qty_per_ctn')}<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>{t('packing.table.cols.qty_per_ctn_ar')}</span></th>
                    <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '60px' }}>{t('packing.table.cols.item_qty')}<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>{t('packing.table.cols.item_qty_ar')}</span></th>
                    <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '60px' }}>{t('packing.table.cols.total_item_qty')}<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>{t('packing.table.cols.total_item_qty_ar')}</span></th>
-                   {showImageColumn ? (
+                   {showImageColumn && (
                        <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '80px' }}>{t('packing.table.cols.image')}<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>{t('packing.table.cols.image_ar')}</span></th>
-                   ) : (
-                       <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)' }}>{t('packing.table.cols.details')}<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>{t('packing.table.cols.details_ar')}</span></th>
                    )}
+                   <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)' }}>تفاصيل أخرى<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>Other Details</span></th>
                    <th className="no-print" style={{ padding: '10px 5px', width: '40px', border: '1px solid var(--border-color)' }}></th>
                  </tr>
                </thead>
@@ -707,15 +827,16 @@ const PackingList = () => {
                                             </td>
                                         )}
                                         {isFirst && (
-                                            showImageColumn ? (
+                                            showImageColumn && (
                                                 <td rowSpan={packagesToRender.length} style={{ border: '1px solid var(--border-color)', padding: '2px', textAlign: 'center' }}>
                                                     {row.image && <img src={row.image} alt="Item" style={{ width: '50px', height: '60px', objectFit: 'contain' }} />}
                                                 </td>
-                                            ) : (
-                                                <td rowSpan={packagesToRender.length} style={{ border: '1px solid var(--border-color)', padding: '5px' }}>
-                                                    <input type="text" value={row.details} onChange={e => handleRowChange(row.id, 'details', e.target.value)} style={{ width: '100%', background: 'transparent', border: 'none', textAlign: 'center', outline: 'none', color: 'var(--text-main)' }} />
-                                                </td>
                                             )
+                                        )}
+                                        {isFirst && (
+                                            <td rowSpan={packagesToRender.length} style={{ border: '1px solid var(--border-color)', padding: '5px' }}>
+                                                <input type="text" value={row.factoryCode || row.details} onChange={e => handleRowChange(row.id, 'factoryCode', e.target.value)} style={{ width: '100%', background: 'transparent', border: 'none', textAlign: 'center', outline: 'none', color: 'var(--text-main)' }} placeholder="-" />
+                                            </td>
                                         )}
                                         {isFirst && (
                                             <td rowSpan={packagesToRender.length} className="no-print" style={{ border: '1px solid var(--border-color)', padding: '5px', textAlign: 'center' }}>
@@ -795,15 +916,14 @@ const PackingList = () => {
                                              </td>
                                          ) : null}
 
-                                         {showImageColumn ? (
+                                         {showImageColumn && (
                                              <td style={{ border: '1px solid var(--border-color)', padding: '2px', textAlign: 'center' }}>
                                                  {item.image && <img src={item.image} alt="Item" style={{ width: '50px', height: '60px', objectFit: 'contain' }} />}
                                              </td>
-                                         ) : (
-                                             <td style={{ border: '1px solid var(--border-color)', padding: '5px' }}>
-                                                 <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{item.details}</span>
-                                             </td>
                                          )}
+                                         <td style={{ border: '1px solid var(--border-color)', padding: '5px' }}>
+                                             <span style={{ color: 'var(--text-main)' }}>{item.factoryCode || item.details || '-'}</span>
+                                         </td>
 
                                           {isFirst && (
                                          <td rowSpan={group.items.length} className="no-print" style={{ border: '1px solid var(--border-color)', padding: '5px', textAlign: 'center' }}>

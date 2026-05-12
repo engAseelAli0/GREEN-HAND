@@ -1277,15 +1277,15 @@ const PrintBarcodes = () => {
                           <div className="sticker-barcode-wrap">
                             <ReactBarcode 
                                 value={row.batchBarcode} 
-                                format="CODE39"
-                                width={1.3} 
-                                height={30} 
-                                fontSize={12}
-                                margin={8}
+                                format="CODE128"
+                                width={0.8} 
+                                height={18} 
+                                fontSize={10}
+                                margin={4}
                                 displayValue={true}
                                 font="Arial"
                                 fontOptions="bold"
-                                textMargin={2}
+                                textMargin={1}
                             />
                           </div>
 

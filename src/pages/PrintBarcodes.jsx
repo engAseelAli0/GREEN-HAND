@@ -767,8 +767,9 @@ const PrintBarcodes = () => {
              display: grid !important;
              grid-template-columns: repeat(${printSettings.columns || 1}, ${printSettings.labelWidth || 3}cm) !important;
              grid-template-rows: repeat(${printSettings.rows || 1}, ${printSettings.labelHeight || 2.499}cm) !important;
-             gap: ${printSettings.rowGap || 0}cm ${printSettings.columnGap || 0}cm;
-             width: 100%;
+             column-gap: ${printSettings.columnGap || 0}cm !important;
+             row-gap: ${printSettings.rowGap || 0}cm !important;
+             width: fit-content !important;
              page-break-after: always;
              break-after: page;
              box-sizing: border-box;
@@ -783,10 +784,10 @@ const PrintBarcodes = () => {
           }
 
           .sticker-label {
-             width: 100% !important;
-             height: 100% !important;
+             width: ${printSettings.labelWidth || 3}cm !important;
+             height: ${printSettings.labelHeight || 2.499}cm !important;
              border: none;
-             padding: 2% 4%;
+             padding: 0.05cm 0.1cm;
              background: #fff;
              box-sizing: border-box;
              page-break-inside: avoid;
@@ -799,29 +800,29 @@ const PrintBarcodes = () => {
              gap: 0;
              direction: ltr !important;
              text-align: left !important;
-             container-type: size;
-             container-name: sticker;
           }
 
           /* Row 1: Model No */
           .sticker-row-model {
              display: flex;
              align-items: baseline;
-             gap: 3cqi;
+             gap: 0.1cm;
              width: 100%;
              font-family: Arial, Helvetica, sans-serif;
              color: #000;
              margin-bottom: 0;
              line-height: 1.1;
+             white-space: nowrap;
+             overflow: hidden;
           }
 
           .sticker-row-model .sticker-lbl {
-             font-size: 9cqi;
+             font-size: 7.5pt;
              font-weight: 700;
           }
 
           .sticker-row-model .sticker-val {
-             font-size: 12cqi;
+             font-size: 9pt;
              font-weight: 900;
              letter-spacing: 0.3px;
           }
@@ -836,26 +837,28 @@ const PrintBarcodes = () => {
              color: #000;
              margin-bottom: 0;
              line-height: 1.1;
+             white-space: nowrap;
+             overflow: hidden;
           }
 
           .sticker-row-size .sticker-size-left {
              display: flex;
              align-items: baseline;
-             gap: 2cqi;
+             gap: 0.1cm;
           }
 
           .sticker-row-size .sticker-lbl {
-             font-size: 9cqi;
+             font-size: 7.5pt;
              font-weight: 700;
           }
 
           .sticker-row-size .sticker-val {
-             font-size: 11cqi;
+             font-size: 8.5pt;
              font-weight: 900;
           }
 
           .sticker-row-size .sticker-range {
-             font-size: 10cqi;
+             font-size: 7.5pt;
              font-weight: 700;
           }
 
@@ -880,13 +883,15 @@ const PrintBarcodes = () => {
           /* Product name at bottom */
           .sticker-product-name {
              font-family: Arial, Helvetica, sans-serif;
-             font-size: 10cqi;
+             font-size: 8pt;
              font-weight: 900;
              color: #000;
              text-align: center;
              margin-top: 0;
              letter-spacing: 0.2px;
              line-height: 1.1;
+             white-space: nowrap;
+             overflow: hidden;
           }
 
           .bc-table-card { box-shadow: none !important; border: none !important; border-radius: 0 !important; }

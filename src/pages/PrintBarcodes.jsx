@@ -766,9 +766,8 @@ const PrintBarcodes = () => {
           .sticker-page {
              display: grid !important;
              grid-template-columns: repeat(${printSettings.columns || 1}, ${printSettings.labelWidth || 3}cm) !important;
-             grid-template-rows: repeat(${printSettings.rows || 1}, ${printSettings.labelHeight || 2.499}cm) !important;
+             grid-template-rows: ${printSettings.labelHeight || 2.499}cm !important;
              column-gap: ${printSettings.columnGap || 0}cm !important;
-             row-gap: ${printSettings.rowGap || 0}cm !important;
              width: fit-content !important;
              page-break-after: always;
              break-after: page;
@@ -784,11 +783,11 @@ const PrintBarcodes = () => {
           }
 
           .sticker-label {
-             width: ${printSettings.labelWidth || 3}cm !important;
-             height: ${printSettings.labelHeight || 2.499}cm !important;
+             width: 100% !important;
+             height: 100% !important;
              border: none;
-             padding: 0.05cm 0.1cm;
-             background: #fff;
+             padding: 0.1cm;
+             background: transparent;
              box-sizing: border-box;
              page-break-inside: avoid;
              break-inside: avoid;
@@ -796,8 +795,6 @@ const PrintBarcodes = () => {
              flex-direction: column;
              align-items: center;
              justify-content: space-between;
-             overflow: hidden;
-             gap: 0;
              direction: ltr !important;
              text-align: left !important;
           }
@@ -867,17 +864,13 @@ const PrintBarcodes = () => {
              width: 100%;
              display: flex;
              justify-content: center;
-             flex: 1;
              align-items: center;
-             min-height: 0;
-             overflow: hidden;
+             margin: 0;
           }
 
           .sticker-barcode-wrap svg {
-             width: 100% !important;
              max-width: 100% !important;
-             height: auto !important;
-             max-height: 100% !important;
+             height: 32px !important;
           }
 
           /* Product name at bottom */
@@ -1201,8 +1194,10 @@ const PrintBarcodes = () => {
           });
 
           const cols = printSettings.columns || 1;
-          const rowsN = printSettings.rows || 1;
-          const itemsPerPage = cols * rowsN;
+          
+          // CRITICAL: For Zebra thermal printers, we MUST chunk the data exactly 1 row per page!
+          // The printer gap sensor expects 1 row per physical 'page' signal from the browser.
+          const itemsPerPage = cols;
           
           const pages = [];
           for (let i = 0; i < allStickers.length; i += itemsPerPage) {
@@ -1237,14 +1232,14 @@ const PrintBarcodes = () => {
                             <ReactBarcode 
                                 value={row.batchBarcode} 
                                 format="CODE128"
-                                width={1} 
-                                height={28} 
-                                fontSize={8}
-                                margin={0}
+                                width={1.2} 
+                                height={32} 
+                                fontSize={9}
+                                margin={3}
                                 displayValue={true}
                                 font="Arial"
                                 fontOptions="bold"
-                                textMargin={1}
+                                textMargin={2}
                             />
                           </div>
 

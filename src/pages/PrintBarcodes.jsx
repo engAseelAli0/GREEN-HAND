@@ -813,6 +813,7 @@ const PrintBarcodes = () => {
              page-break-after: always;
              break-after: page;
              margin: 0 !important;
+             margin-left: ${printSettings.marginLeft || 0.036}cm !important;
              padding: 0 !important;
           }
 
@@ -828,7 +829,7 @@ const PrintBarcodes = () => {
              height: ${printSettings.labelHeight || 2.499}cm !important;
              vertical-align: top !important;
              border: none !important;
-             padding: 0.05cm 0.1cm !important;
+             padding: 0.02cm 0.08cm !important;
              background: transparent !important;
              box-sizing: border-box !important;
              direction: ltr !important;
@@ -842,11 +843,11 @@ const PrintBarcodes = () => {
              flex-direction: column !important;
              align-items: center !important;
              justify-content: flex-start !important;
-             gap: 0.04cm !important;
+             gap: 0.01cm !important;
              width: 100% !important;
              height: auto !important;
              box-sizing: border-box !important;
-             padding: 0.03cm 0 !important;
+             padding: 0 !important;
           }
 
           /* ══ Row 1: Model No ══ */

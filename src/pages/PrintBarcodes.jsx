@@ -44,37 +44,36 @@ const IntField = ({ label, fieldKey, unit = '', settings, onUpdate }) => (
   </div>
 );
 
-// ══ Enterprise-Grade Barcode Component (bwip-js) ══
-const BwipBarcode = React.memo(({ value, height = 18, scale = 2, showText = true }) => {
-  const [src, setSrc] = React.useState('');
+// ══ Enterprise-Grade Barcode Component (bwip-js → SVG) ══
+const BwipBarcode = React.memo(({ value, height = 10, showText = true }) => {
+  const [svgMarkup, setSvgMarkup] = React.useState('');
 
   React.useEffect(() => {
     if (!value) return;
     try {
-      const canvas = document.createElement('canvas');
-      bwipjs.toCanvas(canvas, {
+      const svg = bwipjs.toSVG({
         bcid: 'code128',
         text: value,
-        scale: scale,
         height: height,
         includetext: showText,
         textxalign: 'center',
-        textsize: 10,
+        textsize: 9,
         textgaps: 1,
-        paddingleft: 6,
-        paddingright: 6,
-        paddingtop: 2,
+        textfont: 'Arial',
+        paddingleft: 4,
+        paddingright: 4,
+        paddingtop: 1,
         paddingbottom: 1,
       });
-      setSrc(canvas.toDataURL('image/png'));
+      setSvgMarkup(svg);
     } catch (e) {
       console.error('Barcode generation error:', e);
-      setSrc('');
+      setSvgMarkup('');
     }
-  }, [value, height, scale, showText]);
+  }, [value, height, showText]);
 
-  if (!src) return <span style={{ fontSize: '8px', color: '#999' }}>{value}</span>;
-  return <img src={src} alt={value} style={{ maxWidth: '100%', height: 'auto' }} />;
+  if (!svgMarkup) return <span style={{ fontSize: '8px', color: '#999' }}>{value}</span>;
+  return <div dangerouslySetInnerHTML={{ __html: svgMarkup }} style={{ width: '100%', textAlign: 'center', lineHeight: 0 }} />;
 });
 
 const PrintBarcodes = () => {
@@ -948,17 +947,20 @@ const PrintBarcodes = () => {
              width: 100% !important;
              text-align: center !important;
              margin: 0 !important;
-             margin-top: 0.04cm !important;
+             margin-top: 0.02cm !important;
              padding: 0 !important;
              line-height: 0 !important;
           }
 
-          .sticker-barcode-wrap img {
+          .sticker-barcode-wrap svg {
              display: inline-block !important;
-             max-width: 100% !important;
+             width: 100% !important;
              height: auto !important;
-             image-rendering: crisp-edges !important;
-             image-rendering: -webkit-optimize-contrast !important;
+             shape-rendering: crispEdges !important;
+          }
+
+          .sticker-barcode-wrap svg rect {
+             shape-rendering: crispEdges !important;
           }
 
           /* ══ Product name at bottom ══ */

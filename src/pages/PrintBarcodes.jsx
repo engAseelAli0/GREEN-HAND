@@ -749,32 +749,71 @@ const PrintBarcodes = () => {
             size: ${printSettings.paperWidth || 9.401}cm ${printSettings.paperHeight || 2.601}cm;
             margin: ${printSettings.marginTop || 0}cm ${printSettings.marginRight || 0}cm ${printSettings.marginBottom || 0}cm ${printSettings.marginLeft || 0}cm;
           }
-          body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; background: #fff !important; margin: 0 !important; padding: 0 !important; }
-          .hide-on-print, .page-setup-modal-overlay { display: none !important; }
-          .printable-section { display: none !important; }
-          .bc-stats-row { display: none !important; }
-          .bc-page-wrapper { max-width: 100% !important; padding: 0 !important; }
 
+          /* ══ AGGRESSIVE PRINT RESET ══ */
+          html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+            height: auto !important;
+            background: #fff !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            overflow: visible !important;
+          }
+
+          /* Hide all screen UI */
+          .hide-on-print,
+          .page-setup-modal-overlay,
+          .printable-section,
+          .bc-stats-row,
+          .bc-stat-card,
+          .bc-search-card,
+          .bc-header,
+          .bc-back-btn,
+          .bc-table-card {
+            display: none !important;
+          }
+
+          /* Reset wrappers */
+          .fade-in,
+          .bc-page-wrapper {
+            max-width: none !important;
+            width: 100% !important;
+            padding: 0 !important;
+            margin: 0 !important;
+          }
+
+          /* ══ STICKER CONTAINER ══ */
           .print-only-stickers {
              display: block !important;
-             width: 100%;
-             padding: 0;
+             width: 100% !important;
+             padding: 0 !important;
+             margin: 0 !important;
              direction: ltr !important;
              text-align: left !important;
           }
 
+          /* ══ EACH PAGE = ONE ROW OF STICKERS ══ 
+             Using a simple table layout instead of CSS Grid.
+             Tables are the most reliable layout in Chrome print mode.
+          */
           .sticker-page {
-             display: grid !important;
-             grid-template-columns: repeat(${printSettings.columns || 1}, ${printSettings.labelWidth || 3}cm) !important;
-             grid-template-rows: ${printSettings.labelHeight || 2.499}cm !important;
-             column-gap: ${printSettings.columnGap || 0}cm !important;
-             width: fit-content !important;
+             display: table !important;
+             table-layout: fixed !important;
+             width: ${(() => {
+               const cols = printSettings.columns || 1;
+               const lw = printSettings.labelWidth || 3;
+               const cg = printSettings.columnGap || 0;
+               return (cols * lw) + ((cols - 1) * cg);
+             })()}cm !important;
+             height: ${printSettings.labelHeight || 2.499}cm !important;
+             border-collapse: separate !important;
+             border-spacing: ${printSettings.columnGap || 0}cm 0 !important;
              page-break-after: always;
              break-after: page;
-             box-sizing: border-box;
-             overflow: hidden;
-             align-content: start;
-             justify-content: start;
+             margin: 0 !important;
+             padding: 0 !important;
           }
 
           .sticker-page:last-child {
@@ -782,118 +821,124 @@ const PrintBarcodes = () => {
              break-after: auto;
           }
 
+          /* ══ EACH STICKER = TABLE CELL ══ */
           .sticker-label {
-             width: 100% !important;
-             height: 100% !important;
-             border: none;
-             padding: 0.1cm;
-             background: transparent;
-             box-sizing: border-box;
-             page-break-inside: avoid;
-             break-inside: avoid;
-             display: flex;
-             flex-direction: column;
-             align-items: center;
-             justify-content: space-between;
+             display: table-cell !important;
+             width: ${printSettings.labelWidth || 3}cm !important;
+             height: ${printSettings.labelHeight || 2.499}cm !important;
+             vertical-align: top !important;
+             border: none !important;
+             padding: 0.05cm 0.08cm !important;
+             background: transparent !important;
+             box-sizing: border-box !important;
              direction: ltr !important;
              text-align: left !important;
+             overflow: hidden !important;
           }
 
-          /* Row 1: Model No */
+          /* ══ STICKER INNER WRAPPER ══ */
+          .sticker-label-inner {
+             display: flex !important;
+             flex-direction: column !important;
+             align-items: center !important;
+             justify-content: flex-start !important;
+             gap: 0.04cm !important;
+             width: 100% !important;
+             height: auto !important;
+             box-sizing: border-box !important;
+             padding: 0.03cm 0 !important;
+          }
+
+          /* ══ Row 1: Model No ══ */
           .sticker-row-model {
-             display: flex;
-             align-items: baseline;
-             gap: 0.1cm;
-             width: 100%;
-             font-family: Arial, Helvetica, sans-serif;
-             color: #000;
-             margin-bottom: 0;
-             line-height: 1.1;
-             white-space: nowrap;
-             overflow: hidden;
+             display: block !important;
+             width: 100% !important;
+             font-family: Arial, Helvetica, sans-serif !important;
+             color: #000 !important;
+             line-height: 1.15 !important;
+             white-space: nowrap !important;
+             text-overflow: ellipsis !important;
+             overflow: hidden !important;
+             margin: 0 !important;
+             padding: 0 !important;
           }
 
           .sticker-row-model .sticker-lbl {
-             font-size: 7.5pt;
-             font-weight: 700;
+             font-size: 7pt !important;
+             font-weight: 700 !important;
           }
 
           .sticker-row-model .sticker-val {
-             font-size: 9pt;
-             font-weight: 900;
-             letter-spacing: 0.3px;
+             font-size: 8.5pt !important;
+             font-weight: 900 !important;
+             letter-spacing: 0.3px !important;
           }
 
-          /* Row 2: Size + Range */
+          /* ══ Row 2: Size + Range ══ */
           .sticker-row-size {
-             display: flex;
-             justify-content: space-between;
-             align-items: baseline;
-             width: 100%;
-             font-family: Arial, Helvetica, sans-serif;
-             color: #000;
-             margin-bottom: 0;
-             line-height: 1.1;
-             white-space: nowrap;
-             overflow: hidden;
+             display: flex !important;
+             justify-content: space-between !important;
+             align-items: baseline !important;
+             width: 100% !important;
+             font-family: Arial, Helvetica, sans-serif !important;
+             color: #000 !important;
+             line-height: 1.15 !important;
+             white-space: nowrap !important;
+             overflow: hidden !important;
+             margin: 0 !important;
+             padding: 0 !important;
           }
 
           .sticker-row-size .sticker-size-left {
-             display: flex;
-             align-items: baseline;
-             gap: 0.1cm;
+             display: inline !important;
           }
 
           .sticker-row-size .sticker-lbl {
-             font-size: 7.5pt;
-             font-weight: 700;
+             font-size: 7pt !important;
+             font-weight: 700 !important;
           }
 
           .sticker-row-size .sticker-val {
-             font-size: 8.5pt;
-             font-weight: 900;
+             font-size: 8pt !important;
+             font-weight: 900 !important;
           }
 
           .sticker-row-size .sticker-range {
-             font-size: 7.5pt;
-             font-weight: 700;
+             font-size: 7pt !important;
+             font-weight: 700 !important;
           }
 
-          /* Barcode */
+          /* ══ Barcode ══ */
           .sticker-barcode-wrap {
-             width: 100%;
-             display: flex;
-             justify-content: center;
-             align-items: center;
-             margin: 0;
+             width: 100% !important;
+             text-align: center !important;
+             margin: 0 !important;
+             padding: 0 !important;
+             line-height: 0 !important;
           }
 
           .sticker-barcode-wrap svg {
+             display: inline-block !important;
              max-width: 100% !important;
-             height: 32px !important;
+             height: auto !important;
           }
 
-          /* Product name at bottom */
+          /* ══ Product name at bottom ══ */
           .sticker-product-name {
-             font-family: Arial, Helvetica, sans-serif;
-             font-size: 8pt;
-             font-weight: 900;
-             color: #000;
-             text-align: center;
-             margin-top: 0;
-             letter-spacing: 0.2px;
-             line-height: 1.1;
-             white-space: nowrap;
-             overflow: hidden;
+             font-family: Arial, Helvetica, sans-serif !important;
+             font-size: 7pt !important;
+             font-weight: 900 !important;
+             color: #000 !important;
+             text-align: center !important;
+             margin: 0 !important;
+             padding: 0 !important;
+             letter-spacing: 0.2px !important;
+             line-height: 1.15 !important;
+             white-space: nowrap !important;
+             text-overflow: ellipsis !important;
+             overflow: hidden !important;
+             width: 100% !important;
           }
-
-          .bc-table-card { box-shadow: none !important; border: none !important; border-radius: 0 !important; }
-          .bc-table thead th { background: #f3f4f6 !important; color: #000 !important; border: 1px solid #d1d5db !important; }
-          .bc-table tbody td { color: #000 !important; border: 1px solid #ddd !important; }
-          .bc-cell-barcode { border: 2px solid #000 !important; border-radius: 0 !important; color: #000 !important; background: transparent !important; }
-          .bc-cell-serial, .bc-cell-size, .bc-cell-qty { background: transparent !important; color: #000 !important; border: none !important; }
-          .bc-cell-color-dot { border: 2px solid #000 !important; }
-          .bc-stat-card, .bc-search-card, .bc-header, .bc-back-btn { display: none !important; }
         }
       `}</style>
 
@@ -1212,16 +1257,17 @@ const PrintBarcodes = () => {
                     const { row, key } = sticker;
                     return (
                       <div key={key} className="sticker-label">
+                        <div className="sticker-label-inner">
                           {/* Row 1: Model No */}
                           <div className="sticker-row-model">
-                             <span className="sticker-lbl">Model No:</span>
+                             <span className="sticker-lbl">Model No: </span>
                              <span className="sticker-val">{row.itemNumber}</span>
                           </div>
 
                           {/* Row 2: Size + Size Range */}
                           <div className="sticker-row-size">
                              <div className="sticker-size-left">
-                                <span className="sticker-lbl">Size:</span>
+                                <span className="sticker-lbl">Size: </span>
                                 <span className="sticker-val">{row.size}</span>
                              </div>
                              {sizeRange && <span className="sticker-range">{sizeRange}</span>}
@@ -1232,19 +1278,20 @@ const PrintBarcodes = () => {
                             <ReactBarcode 
                                 value={row.batchBarcode} 
                                 format="CODE128"
-                                width={1.2} 
-                                height={32} 
-                                fontSize={9}
-                                margin={3}
+                                width={1} 
+                                height={28} 
+                                fontSize={8}
+                                margin={2}
                                 displayValue={true}
                                 font="Arial"
                                 fontOptions="bold"
-                                textMargin={2}
+                                textMargin={1}
                             />
                           </div>
 
                           {/* Product Name */}
                           <div className="sticker-product-name">{row.itemName}</div>
+                        </div>
                       </div>
                     );
                   })}

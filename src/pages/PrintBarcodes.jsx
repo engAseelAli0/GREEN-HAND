@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { Search, Printer, ArrowRight, Barcode as BarcodeIcon, Hash, Package, Layers, Palette, Ruler, BarChart3, Sparkles, X, Settings, Save, RotateCcw } from 'lucide-react';
 import { englishOnly } from '../utils/textUtils';
 import { Link } from 'react-router-dom';
-import ReactBarcode from 'react-barcode';
+import bwipjs from 'bwip-js';
 
 const LS_KEY = 'barcode_print_settings';
 const DEFAULT_PRINT_SETTINGS = {
@@ -43,6 +43,39 @@ const IntField = ({ label, fieldKey, unit = '', settings, onUpdate }) => (
     </div>
   </div>
 );
+
+// ══ Enterprise-Grade Barcode Component (bwip-js) ══
+const BwipBarcode = React.memo(({ value, height = 18, scale = 2, showText = true }) => {
+  const [src, setSrc] = React.useState('');
+
+  React.useEffect(() => {
+    if (!value) return;
+    try {
+      const canvas = document.createElement('canvas');
+      bwipjs.toCanvas(canvas, {
+        bcid: 'code128',
+        text: value,
+        scale: scale,
+        height: height,
+        includetext: showText,
+        textxalign: 'center',
+        textsize: 10,
+        textgaps: 1,
+        paddingleft: 6,
+        paddingright: 6,
+        paddingtop: 2,
+        paddingbottom: 1,
+      });
+      setSrc(canvas.toDataURL('image/png'));
+    } catch (e) {
+      console.error('Barcode generation error:', e);
+      setSrc('');
+    }
+  }, [value, height, scale, showText]);
+
+  if (!src) return <span style={{ fontSize: '8px', color: '#999' }}>{value}</span>;
+  return <img src={src} alt={value} style={{ maxWidth: '100%', height: 'auto' }} />;
+});
 
 const PrintBarcodes = () => {
   const { t } = useTranslation();
@@ -843,7 +876,7 @@ const PrintBarcodes = () => {
              flex-direction: column !important;
              align-items: center !important;
              justify-content: flex-start !important;
-             gap: 0.06cm !important;
+             gap: 0 !important;
              width: 100% !important;
              height: auto !important;
              box-sizing: border-box !important;
@@ -887,6 +920,7 @@ const PrintBarcodes = () => {
              white-space: nowrap !important;
              overflow: hidden !important;
              margin: 0 !important;
+             margin-top: -0.02cm !important;
              padding: 0 !important;
           }
 
@@ -914,6 +948,7 @@ const PrintBarcodes = () => {
              width: 100% !important;
              text-align: center !important;
              margin: 0 !important;
+             margin-top: 0.04cm !important;
              padding: 0 !important;
              line-height: 0 !important;
           }
@@ -1278,18 +1313,11 @@ const PrintBarcodes = () => {
 
                           {/* Barcode */}
                           <div className="sticker-barcode-wrap">
-                            <ReactBarcode 
-                                value={row.batchBarcode} 
-                                format="CODE128"
-                                renderer="img"
-                                width={1} 
-                                height={18} 
-                                fontSize={9}
-                                margin={6}
-                                displayValue={true}
-                                font="Arial"
-                                fontOptions=""
-                                textMargin={2}
+                            <BwipBarcode 
+                                value={row.batchBarcode}
+                                height={10}
+                                scale={2}
+                                showText={true}
                             />
                           </div>
 

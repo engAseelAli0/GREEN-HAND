@@ -828,7 +828,7 @@ const PrintBarcodes = () => {
              height: ${printSettings.labelHeight || 2.499}cm !important;
              vertical-align: top !important;
              border: none !important;
-             padding: 0.05cm 0.08cm !important;
+             padding: 0.05cm 0.1cm !important;
              background: transparent !important;
              box-sizing: border-box !important;
              direction: ltr !important;
@@ -1260,7 +1260,7 @@ const PrintBarcodes = () => {
                         <div className="sticker-label-inner">
                           {/* Row 1: Model No */}
                           <div className="sticker-row-model">
-                             <span className="sticker-lbl">Model No: </span>
+                             <span className="sticker-lbl">Model: </span>
                              <span className="sticker-val">{row.itemNumber}</span>
                           </div>
 
@@ -1277,15 +1277,15 @@ const PrintBarcodes = () => {
                           <div className="sticker-barcode-wrap">
                             <ReactBarcode 
                                 value={row.batchBarcode} 
-                                format="CODE128"
-                                width={1} 
-                                height={28} 
-                                fontSize={8}
-                                margin={2}
+                                format="CODE39"
+                                width={1.3} 
+                                height={30} 
+                                fontSize={12}
+                                margin={8}
                                 displayValue={true}
                                 font="Arial"
                                 fontOptions="bold"
-                                textMargin={1}
+                                textMargin={2}
                             />
                           </div>
 

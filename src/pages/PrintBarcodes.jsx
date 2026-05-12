@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAppData } from '../context/AppDataContext';
 import { supabase } from '../supabaseClient';
 import toast from 'react-hot-toast';
@@ -55,6 +55,8 @@ const PrintBarcodes = () => {
   const [tempSettings, setTempSettings] = useState(loadSettings);
   const [showPageSetup, setShowPageSetup] = useState(false);
   const [setupTab, setSetupTab] = useState('paper');
+  const [showStickers, setShowStickers] = useState(false);
+  const isPrintingRef = useRef(false);
   
   // F9 Search States
   const [showSerialsList, setShowSerialsList] = useState(false);
@@ -198,7 +200,25 @@ const PrintBarcodes = () => {
     setTempSettings(prev => ({ ...prev, [key]: val }));
   };
 
-  const handlePrint = () => window.print();
+  const handlePrint = () => {
+    if (rows.length === 0) return;
+    isPrintingRef.current = true;
+    setShowStickers(true);
+  };
+
+  // When stickers are mounted in the DOM, trigger the actual print
+  useEffect(() => {
+    if (showStickers && isPrintingRef.current) {
+      // Give the browser a moment to render all barcode SVGs
+      const timer = setTimeout(() => {
+        window.print();
+        // After print dialog closes, remove stickers from DOM to free memory
+        isPrintingRef.current = false;
+        setShowStickers(false);
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [showStickers]);
 
   const totalQty = rows.reduce((sum, r) => sum + r.quantity, 0);
   const uniqueColors = [...new Set(rows.map(r => r.colorRef))];
@@ -736,20 +756,35 @@ const PrintBarcodes = () => {
           .bc-page-wrapper { max-width: 100% !important; padding: 0 !important; }
 
           .print-only-stickers {
-             display: flex !important;
-             flex-wrap: wrap !important;
-             gap: ${printSettings.rowGap || 0}cm ${printSettings.columnGap || 0}cm;
+             display: block !important;
              width: 100%;
              padding: 0;
              direction: ltr !important;
              text-align: left !important;
           }
 
+          .sticker-page {
+             display: flex !important;
+             flex-wrap: wrap !important;
+             gap: ${printSettings.rowGap || 0}cm ${printSettings.columnGap || 0}cm;
+             width: 100%;
+             page-break-after: always;
+             break-after: page;
+             box-sizing: border-box;
+             overflow: hidden;
+             align-content: flex-start;
+          }
+
+          .sticker-page:last-child {
+             page-break-after: auto;
+             break-after: auto;
+          }
+
           .sticker-label {
              width: ${printSettings.labelWidth || 3}cm;
              height: ${printSettings.labelHeight || 2.499}cm;
-             border: 1px solid #000;
-             padding: 4% 5%;
+             border: none;
+             padding: 2% 4%;
              background: #fff;
              box-sizing: border-box;
              page-break-inside: avoid;
@@ -830,6 +865,7 @@ const PrintBarcodes = () => {
              flex: 1;
              align-items: center;
              min-height: 0;
+             overflow: hidden;
           }
 
           .sticker-barcode-wrap svg {
@@ -1148,50 +1184,73 @@ const PrintBarcodes = () => {
           </div>
         )}
 
-        {/* --- Print Only: Physical Barcode Stickers Loop --- */}
-        {rows.length > 0 && (
-          <div className="print-only-stickers">
-            {rows.map((row, rIdx) => (
-              Array.from({ length: row.quantity }).map((_, i) => (
-                <div key={`${rIdx}-${i}`} className="sticker-label">
-                    {/* Row 1: Model No */}
-                    <div className="sticker-row-model">
-                       <span className="sticker-lbl">Model No:</span>
-                       <span className="sticker-val">{row.itemNumber}</span>
-                    </div>
+        {/* --- Print Only: Physical Barcode Stickers Loop (rendered only when printing) --- */}
+        {showStickers && rows.length > 0 && (() => {
+          const allStickers = [];
+          rows.forEach((row, rIdx) => {
+            for (let i = 0; i < row.quantity; i++) {
+              allStickers.push({ row, key: `${rIdx}-${i}` });
+            }
+          });
 
-                    {/* Row 2: Size + Size Range */}
-                    <div className="sticker-row-size">
-                       <div className="sticker-size-left">
-                          <span className="sticker-lbl">Size:</span>
-                          <span className="sticker-val">{row.size}</span>
-                       </div>
-                       {sizeRange && <span className="sticker-range">{sizeRange}</span>}
-                    </div>
+          const cols = printSettings.columns || 1;
+          const rowsN = printSettings.rows || 1;
+          const itemsPerPage = cols * rowsN;
+          
+          const pages = [];
+          for (let i = 0; i < allStickers.length; i += itemsPerPage) {
+            pages.push(allStickers.slice(i, i + itemsPerPage));
+          }
 
-                    {/* Barcode */}
-                    <div className="sticker-barcode-wrap">
-                      <ReactBarcode 
-                          value={row.batchBarcode} 
-                          format="CODE128"
-                          width={1} 
-                          height={30} 
-                          fontSize={8}
-                          margin={1}
-                          displayValue={true}
-                          font="Arial"
-                          fontOptions="bold"
-                          textMargin={1}
-                      />
-                    </div>
+          return (
+            <div className="print-only-stickers">
+              {pages.map((pageStickers, pIdx) => (
+                <div key={`page-${pIdx}`} className="sticker-page">
+                  {pageStickers.map((sticker) => {
+                    const { row, key } = sticker;
+                    return (
+                      <div key={key} className="sticker-label">
+                          {/* Row 1: Model No */}
+                          <div className="sticker-row-model">
+                             <span className="sticker-lbl">Model No:</span>
+                             <span className="sticker-val">{row.itemNumber}</span>
+                          </div>
 
-                    {/* Product Name */}
-                    <div className="sticker-product-name">{row.itemName}</div>
+                          {/* Row 2: Size + Size Range */}
+                          <div className="sticker-row-size">
+                             <div className="sticker-size-left">
+                                <span className="sticker-lbl">Size:</span>
+                                <span className="sticker-val">{row.size}</span>
+                             </div>
+                             {sizeRange && <span className="sticker-range">{sizeRange}</span>}
+                          </div>
+
+                          {/* Barcode */}
+                          <div className="sticker-barcode-wrap">
+                            <ReactBarcode 
+                                value={row.batchBarcode} 
+                                format="CODE128"
+                                width={1} 
+                                height={28} 
+                                fontSize={8}
+                                margin={0}
+                                displayValue={true}
+                                font="Arial"
+                                fontOptions="bold"
+                                textMargin={1}
+                            />
+                          </div>
+
+                          {/* Product Name */}
+                          <div className="sticker-product-name">{row.itemName}</div>
+                      </div>
+                    );
+                  })}
                 </div>
-              ))
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+          );
+        })()}
       </div>
 
       {/* ═══════ PAGE SETUP MODAL ═══════ */}

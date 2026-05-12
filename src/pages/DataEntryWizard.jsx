@@ -88,6 +88,7 @@ const DataEntryWizard = () => {
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [imageToEdit, setImageToEdit] = useState(null);
   const [pendingImages, setPendingImages] = useState([]);
+  const [editingExistingImageIndex, setEditingExistingImageIndex] = useState(null);
 
   // ─── Close pickers on outside click ───
   useEffect(() => {
@@ -275,8 +276,44 @@ const DataEntryWizard = () => {
     try {
       const modelNum = currentOrder.serialNumber?.trim();
       const file = await compressImage(editedFile, 1200, 0.75);
-      const ext = file.name.split('.').pop();
+      const ext = file.name.split('.').pop() || 'jpg';
       
+      if (editingExistingImageIndex !== null) {
+        const idx = editingExistingImageIndex;
+        const oldImg = productImages[idx];
+        const fileName = oldImg.name;
+        const filePath = oldImg.path || `product-images/${fileName}`;
+        
+        const { error } = await supabase.storage.from('product_images').upload(filePath, file, { upsert: true });
+
+        if (error) {
+          toast.error(t('entry.messages.upload_error', { error: error.message }), { id: toastId });
+        } else {
+          const { data: urlData } = supabase.storage.from('product_images').getPublicUrl(filePath);
+
+          const newImage = {
+            name: fileName,
+            path: filePath,
+            // Append timestamp to URL to bypass browser cache
+            url: urlData.publicUrl + '?t=' + Date.now(),
+            preview: URL.createObjectURL(file)
+          };
+
+          const newProductImages = [...productImages];
+          newProductImages[idx] = newImage;
+          setProductImages(newProductImages);
+          
+          const updatedImages = [...(currentOrder.productImages || [])];
+          updatedImages[idx] = { name: newImage.name, path: newImage.path, url: newImage.url };
+          updateOrder('productImages', updatedImages);
+          
+          toast.success(t('entry.messages.upload_success'), { id: toastId });
+        }
+        setEditingExistingImageIndex(null);
+        setUploadingImage(false);
+        return;
+      }
+
       const currentCount = productImages.length;
       const fileName = currentCount === 0 ? `${modelNum}.${ext}` : `${modelNum}#${currentCount}.${ext}`;
       const filePath = `product-images/${fileName}`;
@@ -325,6 +362,7 @@ const DataEntryWizard = () => {
   const onCancelEdit = () => {
     setIsEditorOpen(false);
     setImageToEdit(null);
+    setEditingExistingImageIndex(null);
     
     const remaining = pendingImages.slice(1);
     if (remaining.length > 0) {
@@ -333,6 +371,48 @@ const DataEntryWizard = () => {
       setTimeout(() => setIsEditorOpen(true), 500);
     } else {
       setPendingImages([]);
+    }
+  };
+
+  const handleEditExistingImage = async (index, imgObj) => {
+    try {
+      const toastId = toast.loading('جاري تحميل الصورة للتعديل...');
+      const response = await fetch(imgObj.preview || imgObj.url);
+      const blob = await response.blob();
+      const ext = imgObj.name.split('.').pop() || 'jpg';
+      const file = new File([blob], imgObj.name, { type: blob.type || `image/${ext}` });
+      toast.dismiss(toastId);
+      
+      setPendingImages([]);
+      setEditingExistingImageIndex(index);
+      setImageToEdit(file);
+      setIsEditorOpen(true);
+    } catch (err) {
+      console.error(err);
+      toast.error('فشل في تحميل الصورة للتعديل');
+    }
+  };
+
+  const handleRemoveImage = async (index) => {
+    if (!window.confirm('هل أنت متأكد من حذف هذه الصورة؟')) return;
+    
+    const imgToRemove = productImages[index];
+    
+    const newImages = [...productImages];
+    newImages.splice(index, 1);
+    setProductImages(newImages);
+    
+    const updatedOrderImages = [...(currentOrder.productImages || [])];
+    updatedOrderImages.splice(index, 1);
+    updateOrder('productImages', updatedOrderImages);
+
+    if (imgToRemove.path) {
+      try {
+        await supabase.storage.from('product_images').remove([imgToRemove.path]);
+        toast.success('تم حذف الصورة بنجاح');
+      } catch (err) {
+        console.error('Error removing image:', err);
+      }
     }
   };
 
@@ -581,6 +661,13 @@ const DataEntryWizard = () => {
         toast.error(t('entry.messages.not_found'), { id: toastId });
         return;
       }
+      
+      const { data: recData } = await supabase.from('receivings').select('receive_data').eq('serial_number', searchVal).single();
+      if (recData && recData.receive_data && recData.receive_data.status === t('receiving.info.received')) {
+        toast.error('هذا المنتج قد تم استلامه من قبل المستودع ولا يمكن تعديله', { id: toastId, duration: 4000 });
+        return;
+      }
+
       const fetchedOrder = data.order_data || data;
       const finalOrder = { ...defaultOrderState, ...fetchedOrder, serialNumber: data.serial_number || fetchedOrder.serialNumber };
       setCurrentOrder(finalOrder);
@@ -789,7 +876,13 @@ const DataEntryWizard = () => {
 
                 <div className="form-group">
                    <label className="form-label">{t('entry.buyer.company_name')}</label>
-                  <input type="text" className="form-control" value={currentOrder.buyerCompany || ''} onChange={(e) => updateOrder('buyerCompany', e.target.value)} />
+                   <ClearableSelect className="form-control" value={currentOrder.buyerCompany || ''} onChange={(e) => updateOrder('buyerCompany', e.target.value)} clearTitle={t('entry.actions.clear_btn')}>
+                     <option value="">— اختر الشركة —</option>
+                    {lookups.companies?.map((p, i) => {
+                      const val = typeof p === 'object' ? p.name : p;
+                      return <option key={i} value={val}>{val}</option>;
+                    })}
+                  </ClearableSelect>
                 </div>
                 <div className="form-group">
                    <label className="form-label">{t('entry.buyer.product_name')}</label>
@@ -992,6 +1085,31 @@ const DataEntryWizard = () => {
                             title={t('entry.actions.delete_btn')}
                           >
                             <X size={14} />
+                          </button>
+                          <button
+                            onClick={() => handleEditExistingImage(idx, img)}
+                            style={{
+                              position: 'absolute',
+                              top: '4px',
+                              left: '34px',
+                              width: '26px',
+                              height: '26px',
+                              borderRadius: '50%',
+                              background: 'rgba(59, 130, 246, 0.9)',
+                              color: '#fff',
+                              border: 'none',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              transition: 'all 0.2s ease',
+                              boxShadow: '0 2px 6px rgba(0,0,0,0.4)'
+                            }}
+                            onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.15)'}
+                            onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                            title="تعديل الصورة"
+                          >
+                            <Edit3 size={14} />
                           </button>
                         </div>
                       ))}

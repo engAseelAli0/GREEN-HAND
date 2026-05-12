@@ -19,7 +19,8 @@ const initialLookups = {
   measurements: [],
   packagingConditionsList: [],
   componentParts: [],
-  buyerCodes: []
+  buyerCodes: [],
+  companies: []
 };
 
 export const defaultOrderState = {

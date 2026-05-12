@@ -120,7 +120,7 @@
        "select_colors_placeholder": "— اختر الألوان —",
        "select_all": "تحديد جميع الألوان ✓",
        "no_colors_saved": "لا توجد ألوان محفوظة",
-       "color_selected_count": "{{count}} لون محدد",
+       "color_selected_count": "العدد المحدد {{count}}",
        "no_colors_selected_hint": "اختر لوناً واحداً على الأقل من القائمة أعلاه لعرض جدول التوزيع.",
        "select_range_hint": "يرجى تحديد نطاق المقاسات (المقاس من — المقاس إلى) من تبويب \"المواعيد والكمية\" لعرض جدول التوزيع.",
        "size": "المقاس",

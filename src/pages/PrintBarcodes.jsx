@@ -764,15 +764,17 @@ const PrintBarcodes = () => {
           }
 
           .sticker-page {
-             display: flex !important;
-             flex-wrap: wrap !important;
+             display: grid !important;
+             grid-template-columns: repeat(${printSettings.columns || 1}, ${printSettings.labelWidth || 3}cm) !important;
+             grid-template-rows: repeat(${printSettings.rows || 1}, ${printSettings.labelHeight || 2.499}cm) !important;
              gap: ${printSettings.rowGap || 0}cm ${printSettings.columnGap || 0}cm;
              width: 100%;
              page-break-after: always;
              break-after: page;
              box-sizing: border-box;
              overflow: hidden;
-             align-content: flex-start;
+             align-content: start;
+             justify-content: start;
           }
 
           .sticker-page:last-child {
@@ -781,8 +783,8 @@ const PrintBarcodes = () => {
           }
 
           .sticker-label {
-             width: ${printSettings.labelWidth || 3}cm;
-             height: ${printSettings.labelHeight || 2.499}cm;
+             width: 100% !important;
+             height: 100% !important;
              border: none;
              padding: 2% 4%;
              background: #fff;

@@ -829,7 +829,7 @@ const PrintBarcodes = () => {
              height: ${printSettings.labelHeight || 2.499}cm !important;
              vertical-align: top !important;
              border: none !important;
-             padding: 0.02cm 0.08cm !important;
+             padding: 0.05cm 0.1cm !important;
              background: transparent !important;
              box-sizing: border-box !important;
              direction: ltr !important;
@@ -843,11 +843,11 @@ const PrintBarcodes = () => {
              flex-direction: column !important;
              align-items: center !important;
              justify-content: flex-start !important;
-             gap: 0.01cm !important;
+             gap: 0.06cm !important;
              width: 100% !important;
              height: auto !important;
              box-sizing: border-box !important;
-             padding: 0 !important;
+             padding: 0.05cm 0 !important;
           }
 
           /* ══ Row 1: Model No ══ */
@@ -856,7 +856,7 @@ const PrintBarcodes = () => {
              width: 100% !important;
              font-family: Arial, Helvetica, sans-serif !important;
              color: #000 !important;
-             line-height: 1.15 !important;
+             line-height: 1.2 !important;
              white-space: nowrap !important;
              text-overflow: ellipsis !important;
              overflow: hidden !important;
@@ -865,13 +865,13 @@ const PrintBarcodes = () => {
           }
 
           .sticker-row-model .sticker-lbl {
-             font-size: 7pt !important;
-             font-weight: 700 !important;
+             font-size: 7.5pt !important;
+             font-weight: 400 !important;
           }
 
           .sticker-row-model .sticker-val {
-             font-size: 8.5pt !important;
-             font-weight: 900 !important;
+             font-size: 9pt !important;
+             font-weight: 600 !important;
              letter-spacing: 0.3px !important;
           }
 
@@ -883,7 +883,7 @@ const PrintBarcodes = () => {
              width: 100% !important;
              font-family: Arial, Helvetica, sans-serif !important;
              color: #000 !important;
-             line-height: 1.15 !important;
+             line-height: 1.2 !important;
              white-space: nowrap !important;
              overflow: hidden !important;
              margin: 0 !important;
@@ -895,18 +895,18 @@ const PrintBarcodes = () => {
           }
 
           .sticker-row-size .sticker-lbl {
-             font-size: 7pt !important;
-             font-weight: 700 !important;
+             font-size: 7.5pt !important;
+             font-weight: 400 !important;
           }
 
           .sticker-row-size .sticker-val {
-             font-size: 8pt !important;
-             font-weight: 900 !important;
+             font-size: 8.5pt !important;
+             font-weight: 600 !important;
           }
 
           .sticker-row-size .sticker-range {
-             font-size: 7pt !important;
-             font-weight: 700 !important;
+             font-size: 7.5pt !important;
+             font-weight: 500 !important;
           }
 
           /* ══ Barcode ══ */
@@ -918,23 +918,25 @@ const PrintBarcodes = () => {
              line-height: 0 !important;
           }
 
-          .sticker-barcode-wrap svg {
+          .sticker-barcode-wrap img {
              display: inline-block !important;
              max-width: 100% !important;
              height: auto !important;
+             image-rendering: crisp-edges !important;
+             image-rendering: -webkit-optimize-contrast !important;
           }
 
           /* ══ Product name at bottom ══ */
           .sticker-product-name {
              font-family: Arial, Helvetica, sans-serif !important;
-             font-size: 7pt !important;
-             font-weight: 900 !important;
+             font-size: 8pt !important;
+             font-weight: 500 !important;
              color: #000 !important;
              text-align: center !important;
              margin: 0 !important;
              padding: 0 !important;
              letter-spacing: 0.2px !important;
-             line-height: 1.15 !important;
+             line-height: 1.2 !important;
              white-space: nowrap !important;
              text-overflow: ellipsis !important;
              overflow: hidden !important;
@@ -1261,7 +1263,7 @@ const PrintBarcodes = () => {
                         <div className="sticker-label-inner">
                           {/* Row 1: Model No */}
                           <div className="sticker-row-model">
-                             <span className="sticker-lbl">Model: </span>
+                             <span className="sticker-lbl">Model No: </span>
                              <span className="sticker-val">{row.itemNumber}</span>
                           </div>
 
@@ -1279,14 +1281,15 @@ const PrintBarcodes = () => {
                             <ReactBarcode 
                                 value={row.batchBarcode} 
                                 format="CODE128"
-                                width={0.5} 
+                                renderer="img"
+                                width={1} 
                                 height={18} 
-                                fontSize={10}
-                                margin={4}
+                                fontSize={9}
+                                margin={6}
                                 displayValue={true}
                                 font="Arial"
-                                fontOptions="bold"
-                                textMargin={1}
+                                fontOptions=""
+                                textMargin={2}
                             />
                           </div>
 

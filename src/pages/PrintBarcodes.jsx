@@ -1278,7 +1278,7 @@ const PrintBarcodes = () => {
                             <ReactBarcode 
                                 value={row.batchBarcode} 
                                 format="CODE128"
-                                width={0.8} 
+                                width={0.5} 
                                 height={18} 
                                 fontSize={10}
                                 margin={4}

@@ -1,12 +1,14 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppData, defaultOrderState } from '../context/AppDataContext';
+import { useAuth } from '../context/AuthContext';
 import { Save, RefreshCw, Hash, Calendar, Box, Scissors, Palette, LayoutGrid, ChevronRight, ChevronLeft, MessageSquare, CheckSquare, Square, Ruler, Camera, X, ImagePlus, Edit3, Copy, Trash2, Layers, PanelTop } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import toast from 'react-hot-toast';
 import { compressImage } from '../utils/imageUtils';
 import { CustomDateInput } from '../components/CustomDateInput';
 import ImageEditorModal from '../components/ImageEditorModal';
+import { appendActivity, createActivityItem, summarizeOrderChanges } from '../utils/activityLog';
 
 const ClearableSelect = ({ value, onChange, children, className = "form-control", style, disabled, clearTitle }) => (
   <div style={{ position: 'relative', width: '100%', ...style }}>
@@ -38,6 +40,7 @@ const ClearableSelect = ({ value, onChange, children, className = "form-control"
 const DataEntryWizard = () => {
   const { t } = useTranslation();
   const { lookups, currentOrder, updateOrder, setCurrentOrder } = useAppData();
+  const { user, hasPermission } = useAuth();
 
   const TABS = [
     { id: 'buyer', label: t('entry.tabs.buyer'), icon: Hash, num: 1 },
@@ -178,12 +181,12 @@ const DataEntryWizard = () => {
   const toggleViewMode = () => {
     const next = viewMode === 'tabs' ? 'scroll' : 'tabs';
     setViewMode(next);
-    try { localStorage.setItem('gh_viewMode', next); } catch {}
+    try { localStorage.setItem('gh_viewMode', next); } catch { /* ignore unavailable storage */ }
   };
 
   const fetchNextAvailableSerial = async () => {
     try {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('orders')
         .select('serial_number')
         .order('created_at', { ascending: false })
@@ -202,7 +205,7 @@ const DataEntryWizard = () => {
 
   const fetchNextOrderNumber = async () => {
     try {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('orders')
         .select('order_data')
         .order('created_at', { ascending: false })
@@ -318,7 +321,7 @@ const DataEntryWizard = () => {
       const fileName = currentCount === 0 ? `${modelNum}.${ext}` : `${modelNum}#${currentCount}.${ext}`;
       const filePath = `product-images/${fileName}`;
 
-      const { data, error } = await supabase.storage
+      const { error } = await supabase.storage
         .from('product_images')
         .upload(filePath, file, { upsert: true });
 
@@ -455,6 +458,8 @@ const DataEntryWizard = () => {
     } else {
       updateOrder('barcode', '');
     }
+  // updateOrder is provided by context and intentionally excluded to avoid recalculating on every provider render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentOrder.productName, currentOrder.serialNumber, lookups.products]);
 
   useEffect(() => {
@@ -499,7 +504,7 @@ const DataEntryWizard = () => {
       } else {
         setSerialStatus('available');
       }
-    } catch (err) {
+    } catch {
        setSerialStatus('available');
     }
   };
@@ -541,15 +546,21 @@ const DataEntryWizard = () => {
 
     const toastId = toast.loading(t('entry.messages.saving'));
     try {
+      const orderWithActivity = appendActivity(currentOrder, createActivityItem({
+        action: 'create',
+        user,
+        note: `تم إنشاء الطلب رقم ${currentOrder.serialNumber}`,
+        meta: { source: 'data-entry' },
+      }));
       const payload = {
         serial_number: currentOrder.serialNumber,
-        order_data: currentOrder
+        order_data: orderWithActivity
       };
       const { error } = await supabase.from('orders').insert([payload]);
       if (error) throw error;
       toast.success(t('entry.messages.save_success', { serial: currentOrder.serialNumber }), { id: toastId });
       handleClear();
-    } catch (err) {
+    } catch {
       toast.error(t('entry.messages.save_error'), { id: toastId });
     }
   };
@@ -558,15 +569,27 @@ const DataEntryWizard = () => {
     if (!validateForm()) return;
     const toastId = toast.loading(t('entry.messages.updating'));
     try {
+      const { data: previous } = await supabase
+        .from('orders')
+        .select('order_data')
+        .eq('serial_number', originalSerial)
+        .single();
+      const orderWithActivity = appendActivity(currentOrder, createActivityItem({
+        action: 'update',
+        user,
+        note: `تم تحديث الطلب رقم ${currentOrder.serialNumber}`,
+        changes: summarizeOrderChanges(previous?.order_data, currentOrder),
+        meta: { source: 'data-entry', previousSerial: originalSerial },
+      }));
       const payload = {
         serial_number: currentOrder.serialNumber,
-        order_data: currentOrder
+        order_data: orderWithActivity
       };
       const { error } = await supabase.from('orders').update(payload).eq('serial_number', originalSerial);
       if (error) throw error;
       toast.success(t('entry.messages.update_success', { serial: currentOrder.serialNumber }), { id: toastId });
       handleClear();
-    } catch (err) {
+    } catch {
       toast.error(t('entry.messages.save_error'), { id: toastId });
     }
   };
@@ -585,7 +608,15 @@ const DataEntryWizard = () => {
           return;
        }
 
-       const newOrderData = { ...currentOrder, serialNumber: newSerial, orderNumber: null };
+       const newOrderData = appendActivity(
+         { ...currentOrder, serialNumber: newSerial, orderNumber: null },
+         createActivityItem({
+           action: 'copy',
+           user,
+           note: `تم نسخ الطلب من ${currentOrder.serialNumber} إلى ${newSerial}`,
+           meta: { source: 'data-entry', copiedFrom: currentOrder.serialNumber },
+         })
+       );
        const payload = {
          serial_number: newSerial,
          order_data: newOrderData
@@ -597,7 +628,7 @@ const DataEntryWizard = () => {
        setOriginalSerial(newSerial);
        setIsEditMode(true);
        window.scrollTo({ top: 0, behavior: 'smooth' });
-     } catch (err) {
+     } catch {
        toast.error(t('entry.messages.save_error'), { id: toastId });
      }
   };
@@ -607,11 +638,27 @@ const DataEntryWizard = () => {
     
     const toastId = toast.loading(t('entry.messages.deleting'));
     try {
+      const { data: previous } = await supabase
+        .from('orders')
+        .select('order_data')
+        .eq('serial_number', originalSerial)
+        .single();
       const { error } = await supabase.from('orders').delete().eq('serial_number', originalSerial);
       if (error) throw error;
+      const archiveItem = appendActivity(previous?.order_data || currentOrder, createActivityItem({
+        action: 'delete',
+        user,
+        note: `تم حذف الطلب رقم ${originalSerial}`,
+        meta: { source: 'data-entry', serial: originalSerial },
+      }));
+      const deletedArchive = JSON.parse(localStorage.getItem('gh_deleted_activity_archive') || '[]');
+      localStorage.setItem('gh_deleted_activity_archive', JSON.stringify([
+        { serial_number: originalSerial, order_data: archiveItem, deletedAt: new Date().toISOString() },
+        ...deletedArchive,
+      ].slice(0, 100)));
       toast.success(t('entry.messages.delete_success', { serial: originalSerial }), { id: toastId });
       handleClear();
-    } catch (err) {
+    } catch {
       toast.error(t('entry.messages.save_error'), { id: toastId });
     }
   };
@@ -677,7 +724,7 @@ const DataEntryWizard = () => {
       setOriginalSerial(finalOrder.serialNumber);
       toast.success(t('entry.messages.fetch_success', { serial: finalOrder.serialNumber }), { id: toastId });
       if (document.getElementById('fetchSerialInput')) document.getElementById('fetchSerialInput').value = '';
-    } catch (err) {
+    } catch {
       toast.error(t('entry.messages.save_error'), { id: toastId });
     }
   };
@@ -2387,36 +2434,46 @@ const DataEntryWizard = () => {
 
         {isEditMode ? (
           <>
-            <button
-              className="btn btn-outline"
-              style={{ flex: 1, maxWidth: '180px', fontSize: '0.95rem', padding: '0.9rem', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.4)' }}
-              onClick={handleDeleteOrder}
-            >
-              <Trash2 size={18} /> {t('entry.actions.delete_btn')}
-            </button>
-            <button
-              className="btn"
-              style={{ flex: 1.5, maxWidth: '250px', fontSize: '1rem', padding: '0.9rem', backgroundColor: '#3b82f6', color: '#fff', fontWeight: 'bold' }}
-              onClick={handleSaveAsCopy}
-            >
-              <Copy size={18} /> {t('entry.actions.save_as_copy')}
-            </button>
-            <button
-              className="btn btn-primary"
-              style={{ flex: 2, maxWidth: '350px', fontSize: '1.1rem', padding: '0.9rem', fontWeight: 'bold' }}
-              onClick={handleUpdate}
-            >
-              <Save size={20} /> {t('entry.actions.update_btn', { serial: originalSerial })}
-            </button>
+            {hasPermission('entry', 'delete') && (
+              <button
+                className="btn btn-outline"
+                style={{ flex: 1, maxWidth: '180px', fontSize: '0.95rem', padding: '0.9rem', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.4)' }}
+                onClick={handleDeleteOrder}
+              >
+                <Trash2 size={18} /> {t('entry.actions.delete_btn')}
+              </button>
+            )}
+            
+            {hasPermission('entry', 'add') && (
+              <button
+                className="btn"
+                style={{ flex: 1.5, maxWidth: '250px', fontSize: '1rem', padding: '0.9rem', backgroundColor: '#3b82f6', color: '#fff', fontWeight: 'bold' }}
+                onClick={handleSaveAsCopy}
+              >
+                <Copy size={18} /> {t('entry.actions.save_as_copy')}
+              </button>
+            )}
+            
+            {hasPermission('entry', 'edit') && (
+              <button
+                className="btn btn-primary"
+                style={{ flex: 2, maxWidth: '350px', fontSize: '1.1rem', padding: '0.9rem', fontWeight: 'bold' }}
+                onClick={handleUpdate}
+              >
+                <Save size={20} /> {t('entry.actions.update_btn', { serial: originalSerial })}
+              </button>
+            )}
           </>
         ) : (
-          <button
-            className="btn btn-primary"
-            style={{ flex: 3, maxWidth: '600px', fontSize: '1.15rem', padding: '1rem', fontWeight: 'bold', boxShadow: '0 4px 15px rgba(212, 175, 55, 0.3)' }}
-            onClick={handleSaveNew}
-          >
-            <Save size={22} /> {t('entry.actions.save_btn')}
-          </button>
+          hasPermission('entry', 'add') && (
+            <button
+              className="btn btn-primary"
+              style={{ flex: 3, maxWidth: '600px', fontSize: '1.15rem', padding: '1rem', fontWeight: 'bold', boxShadow: '0 4px 15px rgba(212, 175, 55, 0.3)' }}
+              onClick={handleSaveNew}
+            >
+              <Save size={22} /> {t('entry.actions.save_btn')}
+            </button>
+          )
         )}
       </div>
 

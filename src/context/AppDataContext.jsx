@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 
@@ -54,7 +55,7 @@ export const defaultOrderState = {
 
 export const AppDataProvider = ({ children }) => {
   const [lookups, setLookups] = useState(initialLookups);
-  const [isLookupsLoading, setIsLookupsLoading] = useState(true);
+  const [, setIsLookupsLoading] = useState(true);
 
   useEffect(() => {
     const fetchLookups = async () => {

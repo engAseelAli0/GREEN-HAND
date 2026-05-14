@@ -410,7 +410,7 @@ const ImageEditorModal = ({ isOpen, imageFile, onSave, onCancel }) => {
                 value={color} 
                 onChange={(e) => setColor(e.target.value)}
                 style={{
-                  width: '32px', height: '32px', padding: 0, border: 'none',
+                  width: '32px', height: '32px', padding: 0,
                   borderRadius: '50%', cursor: 'pointer', overflow: 'hidden',
                   background: 'linear-gradient(45deg, red, yellow, green, cyan, blue, magenta, red)',
                   border: '2px solid rgba(255,255,255,0.3)'

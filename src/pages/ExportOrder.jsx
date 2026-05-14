@@ -52,7 +52,7 @@ const ExportOrder = () => {
         toast.success(t('export.messages.fetch_success'), { id: toastId });
         setOrder({ serialNumber: data.serial_number, ...data.order_data });
       }
-    } catch (err) {
+    } catch {
       toast.error(t('export.messages.connection_error'), { id: toastId });
     }
   };

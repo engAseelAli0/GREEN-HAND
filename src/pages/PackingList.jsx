@@ -1,8 +1,9 @@
 import React, { useState, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAppData } from '../context/AppDataContext';
+import { useAuth } from '../context/AuthContext';
 import { useTranslation } from 'react-i18next';
-import { Printer, Plus, Trash2, Search, Package, Layers, AlertCircle, X } from 'lucide-react';
+import { Printer, Plus, Trash2, Search, Package, Layers, AlertCircle, X, FileSpreadsheet } from 'lucide-react';
 import { englishOnly } from '../utils/textUtils';
 import toast from 'react-hot-toast';
 import { CustomDateInput } from '../components/CustomDateInput';
@@ -14,6 +15,7 @@ const toEnglishNumbers = (str) => {
 
 const PackingList = () => {
   const { t } = useTranslation();
+  const { hasPermission } = useAuth();
   const today = new Date();
   const localDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
@@ -42,7 +44,7 @@ const PackingList = () => {
     sealNo: ''
   });
 
-  const [isExporting, setIsExporting] = useState(false);
+  const [isExporting] = useState(false);
   const [showFetchDialog, setShowFetchDialog] = useState(false);
   const [showImageColumn, setShowImageColumn] = useState(false);
 
@@ -193,7 +195,7 @@ const PackingList = () => {
               setHighlightedSerials([]);
               fetchAllData(withImage, [], false);
           }
-      } catch (err) {
+      } catch {
           toast.dismiss(toastId);
           toast.error(t('shipping.messages.check_error'));
       }
@@ -290,7 +292,7 @@ const PackingList = () => {
             });
             
             if (orderData) successCount++;
-        } catch (err) {
+        } catch {
             serialCartonMap.push({ isSkipped: true, row });
         }
     }
@@ -466,6 +468,122 @@ const PackingList = () => {
     window.print();
   };
 
+  const exportToExcel = async () => {
+    try {
+      const { utils, writeFile } = await import('xlsx');
+      
+      const excelData = [];
+      
+      // Header
+      excelData.push([t('packing.title')]);
+      excelData.push([]);
+      excelData.push([t('packing.header.invoice_no'), headerInfo.invoiceNo, t('packing.header.date'), headerInfo.date]);
+      excelData.push([t('packing.header.branch'), headerInfo.branch]);
+      excelData.push([]);
+      
+      // Table Header
+      excelData.push([
+        t('packing.table.cols.no'),
+        t('packing.table.cols.carton_no'),
+        t('packing.table.cols.item_no'),
+        t('packing.table.cols.desc'),
+        t('packing.table.cols.carton_qty'),
+        t('packing.table.cols.packing_kind'),
+        t('packing.table.cols.qty_per_ctn'),
+        t('packing.table.cols.item_qty'),
+        t('packing.table.cols.total_item_qty'),
+        'تفاصيل أخرى'
+      ]);
+      
+      // Table Rows
+      rows.forEach((row, index) => {
+        const totalItemQty = serialTotals[row.serial.trim()] || 0;
+        const packages = (row.packages && row.packages.length > 0) ? row.packages : [{ cartonNo: '', cartonQty: '', packingKind: 'Pcs', qtyPerCarton: '' }];
+        
+        packages.forEach((pkg, pIndex) => {
+            const isFirst = pIndex === 0;
+            const c = parseFloat(pkg.cartonQty) || 0;
+            const q = parseFloat(pkg.qtyPerCarton) || 0;
+            const itemQty = c * q;
+
+            excelData.push([
+                isFirst ? index + 1 : '',
+                pkg.cartonNo,
+                isFirst ? row.serial : '',
+                isFirst ? row.desc : '',
+                pkg.cartonQty,
+                pkg.packingKind,
+                pkg.qtyPerCarton,
+                itemQty || '',
+                isFirst ? totalItemQty : '',
+                isFirst ? (row.factoryCode || row.details || '-') : ''
+            ]);
+        });
+      });
+
+      // Mixed Groups
+      mixedGroups.forEach((group, index) => {
+        excelData.push(['', '', '', `--- كرتون مختلط (${group.cartonNo}) ---`, '', '', '', '', '', '']);
+        const groupCtn = parseFloat(group.cartonQty) || 0;
+        group.items.forEach((item, itemIdx) => {
+            const q = parseFloat(item.qtyPerCarton) || 0;
+            const itemQty = groupCtn * q;
+            const totalItemQty = serialTotals[item.serial.trim()] || 0;
+            
+            excelData.push([
+                `M${index + 1}`,
+                itemIdx === 0 ? group.cartonNo : '',
+                item.serial,
+                item.desc,
+                itemIdx === 0 ? group.cartonQty : '',
+                item.packingKind,
+                item.qtyPerCarton,
+                itemQty || '',
+                totalItemQty,
+                item.factoryCode || item.details || '-'
+            ]);
+        });
+      });
+      
+      excelData.push([]);
+      
+      // Footer
+      excelData.push([t('packing.footer.total'), '', '', '', totalCtn, '', '', totalPcs, '', '']);
+      excelData.push(['', t('packing.footer.container_no'), footerInfo.containerNo, '', t('packing.footer.seal_no'), footerInfo.sealNo, '', '', '', '']);
+      
+      const ws = utils.aoa_to_sheet(excelData);
+      ws['!dir'] = 'rtl'; // Right to left
+      
+      // Merge title row
+      ws['!merges'] = [
+        { s: { r: 0, c: 0 }, e: { r: 0, c: 9 } }
+      ];
+      
+      // Set column widths
+      ws['!cols'] = [
+        { wch: 5 },  // No
+        { wch: 15 }, // Carton No
+        { wch: 15 }, // Item No
+        { wch: 25 }, // Desc
+        { wch: 10 }, // Carton Qty
+        { wch: 10 }, // Packing Kind
+        { wch: 10 }, // Qty per Ctn
+        { wch: 10 }, // Item Qty
+        { wch: 15 }, // Total Item Qty
+        { wch: 20 }  // Other Details
+      ];
+      
+      const wb = utils.book_new();
+      utils.book_append_sheet(wb, ws, "Packing List");
+      
+      writeFile(wb, `Packing_List_${headerInfo.invoiceNo || 'Export'}.xlsx`);
+      toast.success('تم تحميل ملف الإكسل بنجاح');
+    } catch (error) {
+      console.error('Error exporting to Excel:', error);
+      toast.error('حدث خطأ أثناء تحميل ملف الإكسل');
+    }
+  };
+
   return (
     <div className="fade-in" style={{ paddingBottom: '4rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
@@ -478,9 +596,14 @@ const PackingList = () => {
             {t('packing.subtitle')}
           </p>
         </div>
-        <button onClick={exportToPDF} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--accent-color)', color: '#000', padding: '10px 20px', fontSize: '1.1rem', border: 'none' }}>
-          <Printer size={20} /> {t('packing.print_btn')}
-        </button>
+        <div style={{ display: 'flex', gap: '1rem' }}>
+          <button onClick={exportToExcel} className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#107c41', borderColor: '#107c41', padding: '10px 20px', fontSize: '1.1rem' }}>
+            <FileSpreadsheet size={20} /> تحميل إكسل
+          </button>
+          <button onClick={exportToPDF} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--accent-color)', color: '#000', padding: '10px 20px', fontSize: '1.1rem', border: 'none' }}>
+            <Printer size={20} /> {t('packing.print_btn')}
+          </button>
+        </div>
       </div>
 
       <div className="card" style={{ padding: '0', overflow: 'hidden', border: 'none', background: 'var(--surface-color)', boxShadow: '0 8px 30px rgba(0,0,0,0.12)' }}>
@@ -840,9 +963,11 @@ const PackingList = () => {
                                         )}
                                         {isFirst && (
                                             <td rowSpan={packagesToRender.length} className="no-print" style={{ border: '1px solid var(--border-color)', padding: '5px', textAlign: 'center' }}>
-                                                <button onClick={() => removeRow(row.id)} style={{ background: 'rgba(239, 68, 68, 0.1)', border: 'none', color: '#ef4444', padding: '4px', borderRadius: '4px', cursor: 'pointer' }}>
-                                                    <Trash2 size={14} />
-                                                </button>
+                                                {(hasPermission('packing-list', 'delete') || hasPermission('packing-list', 'edit')) && (
+                                                  <button onClick={() => removeRow(row.id)} style={{ background: 'rgba(239, 68, 68, 0.1)', border: 'none', color: '#ef4444', padding: '4px', borderRadius: '4px', cursor: 'pointer' }}>
+                                                      <Trash2 size={14} />
+                                                  </button>
+                                                )}
                                             </td>
                                         )}
                                     </tr>
@@ -861,7 +986,7 @@ const PackingList = () => {
                      </tr>
                  )}
 
-                 {mixedGroups.map((group, gIndex) => {
+                 {mixedGroups.map((group) => {
                      const c = parseFloat(group.cartonQty) || 0;
                      let totalGroupQty = 0;
                      group.items.forEach(i => {
@@ -951,15 +1076,19 @@ const PackingList = () => {
 
            {!isExporting && (
              <div className="no-print" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginTop: '1.5rem', gap: '1rem', flexWrap: 'wrap' }}>
-                <button onClick={addRow} className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--accent-color)', borderColor: 'var(--accent-color)' }}>
-                   <Plus size={18} /> {t('shipping.actions.add_row')}
-                </button>
+                {hasPermission('packing-list', 'add') && (
+                  <button onClick={addRow} className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--accent-color)', borderColor: 'var(--accent-color)' }}>
+                     <Plus size={18} /> {t('shipping.actions.add_row')}
+                  </button>
+                )}
                 <button onClick={() => setShowFetchDialog(true)} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'linear-gradient(to right, #10b981, #059669)', border: 'none', padding: '10px 24px' }}>
                    <Search size={18} /> {t('shipping.actions.fetch_all')}
                 </button>
-                <button onClick={() => setShowClearConfirm(true)} className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#ef4444', borderColor: '#ef4444' }}>
-                   <Trash2 size={18} /> {t('shipping.actions.clear_all')}
-                </button>
+                {hasPermission('packing-list', 'delete') && (
+                  <button onClick={() => setShowClearConfirm(true)} className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#ef4444', borderColor: '#ef4444' }}>
+                     <Trash2 size={18} /> {t('shipping.actions.clear_all')}
+                  </button>
+                )}
              </div>
            )}
 

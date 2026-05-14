@@ -1,9 +1,11 @@
 import { Link } from 'react-router-dom';
 import { Edit3, Printer, Settings, Hexagon, Truck, Barcode, Factory, FileSpreadsheet, Package } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useAuth } from '../context/AuthContext';
 
 const HomePortal = () => {
   const { t } = useTranslation();
+  const { hasAccess } = useAuth();
   return (
     <div className="fade-in" style={{ 
         display: 'flex', 
@@ -123,117 +125,31 @@ const HomePortal = () => {
       </div>
 
       <div className="capsules-grid">
-        
-        {/* Capsule 1: Data Entry */}
-        <Link to="/entry" className="capsule-card">
-          <div className="icon-ring">
-            <Edit3 size={40} />
-          </div>
-          <h2 className="capsule-title">{t('nav.entry')}</h2>
-          <p className="capsule-desc">
-            {t('home.entry_desc')}
-          </p>
-        </Link>
-
-        {/* Capsule 2: Export Document */}
-        <Link to="/export" className="capsule-card">
-          <div className="icon-ring" style={{ color: '#60a5fa', borderColor: 'rgba(96, 165, 250, 0.3)' }}>
-            <Printer size={40} />
-          </div>
-          <h2 className="capsule-title">{t('nav.export')}</h2>
-          <p className="capsule-desc">
-            {t('home.export_desc')}
-          </p>
-        </Link>
-
-        {/* Capsule 3: Admin & Settings */}
-        <Link to="/admin" className="capsule-card">
-          <div className="icon-ring" style={{ color: '#a78bfa', borderColor: 'rgba(167, 139, 250, 0.3)' }}>
-            <Settings size={40} />
-          </div>
-          <h2 className="capsule-title">{t('nav.admin')}</h2>
-          <p className="capsule-desc">
-            {t('home.admin_desc')}
-          </p>
-        </Link>
-
-        {/* Capsule 4: Factory Receiving */}
-        <Link to="/receiving" className="capsule-card">
-          <div className="icon-ring" style={{ color: '#4ade80', borderColor: 'rgba(74, 222, 128, 0.3)' }}>
-            <Truck size={40} />
-          </div>
-          <h2 className="capsule-title">{t('nav.receiving')}</h2>
-          <p className="capsule-desc">
-            {t('home.receiving_desc')}
-          </p>
-        </Link>
-
-        {/* Capsule 4.5: Factory Portal */}
-        <Link to="/factory-portal" className="capsule-card">
-          <div className="icon-ring" style={{ color: '#d4af37', borderColor: 'rgba(212, 175, 55, 0.3)' }}>
-            <Factory size={40} />
-          </div>
-          <h2 className="capsule-title">{t('nav.factory_portal')}</h2>
-          <p className="capsule-desc">
-            {t('home.factory_portal_desc')}
-          </p>
-        </Link>
-
-        {/* Capsule 5: Batch Barcodes */}
-        <Link to="/barcodes" className="capsule-card">
-          <div className="icon-ring" style={{ color: '#fb923c', borderColor: 'rgba(251, 146, 60, 0.3)' }}>
-            <Barcode size={40} />
-          </div>
-          <h2 className="capsule-title">{t('nav.barcodes')}</h2>
-          <p className="capsule-desc">
-            {t('home.barcodes_desc')}
-          </p>
-        </Link>
-
-        {/* Capsule 6: Reports */}
-        <Link to="/reports" className="capsule-card">
-          <div className="icon-ring" style={{ color: '#ec4899', borderColor: 'rgba(236, 72, 153, 0.3)' }}>
-            <Printer size={40} />
-          </div>
-          <h2 className="capsule-title">{t('nav.reports')}</h2>
-          <p className="capsule-desc">
-            {t('home.reports_desc')}
-          </p>
-        </Link>
-
-        {/* Capsule 7: Shipping Invoice */}
-        <Link to="/shipping-invoice" className="capsule-card">
-          <div className="icon-ring" style={{ color: '#06b6d4', borderColor: 'rgba(6, 182, 212, 0.3)' }}>
-            <FileSpreadsheet size={40} />
-          </div>
-          <h2 className="capsule-title">{t('nav.shipping_invoice')}</h2>
-          <p className="capsule-desc">
-            {t('home.shipping_invoice_desc')}
-          </p>
-        </Link>
-
-        {/* Capsule 8: Packing List */}
-        <Link to="/packing-list" className="capsule-card">
-          <div className="icon-ring" style={{ color: '#10b981', borderColor: 'rgba(16, 185, 129, 0.3)' }}>
-            <Package size={40} />
-          </div>
-          <h2 className="capsule-title">{t('nav.packing_list')}</h2>
-          <p className="capsule-desc">
-            {t('home.packing_list_desc')}
-          </p>
-        </Link>
-
-        {/* Capsule 9: Warehouse Receipt */}
-        <Link to="/warehouse-receipt" className="capsule-card">
-          <div className="icon-ring" style={{ color: '#f59e0b', borderColor: 'rgba(245, 158, 11, 0.3)' }}>
-            <FileSpreadsheet size={40} />
-          </div>
-          <h2 className="capsule-title">{t('nav.warehouse_receipt')}</h2>
-          <p className="capsule-desc">
-            {t('home.warehouse_receipt_desc')}
-          </p>
-        </Link>
-
+        {[
+          { path: '/entry', icon: Edit3, color: 'var(--accent-color)', titleKey: 'nav.entry', descKey: 'home.entry_desc' },
+          { path: '/export', icon: Printer, color: '#60a5fa', borderColor: 'rgba(96, 165, 250, 0.3)', titleKey: 'nav.export', descKey: 'home.export_desc' },
+          { path: '/admin', icon: Settings, color: '#a78bfa', borderColor: 'rgba(167, 139, 250, 0.3)', titleKey: 'nav.admin', descKey: 'home.admin_desc' },
+          { path: '/receiving', icon: Truck, color: '#4ade80', borderColor: 'rgba(74, 222, 128, 0.3)', titleKey: 'nav.receiving', descKey: 'home.receiving_desc' },
+          { path: '/factory-portal', icon: Factory, color: '#d4af37', borderColor: 'rgba(212, 175, 55, 0.3)', titleKey: 'nav.factory_portal', descKey: 'home.factory_portal_desc' },
+          { path: '/barcodes', icon: Barcode, color: '#fb923c', borderColor: 'rgba(251, 146, 60, 0.3)', titleKey: 'nav.barcodes', descKey: 'home.barcodes_desc' },
+          { path: '/reports', icon: Printer, color: '#ec4899', borderColor: 'rgba(236, 72, 153, 0.3)', titleKey: 'nav.reports', descKey: 'home.reports_desc' },
+          { path: '/shipping-invoice', icon: FileSpreadsheet, color: '#06b6d4', borderColor: 'rgba(6, 182, 212, 0.3)', titleKey: 'nav.shipping_invoice', descKey: 'home.shipping_invoice_desc' },
+          { path: '/packing-list', icon: Package, color: '#10b981', borderColor: 'rgba(16, 185, 129, 0.3)', titleKey: 'nav.packing_list', descKey: 'home.packing_list_desc' },
+          { path: '/warehouse-receipt', icon: FileSpreadsheet, color: '#f59e0b', borderColor: 'rgba(245, 158, 11, 0.3)', titleKey: 'nav.warehouse_receipt', descKey: 'home.warehouse_receipt_desc' }
+        ].filter(capsule => hasAccess(capsule.path)).map((capsule, index) => {
+          const Icon = capsule.icon;
+          return (
+            <Link key={index} to={capsule.path} className="capsule-card">
+              <div className="icon-ring" style={{ color: capsule.color, borderColor: capsule.borderColor }}>
+                <Icon size={40} />
+              </div>
+              <h2 className="capsule-title">{t(capsule.titleKey)}</h2>
+              <p className="capsule-desc">
+                {t(capsule.descKey)}
+              </p>
+            </Link>
+          );
+        })}
       </div>
     </div>
   );

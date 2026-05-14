@@ -5,6 +5,8 @@ import { Toaster } from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
 import LanguageSelector from './components/LanguageSelector';
 import ThemeToggle from './components/ThemeToggle';
+import { useAuth } from './context/AuthContext';
+import { LogOut, User } from 'lucide-react';
 
 const NAV_PAGES = [
   { path: '/entry', labelKey: 'nav.entry', icon: Edit3, color: 'var(--accent-color)' },
@@ -20,11 +22,14 @@ const NAV_PAGES = [
 ];
 
 const AppLayout = () => {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
   const [showNavDropdown, setShowNavDropdown] = useState(false);
   const navDropdownRef = useRef(null);
+  const { user, logout, hasAccess } = useAuth();
+
+  const permittedPages = NAV_PAGES.filter(page => hasAccess(page.path));
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -37,11 +42,6 @@ const AppLayout = () => {
     }
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showNavDropdown]);
-
-  // Close dropdown on route change
-  useEffect(() => {
-    setShowNavDropdown(false);
-  }, [location.pathname]);
 
   return (
     <div className="app-container">
@@ -69,7 +69,20 @@ const AppLayout = () => {
         <nav className="no-print" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
           <ThemeToggle />
           <LanguageSelector />
-          {location.pathname !== '/' && (
+          
+          {user && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: '0.5rem', paddingLeft: '0.5rem', borderLeft: '1px solid var(--border-color)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', color: 'var(--text-muted)' }}>
+                <User size={16} />
+                <span style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>{user.username}</span>
+              </div>
+              <button onClick={() => { logout(); navigate('/login'); }} className="btn btn-outline" style={{ padding: '0.4rem 0.6rem', color: '#ef4444', borderColor: '#ef4444' }} title={t('auth.logout')}>
+                <LogOut size={16} />
+              </button>
+            </div>
+          )}
+
+          {location.pathname !== '/' && permittedPages.length > 0 && (
             <>
               {/* Go To... Dropdown */}
               <div ref={navDropdownRef} style={{ position: 'relative' }}>
@@ -78,7 +91,6 @@ const AppLayout = () => {
                   className="btn btn-outline"
                   style={{
                     display: 'flex', gap: '0.5rem', alignItems: 'center',
-                    borderColor: 'rgba(212, 175, 55, 0.3)', color: 'var(--text-muted)',
                     padding: '0.5rem 1rem', fontSize: '0.9rem',
                     transition: 'all 0.2s',
                     borderWidth: showNavDropdown ? '2px' : '1px',
@@ -108,7 +120,7 @@ const AppLayout = () => {
                     <div style={{ padding: '0.6rem 1rem', borderBottom: '1px solid var(--border-color)', backgroundColor: 'var(--surface-highlight)', fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>
                       {t('quick_jump')}
                     </div>
-                    {NAV_PAGES.map((page) => {
+                    {permittedPages.map((page) => {
                       const Icon = page.icon;
                       const isActive = location.pathname === page.path;
                       return (

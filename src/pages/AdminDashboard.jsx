@@ -1,8 +1,9 @@
 import React, { useState, useRef } from 'react';
 import { useAppData } from '../context/AppDataContext';
-import { Plus, Trash2, Edit, Edit2, Check, X, ImagePlus, ShoppingBag, Banknote, Scissors, Palette, Factory, Ruler, Package, Box, ShoppingCart, Stamp, SlidersHorizontal, ListChecks, Search, Sparkles, GripVertical, Tag, Layers, Puzzle, ChevronDown, Building } from 'lucide-react';
+import { Plus, Trash2, Edit, Edit2, Check, X, ImagePlus, ShoppingBag, Banknote, Scissors, Palette, Factory, Ruler, Package, Box, ShoppingCart, Stamp, SlidersHorizontal, ListChecks, Search, Sparkles, GripVertical, Tag, Layers, Puzzle, ChevronDown, Building, User, Shield } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import toast from 'react-hot-toast';
+import UserManagement from '../components/UserManagement';
 import { compressImage } from '../utils/imageUtils';
 
 const AdminDashboard = () => {
@@ -10,7 +11,6 @@ const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState('products');
   const [newValue, setNewValue] = useState('');
   const [newValuePrefix, setNewValuePrefix] = useState('');
-  const [newValueParts, setNewValueParts] = useState('');
   const [newValuePartAssignment, setNewValuePartAssignment] = useState('');
   const [newValueHex, setNewValueHex] = useState('#000000');
   const [newValueMobile, setNewValueMobile] = useState('');
@@ -54,7 +54,8 @@ const AdminDashboard = () => {
     { id: 'tradeMarks', name: 'العلامات التجارية', icon: Stamp },
     { id: 'measurements', name: 'قائمة المقاسات', icon: SlidersHorizontal },
     { id: 'packagingConditionsList', name: 'شروط التعبئة الإضافية', icon: ListChecks },
-    { id: 'buyerCodes', name: 'رموز المشترين', icon: Tag }
+    { id: 'buyerCodes', name: 'رموز المشترين', icon: Tag },
+    { id: 'system_users', name: 'إدارة المستخدمين', icon: Shield }
   ];
 
   const handleAddOrEdit = () => {
@@ -118,7 +119,6 @@ const AdminDashboard = () => {
     }
     setNewValue('');
     setNewValuePrefix('');
-    setNewValueParts('');
     setNewValuePartAssignment('');
     setNewValueHex('#000000');
     setNewValueMobile('');
@@ -143,7 +143,6 @@ const AdminDashboard = () => {
     } else if (activeTab === 'products') {
       setNewValue(typeof item === 'object' ? item.name : item);
       setNewValuePrefix(typeof item === 'object' ? (item.codePrefix || '') : '');
-      setNewValueParts(typeof item === 'object' && Array.isArray(item.parts) ? item.parts.join('، ') : '');
       setSelectedPartsArr(typeof item === 'object' && Array.isArray(item.parts) ? [...item.parts] : []);
     } else if (activeTab === 'measurements') {
       setNewValue(typeof item === 'object' ? item.name : item);
@@ -175,7 +174,6 @@ const AdminDashboard = () => {
     setEditIndex(null);
     setNewValue('');
     setNewValuePrefix('');
-    setNewValueParts('');
     setNewValuePartAssignment('');
     setNewValueHex('#000000');
     setNewValueMobile('');
@@ -205,7 +203,7 @@ const AdminDashboard = () => {
       const safeId = Date.now().toString(36);
       const fileName = `tm_${safeId}.${ext}`;
       const filePath = `trademarks/${fileName}`;
-      const { data, error } = await supabase.storage
+      const { error } = await supabase.storage
         .from('product_images')
         .upload(filePath, file, { upsert: true });
       if (error) {
@@ -699,11 +697,15 @@ const AdminDashboard = () => {
               <ActiveIcon size={20} color="var(--accent-color)" />
               إدارة {activeTabInfo?.name}
             </div>
-            <span style={styles.badge}>{currentItems.length} عنصر</span>
+            {activeTab !== 'system_users' && <span style={styles.badge}>{currentItems.length} عنصر</span>}
           </div>
 
-          {/* ─── Add / Edit Form ─── */}
-          <div ref={formCardRef} style={styles.formCard}>
+          {activeTab === 'system_users' ? (
+            <UserManagement />
+          ) : (
+            <>
+              {/* ─── Add / Edit Form ─── */}
+              <div ref={formCardRef} style={styles.formCard}>
             <div style={styles.formTitle}>
               {editIndex !== null ? (
                 <><Edit2 size={16} /> تعديل عنصر موجود</>
@@ -1108,7 +1110,7 @@ const AdminDashboard = () => {
 
           {/* ─── Items List ─── */}
           <div style={styles.itemsGrid}>
-            {filteredItems.map((item, index) => {
+            {filteredItems.map((item) => {
               const realIndex = currentItems.indexOf(item);
               const isEditing = editIndex === realIndex;
               const isDragging = dragIndex === realIndex;
@@ -1297,6 +1299,8 @@ const AdminDashboard = () => {
               </div>
             )}
           </div>
+          </>
+          )}
         </div>
       </div>
 

@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAppData } from '../context/AppDataContext';
+import { useAuth } from '../context/AuthContext';
 import { englishOnly } from '../utils/textUtils';
-import { Printer, Plus, Trash2, Search, FileText, Settings, LayoutGrid, AlertCircle, X } from 'lucide-react';
+import { Printer, Plus, Trash2, Search, FileText, Settings, LayoutGrid, AlertCircle, X, FileSpreadsheet } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
 import { CustomDateInput } from '../components/CustomDateInput';
@@ -14,6 +15,7 @@ const toEnglishNumbers = (str) => {
 
 const ShippingInvoice = () => {
   const { t } = useTranslation();
+  const { hasPermission } = useAuth();
   const today = new Date();
   const localDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
@@ -44,7 +46,7 @@ const ShippingInvoice = () => {
     sealNo: ''
   });
 
-  const [isExporting, setIsExporting] = useState(false);
+  const [isExporting] = useState(false);
   const [showFetchDialog, setShowFetchDialog] = useState(false);
   const [showImageColumn, setShowImageColumn] = useState(false);
 
@@ -95,6 +97,14 @@ const ShippingInvoice = () => {
   const removeRow = (id) => {
     if (rows.length === 1) return;
     setRows(rows.filter(r => r.id !== id));
+  };
+
+  const fetchRowData = async (_id, serial) => {
+    if (!serial?.trim()) {
+      toast.error(t('shipping.messages.enter_serials_first'));
+      return;
+    }
+    await fetchAllData(false, [], false);
   };
 
   const handleRowChange = (id, field, value) => {
@@ -208,7 +218,7 @@ const ShippingInvoice = () => {
               setHighlightedSerials([]);
               fetchAllData(withImage, [], false);
           }
-      } catch (err) {
+      } catch {
           toast.dismiss(toastId);
           toast.error(t('shipping.messages.check_error'));
       }
@@ -224,8 +234,6 @@ const ShippingInvoice = () => {
     if (removeBadRows) {
         updatedRows = updatedRows.filter(r => !badSerialsToSkip.includes(r.serial.trim()));
     }
-    let newBuyer = headerInfo.buyer;
-
     for (let i = 0; i < updatedRows.length; i++) {
         let r = updatedRows[i];
         if (r.serial.trim() && !badSerialsToSkip.includes(r.serial.trim())) { // Always fetch fresh data
@@ -262,7 +270,7 @@ const ShippingInvoice = () => {
                     };
                     successCount++;
                 }
-            } catch (err) {
+            } catch {
                 // ignore
             }
         }
@@ -298,6 +306,89 @@ const ShippingInvoice = () => {
     window.print();
   };
 
+  const exportToExcel = async () => {
+    try {
+      const { utils, writeFile } = await import('xlsx');
+      
+      const excelData = [];
+      
+      // Header
+      excelData.push([t('shipping.title')]);
+      excelData.push([]);
+      excelData.push([t('shipping.header.invoice_no'), headerInfo.invoiceNo, t('shipping.header.date'), headerInfo.date]);
+      excelData.push([t('shipping.header.branch'), headerInfo.branch]);
+      excelData.push([]);
+      
+      // Table Header
+      excelData.push([
+        t('shipping.table.cols.no'),
+        t('shipping.table.cols.item_no'),
+        t('shipping.table.cols.desc'),
+        t('shipping.table.cols.arabic_name'),
+        t('shipping.table.cols.qty'),
+        t('shipping.table.cols.currency'),
+        t('shipping.table.cols.unit_price'),
+        t('shipping.table.cols.total_amount'),
+        'تفاصيل أخرى'
+      ]);
+      
+      // Table Rows
+      rows.forEach((row, index) => {
+        excelData.push([
+          index + 1,
+          row.serial,
+          row.desc,
+          row.arabicName,
+          row.qty,
+          row.currency,
+          row.unitPrice,
+          row.totalAmount,
+          row.factoryCode || row.details || '-'
+        ]);
+      });
+      
+      excelData.push([]);
+      
+      // Footer
+      excelData.push([t('shipping.footer.total'), totalItemsCount, '', '', totalPcs, '', '', subTotalAmount, '']);
+      excelData.push(['', '', '', '', '', '', t('shipping.footer.commission') + ` (${footerInfo.commissionPercent}%)`, commissionAmount, '']);
+      excelData.push(['', '', '', '', '', '', t('shipping.footer.container_fee'), footerInfo.containerFee, '']);
+      excelData.push(['', '', '', '', '', '', t('shipping.footer.insurance'), footerInfo.insurance, '']);
+      excelData.push(['', '', '', '', '', '', t('shipping.footer.internal_shipping'), footerInfo.internalShipping, '']);
+      excelData.push(['', '', '', '', '', '', t('shipping.footer.invoice_total'), invoiceTotal, '']);
+      
+      const ws = utils.aoa_to_sheet(excelData);
+      ws['!dir'] = 'rtl'; // Right to left
+      
+      // Merge title row
+      ws['!merges'] = [
+        { s: { r: 0, c: 0 }, e: { r: 0, c: 8 } }
+      ];
+      
+      // Set column widths
+      ws['!cols'] = [
+        { wch: 5 },  // No
+        { wch: 15 }, // Item No
+        { wch: 25 }, // Desc
+        { wch: 25 }, // Arabic Name
+        { wch: 10 }, // Qty
+        { wch: 10 }, // Currency
+        { wch: 15 }, // Unit Price
+        { wch: 15 }, // Total Amount
+        { wch: 20 }  // Other Details
+      ];
+      
+      const wb = utils.book_new();
+      utils.book_append_sheet(wb, ws, "Shipping Invoice");
+      
+      writeFile(wb, `Shipping_Invoice_${headerInfo.invoiceNo || 'Export'}.xlsx`);
+      toast.success('تم تحميل ملف الإكسل بنجاح');
+    } catch (error) {
+      console.error('Error exporting to Excel:', error);
+      toast.error('حدث خطأ أثناء تحميل ملف الإكسل');
+    }
+  };
+
   return (
     <div className="fade-in" style={{ paddingBottom: '4rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
@@ -310,9 +401,14 @@ const ShippingInvoice = () => {
             {t('shipping.subtitle')}
           </p>
         </div>
-        <button className="btn btn-primary no-print" onClick={exportToPDF} disabled={isExporting} style={{ padding: '12px 24px', fontSize: '1.1rem' }}>
-          {isExporting ? <div className="spinner" style={{ width: '20px', height: '20px' }}/> : <><Printer size={20} /> {t('shipping.print_btn')}</>}
-        </button>
+        <div style={{ display: 'flex', gap: '1rem' }}>
+          <button className="btn btn-outline no-print" onClick={exportToExcel} disabled={isExporting} style={{ padding: '12px 24px', fontSize: '1.1rem', color: '#107c41', borderColor: '#107c41', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <FileSpreadsheet size={20} /> تحميل إكسل
+          </button>
+          <button className="btn btn-primary no-print" onClick={exportToPDF} disabled={isExporting} style={{ padding: '12px 24px', fontSize: '1.1rem' }}>
+            {isExporting ? <div className="spinner" style={{ width: '20px', height: '20px' }}/> : <><Printer size={20} /> {t('shipping.print_btn')}</>}
+          </button>
+        </div>
       </div>
 
       <div id="invoice-print-area" style={{ 
@@ -687,9 +783,11 @@ const ShippingInvoice = () => {
 
                         <td className="no-print" style={{ border: '1px solid var(--border-color)', padding: '5px', textAlign: 'center' }}>
                             <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
-                                <button onClick={() => removeRow(row.id)} style={{ background: 'rgba(239, 68, 68, 0.1)', border: 'none', color: '#ef4444', padding: '4px', borderRadius: '4px', cursor: 'pointer' }}>
-                                    <Trash2 size={14} />
-                                </button>
+                                {(hasPermission('shipping-invoice', 'delete') || hasPermission('shipping-invoice', 'edit')) && (
+                                  <button onClick={() => removeRow(row.id)} style={{ background: 'rgba(239, 68, 68, 0.1)', border: 'none', color: '#ef4444', padding: '4px', borderRadius: '4px', cursor: 'pointer' }}>
+                                      <Trash2 size={14} />
+                                  </button>
+                                )}
                                 <button className="no-print" onClick={() => fetchRowData(row.id, row.serial)} style={{ background: 'none', border: 'none', color: 'var(--accent-color)', cursor: 'pointer', padding: '2px' }}>
                                     <Search size={14} />
                                 </button>
@@ -704,15 +802,19 @@ const ShippingInvoice = () => {
 
            {!isExporting && (
              <div className="no-print" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginTop: '1rem', gap: '1rem' }}>
-                <button onClick={addRow} className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--accent-color)', borderColor: 'var(--accent-color)' }}>
-                   <Plus size={18} /> {t('shipping.actions.add_row')}
-                </button>
+                {hasPermission('shipping-invoice', 'add') && (
+                  <button onClick={addRow} className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--accent-color)', borderColor: 'var(--accent-color)' }}>
+                     <Plus size={18} /> {t('shipping.actions.add_row')}
+                  </button>
+                )}
                 <button onClick={() => setShowFetchDialog(true)} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'linear-gradient(to right, #10b981, #059669)', border: 'none', padding: '10px 24px' }}>
                    <Search size={18} /> {t('shipping.actions.fetch_all')}
                 </button>
-                <button onClick={() => setShowClearConfirm(true)} className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#ef4444', borderColor: '#ef4444' }}>
-                   <Trash2 size={18} /> {t('shipping.actions.clear_all')}
-                </button>
+                {hasPermission('shipping-invoice', 'delete') && (
+                  <button onClick={() => setShowClearConfirm(true)} className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#ef4444', borderColor: '#ef4444' }}>
+                     <Trash2 size={18} /> {t('shipping.actions.clear_all')}
+                  </button>
+                )}
              </div>
            )}
 

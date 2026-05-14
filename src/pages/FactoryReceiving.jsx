@@ -1,15 +1,16 @@
-import React, { useState, useEffect } from 'react';
-import { useAppData } from '../context/AppDataContext';
+import React, { useState } from 'react';
+import { useAuth } from '../context/AuthContext';
 import { supabase } from '../supabaseClient';
 import { Search, Save, PackageCheck, AlertCircle, Info, Box, Palette, Calculator, CheckCircle2, XCircle, Download, Printer, X, Factory } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 import { useTranslation } from 'react-i18next';
 import { extractColorCSS } from '../utils/textUtils';
+import { appendActivity, createActivityItem } from '../utils/activityLog';
 
 const FactoryReceiving = () => {
   const { t } = useTranslation();
-  const { lookups } = useAppData();
+  const { user, hasPermission } = useAuth();
   
   const [modelNo, setModelNo] = useState('');
   const [isFetched, setIsFetched] = useState(false);
@@ -280,6 +281,28 @@ const FactoryReceiving = () => {
     try {
       const { error } = await supabase.from('receivings').upsert(payload);
       if (error) throw error;
+      const { data: orderRow } = await supabase
+        .from('orders')
+        .select('order_data')
+        .eq('serial_number', modelNo.trim())
+        .single();
+      if (orderRow?.order_data) {
+        const orderWithActivity = appendActivity(orderRow.order_data, createActivityItem({
+          action: 'receive',
+          user,
+          note: `تم استلام الطلب بإجمالي ${totals.totalProd} قطعة`,
+          meta: {
+            source: 'factory-receiving',
+            cartons: totals.totalCtn,
+            pieces: totals.totalProd,
+            colors: colors.filter(c => c.colorName && parseInt(c.quantity)).length,
+          },
+        }));
+        await supabase
+          .from('orders')
+          .update({ order_data: orderWithActivity })
+          .eq('serial_number', modelNo.trim());
+      }
       toast.success(t('receiving.messages.save_success'), { id: toastId });
       
       // Reset form to allow entering a new model
@@ -846,20 +869,23 @@ const FactoryReceiving = () => {
                    <AlertCircle size={14} /> {t('receiving.messages.colors_mismatch_warning', { colors: totalColorsQty, total: totals.totalProd })}
                 </div>
              )}
-             <button 
-               className="btn btn-primary" 
-               onClick={handleSave}
-               disabled={!canSave}
-               style={{ 
-                 padding: '16px 40px', fontSize: '1.2rem', 
-                 background: canSave ? 'linear-gradient(to right, #22c55e, #16a34a)' : 'var(--bg-color)',
-                 color: canSave ? '#fff' : 'var(--text-muted)',
-                 border: canSave ? 'none' : '1px solid var(--border-color)',
-               }}
-             >
-               <Save size={24} />
-               {t('receiving.summary.save_btn')}
-             </button>
+             
+             {(hasPermission('receiving', 'add') || hasPermission('receiving', 'edit')) && (
+               <button 
+                 className="btn btn-primary" 
+                 onClick={handleSave}
+                 disabled={!canSave}
+                 style={{ 
+                   padding: '16px 40px', fontSize: '1.2rem', 
+                   background: canSave ? 'linear-gradient(to right, #22c55e, #16a34a)' : 'var(--bg-color)',
+                   color: canSave ? '#fff' : 'var(--text-muted)',
+                   border: canSave ? 'none' : '1px solid var(--border-color)',
+                 }}
+               >
+                 <Save size={24} />
+                 {t('receiving.summary.save_btn')}
+               </button>
+             )}
           </div>
         </div>
       )}

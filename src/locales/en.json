@@ -793,5 +793,35 @@
       "export_success": "Exported successfully!",
       "export_failed": "PDF export failed"
     }
+  },
+  "auth": {
+    "login": "Login to Portal",
+    "login_desc": "Enter your credentials to access the system",
+    "logout": "Logout",
+    "username": "Username",
+    "password": "Password",
+    "role": "Role",
+    "login_btn": "Sign In",
+    "invalid_credentials": "Invalid username or password",
+    "unauthorized": "Access Denied",
+    "unauthorized_desc": "You do not have permission to view this page.",
+    "return_home": "Return to Home",
+    "user_management": "User Management",
+    "add_user": "Add New User",
+    "edit_user": "Edit User",
+    "delete_user": "Delete User",
+    "permissions": "Screen Permissions",
+    "select_pages": "Select allowed pages:",
+    "admin": "Admin",
+    "data_entry": "Data Entry",
+    "warehouse": "Warehouse",
+    "factory": "Factory",
+    "guest": "Guest",
+    "no_users": "No users found. Create one to get started.",
+    "save_user": "Save User",
+    "cancel": "Cancel",
+    "user_saved": "User saved successfully!",
+    "user_deleted": "User deleted successfully!",
+    "confirm_delete": "Are you sure you want to delete this user?"
   }
 }

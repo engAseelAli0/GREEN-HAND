@@ -13,13 +13,17 @@ import ReportsPortal from './pages/ReportsPortal'
 import ShippingInvoice from './pages/ShippingInvoice'
 import PackingList from './pages/PackingList'
 import WarehouseReceipt from './pages/WarehouseReceipt'
+import Login from './pages/Login'
+import Unauthorized from './pages/Unauthorized'
+import { AuthProvider } from './context/AuthContext'
+import ProtectedRoute from './components/ProtectedRoute'
 import { AppDataProvider } from './context/AppDataContext'
 import { ThemeProvider } from './context/ThemeContext'
 import './i18n'
 import './index.css'
 
 // Global fix to prevent mouse wheel and arrow keys from altering number inputs everywhere
-document.addEventListener('wheel', function(e) {
+document.addEventListener('wheel', function() {
   if (document.activeElement && document.activeElement.type === 'number') {
     document.activeElement.blur();
   }
@@ -37,23 +41,28 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <ThemeProvider>
       <AppDataProvider>
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<AppLayout />}>
-              <Route index element={<HomePortal />} />
-              <Route path="entry" element={<DataEntryWizard />} />
-              <Route path="admin" element={<AdminDashboard />} />
-              <Route path="export" element={<ExportOrder />} />
-              <Route path="receiving" element={<FactoryReceiving />} />
-              <Route path="factory-portal" element={<FactoryOwnerPortal />} />
-              <Route path="barcodes" element={<PrintBarcodes />} />
-              <Route path="reports" element={<ReportsPortal />} />
-              <Route path="shipping-invoice" element={<ShippingInvoice />} />
-              <Route path="packing-list" element={<PackingList />} />
-              <Route path="warehouse-receipt" element={<WarehouseReceipt />} />
-            </Route>
-          </Routes>
-        </BrowserRouter>
+        <AuthProvider>
+          <BrowserRouter>
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route path="/unauthorized" element={<Unauthorized />} />
+              
+              <Route path="/" element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
+                <Route index element={<HomePortal />} />
+                <Route path="entry" element={<ProtectedRoute><DataEntryWizard /></ProtectedRoute>} />
+                <Route path="admin" element={<ProtectedRoute><AdminDashboard /></ProtectedRoute>} />
+                <Route path="export" element={<ProtectedRoute><ExportOrder /></ProtectedRoute>} />
+                <Route path="receiving" element={<ProtectedRoute><FactoryReceiving /></ProtectedRoute>} />
+                <Route path="factory-portal" element={<ProtectedRoute><FactoryOwnerPortal /></ProtectedRoute>} />
+                <Route path="barcodes" element={<ProtectedRoute><PrintBarcodes /></ProtectedRoute>} />
+                <Route path="reports" element={<ProtectedRoute><ReportsPortal /></ProtectedRoute>} />
+                <Route path="shipping-invoice" element={<ProtectedRoute><ShippingInvoice /></ProtectedRoute>} />
+                <Route path="packing-list" element={<ProtectedRoute><PackingList /></ProtectedRoute>} />
+                <Route path="warehouse-receipt" element={<ProtectedRoute><WarehouseReceipt /></ProtectedRoute>} />
+              </Route>
+            </Routes>
+          </BrowserRouter>
+        </AuthProvider>
       </AppDataProvider>
     </ThemeProvider>
   </React.StrictMode>,

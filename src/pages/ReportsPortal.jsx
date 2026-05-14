@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAppData } from '../context/AppDataContext';
-import { Filter, Download, FileText, ChevronDown, ChevronUp, Printer, Calendar, Factory, ArrowUpDown, Camera, X } from 'lucide-react';
+import { Filter, Download, FileText, ChevronDown, ChevronUp, Printer, Calendar, Factory, ArrowUpDown, Camera, X, Brain, ShieldCheck, AlertTriangle, Clock, Activity, CheckCircle2, Trophy, Coins, TrendingUp } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
 import { CustomDateInput } from '../components/CustomDateInput';
@@ -9,15 +9,100 @@ import * as XLSX from 'xlsx';
 import { englishOnly } from '../utils/textUtils';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { analyzeOrder, buildOperationalIntelligence } from '../utils/orderIntelligence';
+import { activitySummary, formatActivityTime } from '../utils/activityLog';
+
+const calculateTotalPiecesCount = (orderData) => {
+  if (!orderData) return 0;
+  const colorsDist = orderData.colorDistribution || {};
+  let total = 0;
+  Object.keys(colorsDist).forEach(color => {
+    if (colorsDist[color] && typeof colorsDist[color] === 'object') {
+      Object.values(colorsDist[color]).forEach(val => {
+        total += (parseInt(val, 10) || 0);
+      });
+    }
+  });
+  return total;
+};
 
 const ReportsPortal = () => {
   const { t } = useTranslation();
   const { lookups } = useAppData();
   const [orders, setOrders] = useState([]);
+  const [receivings, setReceivings] = useState([]);
   const [filteredOrders, setFilteredOrders] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
   const [sortConfig, setSortConfig] = useState({ key: 'serial_number', direction: 'desc' });
+  const intelligence = useMemo(
+    () => buildOperationalIntelligence(filteredOrders, receivings, lookups),
+    [filteredOrders, receivings, lookups]
+  );
+  const receivingMap = useMemo(
+    () => new Map(receivings.map(item => [item.serial_number, item])),
+    [receivings]
+  );
+  const executiveDashboard = useMemo(() => {
+    const receivingBySerial = new Map(receivings.map(item => [item.serial_number, item]));
+    const factoryMap = new Map();
+    const productMap = new Map();
+    let totalValue = 0;
+    let delayedOrders = 0;
+
+    filteredOrders.forEach(order => {
+      const data = order.order_data || {};
+      const factoryName = data.factoryId || 'غير محدد';
+      const productName = englishOnly(data.productName) || data.productName || 'غير محدد';
+      const qty = calculateTotalPiecesCount(data) || parseInt(data.totalQuantity, 10) || 0;
+      const value = qty * (parseFloat(data.productPrice) || 0);
+      const insight = analyzeOrder(order, receivingBySerial.get(order.serial_number), lookups);
+      const isDelayed = insight.stage === 'overdue';
+      totalValue += value;
+      if (isDelayed) delayedOrders += 1;
+
+      const factoryStats = factoryMap.get(factoryName) || {
+        name: factoryName,
+        orders: 0,
+        quantity: 0,
+        value: 0,
+        delayed: 0,
+        received: 0,
+        health: 0,
+      };
+      factoryStats.orders += 1;
+      factoryStats.quantity += qty;
+      factoryStats.value += value;
+      factoryStats.delayed += isDelayed ? 1 : 0;
+      factoryStats.received += insight.stage === 'received' ? 1 : 0;
+      factoryStats.health += insight.healthScore;
+      factoryMap.set(factoryName, factoryStats);
+
+      const productStats = productMap.get(productName) || { name: productName, orders: 0, quantity: 0, value: 0 };
+      productStats.orders += 1;
+      productStats.quantity += qty;
+      productStats.value += value;
+      productMap.set(productName, productStats);
+    });
+
+    const factories = [...factoryMap.values()]
+      .map(item => ({
+        ...item,
+        avgHealth: item.orders ? Math.round(item.health / item.orders) : 0,
+        delayRate: item.orders ? Math.round((item.delayed / item.orders) * 100) : 0,
+        receiveRate: item.orders ? Math.round((item.received / item.orders) * 100) : 0,
+      }))
+      .sort((a, b) => b.orders - a.orders);
+
+    return {
+      totalValue,
+      delayedOrders,
+      factories,
+      bestFactories: [...factories].sort((a, b) => b.avgHealth - a.avgHealth).slice(0, 5),
+      delayedFactories: [...factories].filter(item => item.delayed > 0).sort((a, b) => b.delayed - a.delayed).slice(0, 5),
+      topProducts: [...productMap.values()].sort((a, b) => b.quantity - a.quantity).slice(0, 6),
+    };
+  }, [filteredOrders, receivings, lookups]);
 
   
   // Filters state
@@ -84,6 +169,17 @@ const ReportsPortal = () => {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
+
+      const { data: recData, error: recError } = await supabase
+        .from('receivings')
+        .select('*');
+
+      if (!recError) {
+        setReceivings(recData || []);
+      } else {
+        console.warn('Could not fetch receivings for intelligence:', recError);
+        setReceivings([]);
+      }
       
       sortedData = (data || []).sort((a, b) => {
          return (parseInt(b.serial_number) || 0) - (parseInt(a.serial_number) || 0);
@@ -360,7 +456,7 @@ const ReportsPortal = () => {
            12: { cellWidth: 22 },
          },
          margin: { left: margin, right: margin },
-         didDrawPage: (data) => {
+          didDrawPage: () => {
            // Footer on each page
            pdf.setFontSize(7);
            pdf.setFont('helvetica', 'normal');
@@ -375,20 +471,6 @@ const ReportsPortal = () => {
        toast.error(t('reports.messages.pdf_error'), { id: toastId });
        console.error(err);
     }
-  };
-
-  const calculateTotalPiecesCount = (orderData) => {
-      if (!orderData) return 0;
-      const colorsDist = orderData.colorDistribution || {};
-      let total = 0;
-      Object.keys(colorsDist).forEach(color => {
-          if (colorsDist[color] && typeof colorsDist[color] === 'object') {
-              Object.values(colorsDist[color]).forEach(val => {
-                  total += (parseInt(val) || 0);
-              });
-          }
-      });
-      return total;
   };
 
   const renderSerialsLookup = () => (
@@ -498,6 +580,192 @@ const ReportsPortal = () => {
         </div>
       </div>
 
+      {dataLoaded && (
+        <div className="card glass-panel" style={{ marginBottom: '2rem', border: '1px solid rgba(212,175,55,0.18)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '1.25rem' }}>
+            <div>
+              <h3 style={{ margin: 0, color: 'var(--text-strong)', display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
+                <TrendingUp size={22} color="var(--accent-color)" /> Dashboard تنفيذية
+              </h3>
+              <p style={{ margin: '0.35rem 0 0', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                مؤشرات مالية وتشغيلية مختصرة حسب النتائج الحالية.
+              </p>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '0.8rem', marginBottom: '1rem' }}>
+            {[
+              { label: 'إجمالي قيمة البضاعة', value: executiveDashboard.totalValue.toLocaleString(), icon: Coins, color: '#d4af37' },
+              { label: 'طلبات متأخرة', value: executiveDashboard.delayedOrders, icon: Clock, color: '#fb7185' },
+              { label: 'عدد المصانع', value: executiveDashboard.factories.length, icon: Factory, color: '#38bdf8' },
+              { label: 'منتجات نشطة', value: executiveDashboard.topProducts.length, icon: Trophy, color: '#34d399' },
+            ].map(item => {
+              const Icon = item.icon;
+              return (
+                <div key={item.label} style={{ padding: '1rem', borderRadius: 16, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+                  <div style={{ width: 42, height: 42, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', color: item.color, background: `${item.color}1f` }}>
+                    <Icon size={20} />
+                  </div>
+                  <div>
+                    <div style={{ color: 'var(--text-strong)', fontWeight: 900, fontSize: '1.22rem', fontFamily: 'Outfit, sans-serif' }}>{item.value}</div>
+                    <div style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>{item.label}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
+            <div style={{ padding: '1rem', borderRadius: 14, background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.05)' }}>
+              <h4 style={{ margin: '0 0 0.75rem', color: 'var(--text-strong)', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                <Factory size={18} color="#38bdf8" /> أداء المصانع
+              </h4>
+              {executiveDashboard.bestFactories.length === 0 ? (
+                <div style={{ color: 'var(--text-muted)' }}>لا توجد بيانات مصانع ضمن النتائج.</div>
+              ) : executiveDashboard.bestFactories.map(factory => (
+                <div key={factory.name} style={{ marginBottom: '0.75rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-strong)', fontSize: '0.85rem', marginBottom: 5 }}>
+                    <strong>{factory.name}</strong>
+                    <span>{factory.avgHealth}% صحة</span>
+                  </div>
+                  <div style={{ height: 8, borderRadius: 999, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
+                    <div style={{ width: `${factory.avgHealth}%`, height: '100%', background: factory.avgHealth >= 80 ? '#34d399' : factory.avgHealth >= 55 ? '#fbbf24' : '#fb7185' }} />
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)', fontSize: '0.72rem', marginTop: 4 }}>
+                    <span>{factory.orders} طلب</span>
+                    <span>{factory.receiveRate}% استلام</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ padding: '1rem', borderRadius: 14, background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.05)' }}>
+              <h4 style={{ margin: '0 0 0.75rem', color: 'var(--text-strong)', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                <AlertTriangle size={18} color="#fb7185" /> التأخير حسب المصنع
+              </h4>
+              {executiveDashboard.delayedFactories.length === 0 ? (
+                <div style={{ color: '#34d399', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                  <CheckCircle2 size={17} /> لا توجد تأخيرات في النتائج الحالية.
+                </div>
+              ) : executiveDashboard.delayedFactories.map(factory => (
+                <div key={factory.name} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '0.75rem', alignItems: 'center', padding: '0.55rem 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                  <div>
+                    <strong style={{ color: 'var(--text-strong)' }}>{factory.name}</strong>
+                    <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{factory.orders} طلب، معدل التأخير {factory.delayRate}%</div>
+                  </div>
+                  <span style={{ color: '#fb7185', fontWeight: 900 }}>{factory.delayed}</span>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ padding: '1rem', borderRadius: 14, background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.05)' }}>
+              <h4 style={{ margin: '0 0 0.75rem', color: 'var(--text-strong)', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                <Trophy size={18} color="#d4af37" /> المنتجات الأكثر طلبًا
+              </h4>
+              {executiveDashboard.topProducts.length === 0 ? (
+                <div style={{ color: 'var(--text-muted)' }}>لا توجد بيانات منتجات ضمن النتائج.</div>
+              ) : executiveDashboard.topProducts.map((product, index) => (
+                <div key={product.name} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: '0.65rem', alignItems: 'center', padding: '0.5rem 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                  <span style={{ color: index === 0 ? '#d4af37' : 'var(--text-muted)', fontWeight: 900 }}>#{index + 1}</span>
+                  <div>
+                    <strong style={{ color: 'var(--text-strong)', fontSize: '0.86rem' }}>{product.name}</strong>
+                    <div style={{ color: 'var(--text-muted)', fontSize: '0.74rem' }}>{product.orders} طلب</div>
+                  </div>
+                  <span style={{ color: 'var(--accent-color)', fontWeight: 900 }}>{product.quantity.toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {dataLoaded && (
+        <div className="card glass-panel" style={{ marginBottom: '2rem', border: '1px solid rgba(56,189,248,0.18)', boxShadow: '0 18px 50px rgba(0,0,0,0.22)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '1.25rem' }}>
+            <div>
+              <h3 style={{ margin: 0, color: 'var(--text-strong)', display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
+                <Brain size={22} color="#38bdf8" /> مركز الذكاء التشغيلي
+              </h3>
+              <p style={{ margin: '0.35rem 0 0', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                تحليل تلقائي لصحة الطلبات، مراحلها، والمشاكل التي قد توقف الطباعة أو التصدير أو الاستلام.
+              </p>
+            </div>
+            <div style={{ minWidth: 92, height: 92, borderRadius: 18, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: intelligence.avgHealth >= 80 ? 'rgba(16,185,129,0.12)' : intelligence.avgHealth >= 55 ? 'rgba(245,158,11,0.12)' : 'rgba(244,63,94,0.12)', border: '1px solid rgba(255,255,255,0.08)' }}>
+              <strong style={{ fontSize: '1.8rem', color: intelligence.avgHealth >= 80 ? '#34d399' : intelligence.avgHealth >= 55 ? '#fbbf24' : '#fb7185', lineHeight: 1 }}>{intelligence.avgHealth}</strong>
+              <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: 4 }}>صحة النظام</span>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(165px, 1fr))', gap: '0.8rem', marginBottom: '1rem' }}>
+            {[
+              { label: 'الطلبات', value: filteredOrders.length, icon: FileText, color: '#38bdf8' },
+              { label: 'إجمالي القطع', value: intelligence.totalQuantity.toLocaleString(), icon: Activity, color: '#d4af37' },
+              { label: 'مخاطر عالية', value: intelligence.riskCounts.high || 0, icon: AlertTriangle, color: '#fb7185' },
+              { label: 'تم الاستلام', value: intelligence.stageCounts.received || 0, icon: CheckCircle2, color: '#34d399' },
+              { label: 'متأخر', value: intelligence.stageCounts.overdue || 0, icon: Clock, color: '#f97316' },
+            ].map(item => {
+              const Icon = item.icon;
+              return (
+                <div key={item.label} style={{ padding: '1rem', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 14, display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', background: `${item.color}1f`, color: item.color }}>
+                    <Icon size={19} />
+                  </div>
+                  <div>
+                    <div style={{ color: 'var(--text-strong)', fontWeight: 900, fontSize: '1.2rem', fontFamily: 'Outfit, sans-serif' }}>{item.value}</div>
+                    <div style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>{item.label}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 1.1fr) minmax(260px, 0.9fr)', gap: '1rem' }}>
+            <div style={{ padding: '1rem', background: 'rgba(255,255,255,0.025)', borderRadius: 14, border: '1px solid rgba(255,255,255,0.05)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', color: 'var(--text-strong)', fontWeight: 800, marginBottom: '0.75rem' }}>
+                <ShieldCheck size={18} color="#34d399" /> أولويات الإصلاح الذكية
+              </div>
+              {intelligence.topIssues.length === 0 ? (
+                <div style={{ color: '#34d399', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                  <CheckCircle2 size={17} /> لا توجد مشاكل تشغيلية واضحة في النتائج الحالية.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {intelligence.topIssues.map(issue => (
+                    <div key={issue.label} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', alignItems: 'center', gap: '0.65rem', padding: '0.65rem 0.75rem', borderRadius: 12, background: issue.severity === 'critical' ? 'rgba(244,63,94,0.08)' : 'rgba(245,158,11,0.08)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                      <AlertTriangle size={16} color={issue.severity === 'critical' ? '#fb7185' : '#fbbf24'} />
+                      <div>
+                        <div style={{ color: 'var(--text-strong)', fontWeight: 700, fontSize: '0.86rem' }}>{issue.label}</div>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.76rem', marginTop: 2 }}>{issue.fix}</div>
+                      </div>
+                      <strong style={{ color: 'var(--accent-color)' }}>{issue.count}</strong>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div style={{ padding: '1rem', background: 'rgba(255,255,255,0.025)', borderRadius: 14, border: '1px solid rgba(255,255,255,0.05)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', color: 'var(--text-strong)', fontWeight: 800, marginBottom: '0.75rem' }}>
+                <Clock size={18} color="#fbbf24" /> طلبات تحتاج متابعة الآن
+              </div>
+              {intelligence.urgentOrders.length === 0 ? (
+                <div style={{ color: 'var(--text-muted)' }}>لا توجد طلبات عاجلة ضمن النتائج الحالية.</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                  {intelligence.urgentOrders.map(item => (
+                    <button key={item.serial} onClick={() => toggleRow(item.serial)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', width: '100%', border: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.03)', color: 'var(--text-strong)', borderRadius: 12, padding: '0.55rem 0.7rem', cursor: 'pointer', fontFamily: 'Tajawal, sans-serif' }}>
+                      <span style={{ fontWeight: 800 }}>#{item.serial}</span>
+                      <span style={{ color: item.stageColor, fontSize: '0.8rem' }}>{item.stageLabel}</span>
+                      <span style={{ color: item.healthScore < 55 ? '#fb7185' : '#fbbf24', fontWeight: 900 }}>{item.healthScore}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Filter Card */}
       <div className="card glass-panel" style={{ marginBottom: '2rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem' }}>
@@ -592,6 +860,9 @@ const ReportsPortal = () => {
                   <th style={{ padding: '1rem', color: sortConfig.key === 'requestDate' ? 'var(--accent-color)' : 'inherit', cursor: 'pointer', userSelect: 'none' }} onClick={() => handleSort('requestDate')}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'center' }}>{t('reports.table.cols.order_date')} <ArrowUpDown size={14} opacity={sortConfig.key === 'requestDate' ? 1 : 0.3}/></div>
                   </th>
+                  <th style={{ padding: '1rem', textAlign: 'center' }}>المرحلة</th>
+                  <th style={{ padding: '1rem', textAlign: 'center' }}>الصحة</th>
+                  <th style={{ padding: '1rem', textAlign: 'center' }}>آخر نشاط</th>
                   <th style={{ padding: '1rem', textAlign: 'center' }}>{t('reports.table.cols.details')}</th>
                 </tr>
               </thead>
@@ -600,6 +871,9 @@ const ReportsPortal = () => {
                   const d = order.order_data || {};
                   const isExpanded = expandedRows.includes(order.serial_number);
                   const computedTotal = calculateTotalPiecesCount(d);
+                  const insight = analyzeOrder(order, receivingMap.get(order.serial_number), lookups);
+                  const activities = d.activityLog || [];
+                  const actSummary = activitySummary(activities);
 
                   return (
                     <React.Fragment key={idx}>
@@ -622,6 +896,26 @@ const ReportsPortal = () => {
                         </td>
                         <td style={{ padding: '1rem', textAlign: 'center' }}>{d.requestDate || '-'}</td>
                         <td style={{ padding: '1rem', textAlign: 'center' }}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 92, padding: '0.28rem 0.65rem', borderRadius: 999, color: insight.stageColor, background: `${insight.stageColor}18`, border: `1px solid ${insight.stageColor}33`, fontWeight: 800, fontSize: '0.78rem' }}>
+                            {insight.stageLabel}
+                          </span>
+                        </td>
+                        <td style={{ padding: '1rem', textAlign: 'center' }}>
+                          <span title={insight.issues.map(i => i.label).join(' | ') || 'سليم'} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 46, height: 46, borderRadius: '50%', color: insight.healthScore >= 80 ? '#34d399' : insight.healthScore >= 55 ? '#fbbf24' : '#fb7185', background: insight.healthScore >= 80 ? 'rgba(16,185,129,0.1)' : insight.healthScore >= 55 ? 'rgba(245,158,11,0.1)' : 'rgba(244,63,94,0.1)', border: '1px solid rgba(255,255,255,0.08)', fontWeight: 900 }}>
+                            {insight.healthScore}
+                          </span>
+                        </td>
+                        <td style={{ padding: '1rem', textAlign: 'center' }}>
+                          {actSummary.last ? (
+                            <div title={formatActivityTime(actSummary.last.at)} style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                              <span style={{ color: actSummary.last.color || 'var(--accent-color)', fontWeight: 800, fontSize: '0.78rem' }}>{actSummary.last.actionLabel}</span>
+                              <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>{actSummary.last.actor}</span>
+                            </div>
+                          ) : (
+                            <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>لا يوجد</span>
+                          )}
+                        </td>
+                        <td style={{ padding: '1rem', textAlign: 'center' }}>
                           <button 
                             className="btn btn-outline" 
                             style={{ padding: '0.4rem', border: 'none', background: isExpanded ? 'rgba(212, 175, 55, 0.2)' : 'rgba(255, 255, 255, 0.05)' }} 
@@ -633,8 +927,88 @@ const ReportsPortal = () => {
                       </tr>
                       {/* Expanded Section for Details */}
                       <tr className="expandable-content" style={{ display: isExpanded ? 'table-row' : 'none', backgroundColor: 'rgba(0,0,0,0.2)' }}>
-                          <td colSpan={7} style={{ padding: '1.5rem', borderBottom: '1px solid var(--border-color)' }}>
+                          <td colSpan={10} style={{ padding: '1.5rem', borderBottom: '1px solid var(--border-color)' }}>
                              
+                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
+                               <div style={{ padding: '0.9rem', borderRadius: 12, background: `${insight.stageColor}12`, border: `1px solid ${insight.stageColor}33` }}>
+                                 <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>مرحلة الطلب</span>
+                                 <div style={{ color: insight.stageColor, fontWeight: 900, marginTop: 4 }}>{insight.stageLabel}</div>
+                               </div>
+                               <div style={{ padding: '0.9rem', borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                 <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>درجة الصحة</span>
+                                 <div style={{ color: insight.healthScore >= 80 ? '#34d399' : insight.healthScore >= 55 ? '#fbbf24' : '#fb7185', fontWeight: 900, marginTop: 4 }}>{insight.healthScore}/100</div>
+                               </div>
+                               <div style={{ padding: '0.9rem', borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                 <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>مشاكل حرجة / تنبيهات</span>
+                                 <div style={{ color: 'var(--text-strong)', fontWeight: 900, marginTop: 4 }}>{insight.criticalCount} / {insight.warningCount}</div>
+                               </div>
+                             </div>
+
+                             {insight.issues.length > 0 && (
+                               <div style={{ marginBottom: '1rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '0.6rem' }}>
+                                 {insight.issues.map((issue, issueIdx) => (
+                                   <div key={issueIdx} style={{ padding: '0.75rem', borderRadius: 12, background: issue.severity === 'critical' ? 'rgba(244,63,94,0.08)' : issue.severity === 'warning' ? 'rgba(245,158,11,0.08)' : 'rgba(56,189,248,0.08)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                     <div style={{ color: issue.severity === 'critical' ? '#fb7185' : issue.severity === 'warning' ? '#fbbf24' : '#38bdf8', fontWeight: 800, fontSize: '0.85rem' }}>{issue.label}</div>
+                                     <div style={{ color: 'var(--text-muted)', fontSize: '0.78rem', marginTop: 3 }}>{issue.fix}</div>
+                                   </div>
+                                 ))}
+                               </div>
+                             )}
+
+                             <div style={{ marginBottom: '1rem', padding: '1rem', borderRadius: 14, background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', marginBottom: '0.85rem' }}>
+                                 <h4 style={{ margin: 0, color: 'var(--text-strong)', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                                   <Activity size={18} color="var(--accent-color)" /> سجل النشاط الذكي
+                                 </h4>
+                                 <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                                   {[
+                                     ['الأحداث', actSummary.total],
+                                     ['الطباعة', actSummary.prints],
+                                     ['التحديثات', actSummary.updates],
+                                     ['الاستلام', actSummary.receives],
+                                   ].map(([label, value]) => (
+                                     <span key={label} style={{ padding: '0.25rem 0.55rem', borderRadius: 999, background: 'rgba(212,175,55,0.08)', color: 'var(--accent-color)', border: '1px solid rgba(212,175,55,0.12)', fontSize: '0.75rem', fontWeight: 800 }}>
+                                       {label}: {value}
+                                     </span>
+                                   ))}
+                                 </div>
+                               </div>
+                               {activities.length === 0 ? (
+                                 <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                                   لا يوجد سجل نشاط قديم لهذا الطلب. سيتم تسجيل الأحداث الجديدة تلقائيًا من الآن.
+                                 </div>
+                               ) : (
+                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', maxHeight: 340, overflow: 'auto', paddingLeft: 4 }}>
+                                   {activities.slice(0, 12).map(item => (
+                                     <div key={item.id || `${item.action}-${item.at}`} style={{ display: 'grid', gridTemplateColumns: '14px 1fr', gap: '0.7rem' }}>
+                                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                         <span style={{ width: 12, height: 12, borderRadius: '50%', background: item.color || '#94a3b8', boxShadow: `0 0 0 4px ${(item.color || '#94a3b8')}22`, marginTop: 7 }} />
+                                         <span style={{ width: 1, flex: 1, background: 'rgba(255,255,255,0.08)', marginTop: 6 }} />
+                                       </div>
+                                       <div style={{ padding: '0.75rem 0.85rem', borderRadius: 12, background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.7rem', marginBottom: 4 }}>
+                                           <strong style={{ color: item.color || 'var(--text-strong)' }}>{item.actionLabel || item.action}</strong>
+                                           <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{formatActivityTime(item.at)}</span>
+                                         </div>
+                                         <div style={{ color: 'var(--text-strong)', fontSize: '0.86rem' }}>{item.note}</div>
+                                         <div style={{ color: 'var(--text-muted)', fontSize: '0.76rem', marginTop: 4 }}>بواسطة: {item.actor || 'system'}</div>
+                                         {item.changes?.length > 0 && (
+                                           <div style={{ marginTop: '0.6rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.35rem' }}>
+                                             {item.changes.map(change => (
+                                               <div key={`${item.id}-${change.field}`} style={{ padding: '0.45rem', borderRadius: 8, background: 'rgba(0,0,0,0.14)', fontSize: '0.75rem' }}>
+                                                 <strong style={{ color: 'var(--accent-color)' }}>{change.label}</strong>
+                                                 <div style={{ color: 'var(--text-muted)', direction: 'ltr', textAlign: 'left' }}>{change.from} → {change.to}</div>
+                                               </div>
+                                             ))}
+                                           </div>
+                                         )}
+                                       </div>
+                                     </div>
+                                   ))}
+                                 </div>
+                               )}
+                             </div>
+
                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem', padding: '1.5rem', background: 'rgba(255,255,255,0.03)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(255,255,255,0.05)' }}>
                                 <div>
                                    <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem', display: 'block', marginBottom: '0.4rem' }}>{t('reports.details.sizes')}</span>

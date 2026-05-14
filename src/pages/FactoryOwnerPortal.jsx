@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { Search, Save, Factory, AlertCircle, Info, Palette, CheckCircle2, X, Box } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -69,19 +69,6 @@ const FactoryOwnerPortal = () => {
       
       const oData = oDataResp.order_data;
       setOriginalOrderData(oData);
-
-      // Helper for Package Calculations
-      const getPackageCalculationsLocal = (pkg) => {
-        const from = parseInt(pkg.fromCtn);
-        const to = parseInt(pkg.toCtn);
-        const units = parseInt(pkg.pcsPerCtn);
-        const hasRange = !isNaN(from) && !isNaN(to) && to >= from;
-        const hasUnits = !isNaN(units) && units > 0;
-        const totalCtnQty = hasRange ? (to - from + 1) : 0;
-        const multiplier = pkg.kind === 'Doz' ? 12 : 1;
-        const totalProdQty = (hasRange && hasUnits) ? (totalCtnQty * units * multiplier) : 0;
-        return { totalCtnQty, totalProdQty };
-      };
 
       setProductInfo({
         mainBarcode: oData.barcode || `1000${oData.serialNumber}`,
@@ -206,8 +193,6 @@ const FactoryOwnerPortal = () => {
     }
 
     const hasActualQuantities = colors.some(c => c.actualQuantity !== '' && parseInt(c.actualQuantity) > 0);
-    const actualSum = colors.reduce((acc, c) => acc + (parseInt(c.actualQuantity) || 0), 0);
-    
     if (hasActualQuantities) {
         if (productInfo.factoryStatus !== t('owner.info.delivered')) {
             toast.error(t('owner.messages.delivered_status_required'));

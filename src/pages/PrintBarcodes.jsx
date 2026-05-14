@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { Search, Printer, ArrowRight, Barcode as BarcodeIcon, Hash, Package, Layers, Palette, Ruler, BarChart3, Sparkles, X, Settings, Save, RotateCcw } from 'lucide-react';
 import { englishOnly } from '../utils/textUtils';
 import { Link } from 'react-router-dom';
-import bwipjs from 'bwip-js';
+import JsBarcode from 'jsbarcode';
 
 const LS_KEY = 'barcode_print_settings';
 const DEFAULT_PRINT_SETTINGS = {
@@ -14,6 +14,7 @@ const DEFAULT_PRINT_SETTINGS = {
   marginTop: 0.051, marginBottom: 0.051, marginLeft: 0.036, marginRight: 0.036,
   labelWidth: 3.0, labelHeight: 2.499,
   columns: 3, rows: 1, columnGap: 0, rowGap: 0,
+  barcodeWidth: 1.0,
 };
 
 const loadSettings = () => {
@@ -44,36 +45,74 @@ const IntField = ({ label, fieldKey, unit = '', settings, onUpdate }) => (
   </div>
 );
 
-// ══ Enterprise-Grade Barcode Component (bwip-js → SVG) ══
-const BwipBarcode = React.memo(({ value, height = 10, showText = true }) => {
-  const [svgMarkup, setSvgMarkup] = React.useState('');
+// ══════════════════════════════════════════════════════════════
+// THERMAL BARCODE — 203 DPI Pixel-Perfect for Zebra GT800
+// Generates a 1-bit (pure B&W) PNG at exact printer resolution.
+// Each canvas pixel = exactly 1 printer dot. No gray = No dithering.
+// ══════════════════════════════════════════════════════════════
+const ZEBRA_DPI = 203;
+const MM_PER_DOT = 25.4 / ZEBRA_DPI; // ≈ 0.1251 mm
+
+const ThermalBarcode = React.memo(({ value, barScale = 1.0 }) => {
+  const [imgSrc, setImgSrc] = React.useState(null);
+  const [dims, setDims] = React.useState({ w: 0, h: 0 });
 
   React.useEffect(() => {
     if (!value) return;
     try {
-      const svg = bwipjs.toSVG({
-        bcid: 'code128',
-        text: value,
-        height: height,
-        includetext: showText,
-        textxalign: 'center',
-        textsize: 9,
-        textgaps: 1,
-        textfont: 'Arial',
-        paddingleft: 4,
-        paddingright: 4,
-        paddingtop: 1,
-        paddingbottom: 1,
+      const canvas = document.createElement('canvas');
+      // ALWAYS width=1 (integer pixels) — guarantees bars NEVER overlap.
+      // Scaling is done ONLY via physical display size (CSS cm).
+      JsBarcode(canvas, value, {
+        format: 'CODE128',
+        width: 1,
+        height: 50,
+        margin: 10,
+        displayValue: false,
+        background: '#ffffff',
+        lineColor: '#000000',
       });
-      setSvgMarkup(svg);
-    } catch (e) {
-      console.error('Barcode generation error:', e);
-      setSvgMarkup('');
-    }
-  }, [value, height, showText]);
 
-  if (!svgMarkup) return <span style={{ fontSize: '8px', color: '#999' }}>{value}</span>;
-  return <div dangerouslySetInnerHTML={{ __html: svgMarkup }} style={{ width: '100%', textAlign: 'center', lineHeight: 0 }} />;
+      // CRITICAL: Threshold every pixel to pure black or pure white.
+      // Thermal printers dither gray → broken jagged bars. Remove ALL gray.
+      const ctx = canvas.getContext('2d');
+      const id = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const d = id.data;
+      for (let i = 0; i < d.length; i += 4) {
+        const lum = d[i] * 0.299 + d[i+1] * 0.587 + d[i+2] * 0.114;
+        const bw = lum > 128 ? 255 : 0;
+        d[i] = bw; d[i+1] = bw; d[i+2] = bw; d[i+3] = 255;
+      }
+      ctx.putImageData(id, 0, 0);
+
+      // Physical size scaled by user's barScale factor
+      const scale = Math.max(0.5, Math.min(barScale, 3));
+      const wCm = (canvas.width * MM_PER_DOT * scale) / 10;
+      const hCm = (canvas.height * MM_PER_DOT * scale) / 10;
+      setDims({ w: wCm, h: hCm });
+      setImgSrc(canvas.toDataURL('image/png'));
+    } catch (e) {
+      console.error('Barcode generation failed:', e);
+    }
+  }, [value, barScale]);
+
+  if (!imgSrc) return null;
+
+  return (
+    <div dir="ltr" style={{ direction: 'ltr', textAlign: 'center', width: '100%' }}>
+      <img
+        src={imgSrc}
+        alt={value}
+        style={{
+          display: 'block',
+          margin: '0 auto',
+          width: `${dims.w}cm`,
+          height: `${dims.h}cm`,
+          imageRendering: 'pixelated',
+        }}
+      />
+    </div>
+  );
 });
 
 const PrintBarcodes = () => {
@@ -204,7 +243,7 @@ const PrintBarcodes = () => {
 
   const handleSaveSettings = () => {
     const parsed = { ...tempSettings };
-    ['paperWidth','paperHeight','marginTop','marginBottom','marginLeft','marginRight','labelWidth','labelHeight','columnGap','rowGap'].forEach(k => {
+    ['paperWidth','paperHeight','marginTop','marginBottom','marginLeft','marginRight','labelWidth','labelHeight','columnGap','rowGap','barcodeWidth'].forEach(k => {
       parsed[k] = parseFloat(parsed[k]) || 0;
     });
     ['columns','rows'].forEach(k => {
@@ -861,7 +900,7 @@ const PrintBarcodes = () => {
              height: ${printSettings.labelHeight || 2.499}cm !important;
              vertical-align: top !important;
              border: none !important;
-             padding: 0.05cm 0.1cm !important;
+             padding: 0.05cm 0.05cm !important;
              background: transparent !important;
              box-sizing: border-box !important;
              direction: ltr !important;
@@ -942,38 +981,41 @@ const PrintBarcodes = () => {
              font-weight: 500 !important;
           }
 
-          /* ══ Barcode ══ */
-          .sticker-barcode-wrap {
-             width: 100% !important;
+          /* ══ Barcode image — pixel-perfect for thermal ══ */
+          .sticker-barcode-wrap img {
+             display: block !important;
+             margin: 0 auto !important;
+             image-rendering: pixelated !important;
+             image-rendering: -moz-crisp-edges !important;
+             -ms-interpolation-mode: nearest-neighbor !important;
+          }
+
+          /* ══ Barcode text (separate from bars) ══ */
+          .sticker-barcode-text {
+             font-family: 'Courier New', Courier, monospace !important;
+             font-size: 5pt !important;
+             font-weight: 600 !important;
+             color: #000 !important;
              text-align: center !important;
              margin: 0 !important;
-             margin-top: 0.02cm !important;
              padding: 0 !important;
-             line-height: 0 !important;
-          }
-
-          .sticker-barcode-wrap svg {
-             display: inline-block !important;
-             width: 100% !important;
-             height: auto !important;
-             shape-rendering: crispEdges !important;
-          }
-
-          .sticker-barcode-wrap svg rect {
-             shape-rendering: crispEdges !important;
+             letter-spacing: 0.5px !important;
+             line-height: 1.1 !important;
+             direction: ltr !important;
+             white-space: nowrap !important;
           }
 
           /* ══ Product name at bottom ══ */
           .sticker-product-name {
              font-family: Arial, Helvetica, sans-serif !important;
-             font-size: 8pt !important;
+             font-size: 6pt !important;
              font-weight: 500 !important;
              color: #000 !important;
              text-align: center !important;
              margin: 0 !important;
              padding: 0 !important;
              letter-spacing: 0.2px !important;
-             line-height: 1.2 !important;
+             line-height: 1 !important;
              white-space: nowrap !important;
              text-overflow: ellipsis !important;
              overflow: hidden !important;
@@ -1315,13 +1357,11 @@ const PrintBarcodes = () => {
 
                           {/* Barcode */}
                           <div className="sticker-barcode-wrap">
-                            <BwipBarcode 
-                                value={row.batchBarcode}
-                                height={10}
-                                scale={2}
-                                showText={true}
-                            />
+                            <ThermalBarcode value={row.batchBarcode} barScale={printSettings.barcodeWidth || 1.0} />
                           </div>
+
+                          {/* Barcode Text (separate from barcode bars) */}
+                          <div className="sticker-barcode-text">{row.batchBarcode}</div>
 
                           {/* Product Name */}
                           <div className="sticker-product-name">{row.itemName}</div>
@@ -1461,6 +1501,13 @@ const PrintBarcodes = () => {
                 <div>
                   <FieldRow label={t('print.setup.label_width')} fieldKey="labelWidth" settings={tempSettings} onUpdate={updateTemp} />
                   <FieldRow label={t('print.setup.label_height')} fieldKey="labelHeight" settings={tempSettings} onUpdate={updateTemp} />
+                  <div style={rowStyle}>
+                    <label style={{ fontSize: '0.9rem', fontWeight: 500, color: 'var(--text-main)' }}>Barcode Scale — حجم الباركود</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <input type="number" step="0.1" min="0.5" max="3" value={tempSettings.barcodeWidth ?? 1.0} onChange={e => updateTemp('barcodeWidth', e.target.value)} style={inputStyle} />
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600 }}>×</span>
+                    </div>
+                  </div>
                 </div>
               )}
               {setupTab === 'layout' && (

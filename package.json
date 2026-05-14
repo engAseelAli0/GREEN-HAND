@@ -18,6 +18,7 @@
     "html2pdf.js": "^0.14.0",
     "i18next": "^26.0.10",
     "i18next-browser-languagedetector": "^8.2.1",
+    "jsbarcode": "^3.12.3",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.7",
     "lucide-react": "^1.7.0",

@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { Search, Printer, ArrowRight, Barcode as BarcodeIcon, Hash, Package, Layers, Palette, Ruler, BarChart3, Sparkles, X, Settings, Save, RotateCcw } from 'lucide-react';
 import { englishOnly } from '../utils/textUtils';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import JsBarcode from 'jsbarcode';
 
 const LS_KEY = 'barcode_print_settings';
@@ -116,6 +117,7 @@ const ThermalBarcode = React.memo(({ value, barScale = 1.0 }) => {
 });
 
 const PrintBarcodes = () => {
+  const { hasPermission } = useAuth();
   const { t } = useTranslation();
   const { lookups } = useAppData();
   const [serialInput, setSerialInput] = useState('');
@@ -1172,6 +1174,7 @@ const PrintBarcodes = () => {
 
             {rows.length > 0 && (
               <>
+                {hasPermission('barcodes', 'export') && (<>
                 <button className="bc-print-btn" onClick={handleOpenSetup} style={{ background: 'linear-gradient(135deg, #6366f1, #4f46e5)', boxShadow: '0 4px 16px rgba(99,102,241,0.25)' }}>
                   <Settings size={18} />
                   {t('print.search.setup_btn')}
@@ -1180,6 +1183,7 @@ const PrintBarcodes = () => {
                   <Printer size={18} />
                   {t('print.search.print_btn')}
                 </button>
+                </>)}
               </>
             )}
           </div>

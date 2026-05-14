@@ -19,8 +19,8 @@ export const AuthProvider = ({ children }) => {
         return null; // Return value for sync usage
       }
 
-      // Supabase emails are formatted as username@greenhand.local
-      const username = authSessionUser.email.replace('@greenhand.local', '');
+      // Use user_metadata.username if available, otherwise fallback to parsing email
+      const username = authSessionUser.user_metadata?.username || authSessionUser.email.replace('@greenhand.local', '');
 
       // Fetch role and pages from system_users
       const { data, error } = await supabase
@@ -95,22 +95,32 @@ export const AuthProvider = ({ children }) => {
       
       // 1. First, check if the user exists in our system_users table
       // We skip this check for 'admin' because the master admin might not be in the table yet
+      let email = `${username}@greenhand.local`;
       if (username !== 'admin') {
         const { data: userCheck, error: userCheckError } = await supabase
           .from('system_users')
-          .select('id')
+          .select('id, permissions')
           .eq('username', username)
           .single();
           
         if (userCheckError || !userCheck) {
-          toast.error("اسم المستخدم غير موجود أو الحساب محذوف!");
+          toast.error("هذا اليوزر غير موجود");
           setLoading(false);
           return false;
+        }
+        
+        if (userCheck.permissions && userCheck.permissions.__is_suspended) {
+          toast.error("هذا الحساب موقوف يرجى التواصل بالادارة");
+          setLoading(false);
+          return false;
+        }
+        
+        if (userCheck.permissions && userCheck.permissions.__auth_email) {
+          email = userCheck.permissions.__auth_email;
         }
       }
 
       // 2. Try to authenticate with Supabase Auth
-      const email = `${username}@greenhand.local`;
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -120,7 +130,7 @@ export const AuthProvider = ({ children }) => {
         console.error('Supabase Auth error:', error);
         // Since we already know the user exists, an "Invalid login credentials" means the password is wrong
         if (error.message === 'Invalid login credentials') {
-          toast.error("كلمة المرور غير صحيحة!");
+          toast.error("كلمة السر غير صحيحة");
         } else {
           toast.error(error.message);
         }

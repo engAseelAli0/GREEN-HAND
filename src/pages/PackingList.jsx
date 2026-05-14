@@ -597,12 +597,16 @@ const PackingList = () => {
           </p>
         </div>
         <div style={{ display: 'flex', gap: '1rem' }}>
-          <button onClick={exportToExcel} className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#107c41', borderColor: '#107c41', padding: '10px 20px', fontSize: '1.1rem' }}>
-            <FileSpreadsheet size={20} /> تحميل إكسل
-          </button>
-          <button onClick={exportToPDF} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--accent-color)', color: '#000', padding: '10px 20px', fontSize: '1.1rem', border: 'none' }}>
-            <Printer size={20} /> {t('packing.print_btn')}
-          </button>
+          {hasPermission('packing', 'export') && (
+            <>
+              <button onClick={exportToExcel} className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#107c41', borderColor: '#107c41', padding: '10px 20px', fontSize: '1.1rem' }}>
+                <FileSpreadsheet size={20} /> تحميل إكسل
+              </button>
+              <button onClick={exportToPDF} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--accent-color)', color: '#000', padding: '10px 20px', fontSize: '1.1rem', border: 'none' }}>
+                <Printer size={20} /> {t('packing.print_btn')}
+              </button>
+            </>
+          )}
         </div>
       </div>
 

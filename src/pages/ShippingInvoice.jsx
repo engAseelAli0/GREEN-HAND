@@ -402,12 +402,16 @@ const ShippingInvoice = () => {
           </p>
         </div>
         <div style={{ display: 'flex', gap: '1rem' }}>
-          <button className="btn btn-outline no-print" onClick={exportToExcel} disabled={isExporting} style={{ padding: '12px 24px', fontSize: '1.1rem', color: '#107c41', borderColor: '#107c41', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <FileSpreadsheet size={20} /> تحميل إكسل
-          </button>
-          <button className="btn btn-primary no-print" onClick={exportToPDF} disabled={isExporting} style={{ padding: '12px 24px', fontSize: '1.1rem' }}>
-            {isExporting ? <div className="spinner" style={{ width: '20px', height: '20px' }}/> : <><Printer size={20} /> {t('shipping.print_btn')}</>}
-          </button>
+          {hasPermission('shipping-invoice', 'export') && (
+            <>
+              <button className="btn btn-outline no-print" onClick={exportToExcel} disabled={isExporting} style={{ padding: '12px 24px', fontSize: '1.1rem', color: '#107c41', borderColor: '#107c41', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <FileSpreadsheet size={20} /> تحميل إكسل
+              </button>
+              <button className="btn btn-primary no-print" onClick={exportToPDF} disabled={isExporting} style={{ padding: '12px 24px', fontSize: '1.1rem' }}>
+                {isExporting ? <div className="spinner" style={{ width: '20px', height: '20px' }}/> : <><Printer size={20} /> {t('shipping.print_btn')}</>}
+              </button>
+            </>
+          )}
         </div>
       </div>
 

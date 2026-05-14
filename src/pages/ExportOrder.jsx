@@ -4,11 +4,13 @@ import { supabase } from '../supabaseClient';
 import toast from 'react-hot-toast';
 import { Search, Printer, FileText, CheckCircle2, DownloadCloud, X } from 'lucide-react';
 import { useAppData } from '../context/AppDataContext';
+import { useAuth } from '../context/AuthContext';
 import { englishOnly } from '../utils/textUtils';
 
 const ExportOrder = () => {
   const { t } = useTranslation();
   const { lookups } = useAppData();
+  const { hasPermission } = useAuth();
   
   const [searchTerm, setSearchTerm] = useState('');
   const [order, setOrder] = useState(null);
@@ -168,68 +170,121 @@ const ExportOrder = () => {
          Object.keys(order.colorDistribution[color] || {}).forEach(size => activeSizesSet.add(size));
      });
   }
-  const sizesToRender = Array.from(activeSizesSet).sort();
+  const sizeOrderArr = ['XXS', 'XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', '2XL', '3XL', '4XL', '5XL', 'F', 'FREE'];
+  const sizesToRender = Array.from(activeSizesSet).sort((a, b) => {
+      const ai = sizeOrderArr.indexOf(a.toUpperCase());
+      const bi = sizeOrderArr.indexOf(b.toUpperCase());
+      if (ai !== -1 && bi !== -1) return ai - bi;
+      if (ai !== -1) return -1;
+      if (bi !== -1) return 1;
+      
+      // Attempt numeric sort
+      const numA = parseFloat(a);
+      const numB = parseFloat(b);
+      if (!isNaN(numA) && !isNaN(numB)) {
+          return numA - numB;
+      }
+      
+      // Fallback to string sort
+      return a.localeCompare(b);
+  });
+
+  // Find Trademark Image
+  const tmObj = order ? lookups.tradeMarks?.find(t => (typeof t === 'object' ? t.name : t) === order.tradeMark) : null;
+  const tmImage = tmObj?.imageUrl || null;
 
   return (
     <div className="fade-in">
       <style>{`
         @media print {
-          @page { size: landscape; margin: 4mm; }
+          @page { size: landscape; margin: 5mm; }
           body * { visibility: hidden; }
           .app-container, .main-content { margin:0!important; padding:0!important; background:white!important; }
           .print-doc, .print-doc * { visibility: visible; }
           .print-doc {
             position: absolute; left:0; top:0; width:100%;
-            background:#fff!important; padding:3mm!important;
+            background:#fff!important; padding:0!important;
             box-shadow:none!important; border:none!important;
             max-width:none!important; border-radius:0!important;
           }
           .no-print { display:none!important; }
-          th, .sec-hdr { background-color:#1a5276!important; color:#fff!important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-          .accent-bg { background-color:#eaf2f8!important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+          .hdr-blue, .hdr-grey, .hdr-light, .title-cell, .bg-cyan { 
+            -webkit-print-color-adjust: exact !important; 
+            print-color-adjust: exact !important; 
+          }
         }
 
         .print-doc {
-          background:#fff; color:#111; padding:10px 14px; border-radius:8px;
-          max-width:1200px; margin:0 auto; box-shadow:0 8px 30px rgba(0,0,0,0.45);
-          font-family:'Inter','Tajawal',sans-serif; font-size:11.5px; line-height:1.3;
-          border:1px solid #ccc;
+          background:#fff; color:#000; padding:10px; border-radius:8px;
+          max-width:1400px; margin:0 auto; box-shadow:0 8px 30px rgba(0,0,0,0.45);
+          font-family:'Inter','Tajawal',sans-serif;
         }
 
-        /* ---- Compact Invoice Table Cells ---- */
-        .inv-table { width:100%; border-collapse:collapse; border:1.5px solid #333; table-layout:auto; }
-        .inv-table th, .inv-table td { border:1px solid #999; padding:2px 4px; vertical-align:middle; word-wrap:break-word; overflow-wrap:break-word; white-space:normal; }
-        .inv-table th { font-size:11.5px; font-weight:700; padding:4px 2px; }
-        .inv-table td { font-size:12px; }
-
-        .sec-hdr {
-          background:#1a5276; color:#fff; font-weight:700; font-size:12px;
-          padding:3px 6px; text-align:center; letter-spacing:0.5px;
+        .inv-table-new {
+          width: 100%;
+          border-collapse: collapse;
+          border: 3px solid #000;
+          table-layout: auto;
+          background: #fff;
         }
-        .sec-hdr-green { background:#1e8449; color:#fff; font-weight:700; font-size:12px; padding:3px 6px; text-align:center; }
-
-        .val-bold { font-weight:700; color:#111; }
-        .val-lg { font-size:14.5px; font-weight:900; }
-        .val-md { font-size:13px; font-weight:700; }
-        .label-cn { font-size:10px; color:#555; display:block; }
-
-        .kp-row-c { display:flex; justify-content:space-between; padding:1px 0; border-bottom:1px dotted #ddd; }
-        .kp-row-c:last-child { border-bottom:none; }
-
-        .sign-row { display:flex; justify-content:space-around; margin-top:4px; padding-top:3px; border-top:1.5px solid #333; }
-        .sign-box-c { text-align:center; min-width:120px; }
-        .sign-box-c .sign-line-c { border-top:1px solid #000; margin-top:20px; margin-bottom:2px; }
-        .sign-box-c .sign-label-c { font-size:8.5px; font-weight:600; color:#555; text-transform:uppercase; }
-
-        .color-dot-c { width:10px;height:10px;border-radius:50%;display:inline-block;margin-left:3px;margin-right:3px;border:1px solid #aaa;vertical-align:middle; }
-        .material-pill-c { background:#eee;padding:1px 5px;border-radius:99px;font-size:8.5px;font-weight:600;display:inline-flex;align-items:center;gap:3px;margin:1px 2px; }
-        .material-pct-c { background:#1a5276;color:#fff;padding:0 4px;border-radius:99px;font-size:8px; }
-
-        .remarks-box { background:#fef9c3;border:1px solid #fde047;padding:3px 6px;border-radius:4px;font-size:10px;color:#713f12;margin-top:3px; }
-        .cond-item { display:flex; gap:3px; align-items:flex-start; font-size:9px; color:#c0392b; font-weight:600; margin-bottom:1px; }
-
-        .img-thumb { width:80px;height:90px;object-fit:cover;border:1px solid #ccc;border-radius:3px; }
-        .barcode-box { border:1px solid #999; padding:3px; text-align:center; font-size:7px; background:#fafafa; border-radius:3px; }
+        .inv-table-new th, .inv-table-new td {
+          border: 1px solid #000;
+          padding: 6px 4px;
+          word-wrap: break-word;
+          white-space: normal;
+          line-height: 1.3;
+        }
+        
+        /* Headers */
+        .hdr-blue {
+          background-color: #1a5276 !important;
+          color: #fff !important;
+          font-weight: 800;
+          text-align: center;
+          font-size: 13px;
+        }
+        .hdr-grey {
+          background-color: #d5dbdb !important;
+          color: #000 !important;
+          font-weight: 800;
+          text-align: center;
+          font-size: 13px;
+        }
+        .hdr-light {
+          background-color: #f2f2f2 !important;
+          color: #000 !important;
+          font-weight: 800;
+          text-align: center;
+          font-size: 12px;
+        }
+        .title-cell {
+          background-color: #1a5276 !important;
+          color: #fff !important;
+          text-align: center;
+          vertical-align: middle;
+        }
+        
+        /* Values */
+        .val-center {
+          text-align: center;
+          font-size: 13px;
+          vertical-align: middle;
+        }
+        .val-left {
+          text-align: left;
+          font-size: 13px;
+          vertical-align: middle;
+        }
+        .val-bold {
+          font-weight: 800;
+          color: #000;
+        }
+        .bg-cyan {
+          background-color: #dcf4f5 !important;
+        }
+        .bg-light-blue {
+          background-color: #eaf2f8 !important;
+        }
       `}</style>
 
       {/* Control Navigation - No Print */}
@@ -358,7 +413,7 @@ const ExportOrder = () => {
             </div>
           </div>
         </div>
-        {order && (
+        {order && hasPermission('export', 'export') && (
            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
               <button className="btn btn-accent" style={{ padding: '0.8rem 2rem', fontSize: '1.15rem', gap: '0.75rem', borderRadius: '50px', background: 'linear-gradient(135deg, var(--accent-color), #b48c26)', color: '#000', fontWeight: 'bold', boxShadow: '0 4px 15px rgba(212, 175, 55, 0.4)' }} onClick={() => window.print()}>
                <Printer size={22} /> {t('export.print_btn')}
@@ -384,273 +439,319 @@ const ExportOrder = () => {
 
       {order && (
         <div className="print-doc" id="export-doc" dir="ltr">
-          {/* ═══ TOP LOGO HEADER ═══ */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, paddingBottom: 6, borderBottom: '2px solid #1a5276' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-              <div style={{ padding: '4px 12px', border: '2px solid #1e8449', borderRadius: 6, textAlign: 'center', background: '#eafaf1' }}>
-                <div style={{ fontSize: 18, fontWeight: 900, color: '#1e8449', letterSpacing: 3 }}>Green Hand</div>
-                <div style={{ fontSize: 9, color: '#1e8449', fontStyle: 'italic', fontWeight: 600 }}>Where elegance begins</div>
-              </div>
-            </div>
-            <div style={{ fontSize: 20, fontWeight: 900, color: '#1a5276', letterSpacing: 1 }}>{t('export.doc.export_invoice', 'EXPORT INVOICE / 出口发票')}</div>
-          </div>
-
-          {/* ═══ ROW 1: HEADER ═══ */}
-          <table className="inv-table" style={{ marginBottom: 4 }}>
+          <table className="inv-table-new">
+            <colgroup>
+              <col style={{ width: '13%' }} /> {/* 1: Product Name */}
+              <col style={{ width: '9%' }} />  {/* 2: Model No */}
+              <col style={{ width: '11%' }} /> {/* 3: Barcode */}
+              <col style={{ width: '8%' }} />  {/* 4: Price */}
+              <col style={{ width: '8%' }} />  {/* 5: Qty */}
+              <col style={{ width: '6%' }} />  {/* 6: Size Qty */}
+              <col style={{ width: '13%' }} /> {/* 7: Prod Sizes */}
+              <col style={{ width: '11%' }} /> {/* 8: Carton Size */}
+              <col style={{ width: '1%' }} />  {/* 9: Plastic Bag */}
+              <col style={{ width: '1%' }} /> {/* 10: CTN Qty */}
+            </colgroup>
             <tbody>
+              {/* ═══ ROW 1: HEADER ═══ */}
               <tr>
-                <td colSpan={2} className="sec-hdr" style={{ fontSize: 11 }}>{t('export.doc.order_no')}</td>
-                <td style={{ textAlign: 'center' }}><span className="val-md">{order.orderNumber || '-'}</span></td>
-                <td className="sec-hdr">{t('export.doc.request_date')}</td>
-                <td style={{ textAlign: 'center' }}><span className="val-bold">{formatDate(order.requestDate)}</span></td>
-                <td className="sec-hdr">{t('export.doc.delivery_date')}</td>
-                <td style={{ textAlign: 'center' }}><span className="val-bold">{formatDate(order.deliveryDate)}</span></td>
+                <th colSpan={2} className="hdr-blue">Order No. 订单号码</th>
+                <td colSpan={2} className="val-center val-bold">{order.orderNumber || '-'}</td>
+                <th colSpan={2} className="hdr-blue">Request Date 订单日期</th>
+                <td colSpan={1} className="val-center val-bold">{formatDate(order.requestDate)}</td>
+                <th colSpan={2} className="hdr-blue">Delivery Date 交货日期</th>
+                <td colSpan={1} className="val-center val-bold">{formatDate(order.deliveryDate)}</td>
               </tr>
-              <tr>
-                <td rowSpan={3} colSpan={2} style={{ textAlign: 'center', padding: '4px 6px' }}>
-                  <div style={{ fontSize: 15, fontWeight: 900, color: '#111', lineHeight: 1.1 }}>{t('export.doc.product_order_en')}</div>
-                  <div style={{ fontSize: 13, fontWeight: 800, color: '#1a5276' }}>{t('export.doc.product_order_zh')}</div>
-                </td>
-                <td style={{ fontSize: 10 }}>{t('export.doc.buyer_name')}</td>
-                <td colSpan={2} className="val-bold">{order.buyerCompany || '-'}</td>
-                <td style={{ fontSize: 10 }}>{t('export.doc.factory_name')}</td>
-                <td className="val-bold">
-                  {factoryInfo.name || '-'} 
-                  {factoryInfo.code ? <span style={{ color: '#1a5276', marginLeft: '4px' }}>[{factoryInfo.code}]</span> : null}
-                </td>
-              </tr>
-              <tr>
-                <td style={{ fontSize: 10 }}>{t('export.doc.buyer_mobile')}</td>
-                <td colSpan={2} className="val-bold">{order.buyerMobile || '-'}</td>
-                <td style={{ fontSize: 10 }}>{t('export.doc.factory_mobile')}</td>
-                <td className="val-bold">{factoryInfo.mobile || '-'}</td>
-              </tr>
-              <tr>
-                <td style={{ fontSize: 10 }}>{t('export.doc.customer_id')}</td>
-                <td colSpan={2} className="val-bold">{order.buyerNumber || order.buyerCode || '-'}</td>
-                <td style={{ fontSize: 10 }}>{t('export.doc.factory_address')}</td>
-                <td className="val-bold">{factoryInfo.address || '-'}</td>
-              </tr>
-            </tbody>
-          </table>
 
-          {/* ═══ ROW 2: PRODUCT + MEASUREMENTS + IMAGE ═══ */}
-          <table className="inv-table" style={{ marginBottom: 4 }}>
-            <thead>
+              {/* ═══ ROW 2-4: BUYER & FACTORY INFO ═══ */}
               <tr>
-                <th style={{ textAlign: 'right', width: '15%' }}>{t('export.doc.product_name')}</th>
-                <th style={{ textAlign: 'center', width: '8%' }}>{t('export.doc.model_no')}</th>
-                <th style={{ textAlign: 'center', width: '10%' }}>{t('export.doc.barcode')}</th>
-                <th style={{ textAlign: 'center', width: '8%' }}>{t('export.doc.price')}</th>
-                <th style={{ textAlign: 'center', width: '7%' }}>{t('export.doc.qty')}</th>
-                <th style={{ textAlign: 'center', width: '7%' }}>{t('export.doc.size_qty')}</th>
-                <th style={{ textAlign: 'center', width: '15%' }}>{t('export.doc.size_range')}</th>
+                <th colSpan={2} rowSpan={3} className="title-cell">
+                  <div style={{ fontSize: '20px', fontWeight: 900, marginBottom: '6px' }}>Product Order</div>
+                  <div style={{ fontSize: '20px', fontWeight: 900 }}>产品订单</div>
+                </th>
+                <th colSpan={2} className="hdr-light">Buyer Co. Name 买方公司名称</th>
+                <td colSpan={2} className="val-center val-bold">{order.buyerCompany || '-'}</td>
+                <th colSpan={2} className="hdr-light">Fact. Name 工厂名字</th>
+                <td colSpan={2} className="val-center val-bold">{factoryInfo.name || '-'}</td>
               </tr>
-            </thead>
-            <tbody>
               <tr>
-                <td className="val-bold" style={{ fontSize: 11 }}>{englishOnly(order.productName) || '-'}
-                  {order.tradeMark && <div style={{ fontSize: 8.5, color: '#555', fontWeight: 'normal' }}>TM: {order.tradeMark}</div>}
-                </td>
-                <td style={{ textAlign: 'center' }}><span className="val-lg">{order.barcode || '-'}</span></td>
-                <td style={{ textAlign: 'center' }}><span className="val-md">{order.barcode ? `100${order.barcode}` : '-'}</span></td>
-                <td style={{ textAlign: 'center' }}><span className="val-bold">¥ {order.productPrice || '-'}</span></td>
-                <td style={{ textAlign: 'center' }}><span className="val-lg">{order.totalQuantity || '-'}</span></td>
-                <td style={{ textAlign: 'center' }}><span className="val-bold">{sizesToRender.length || '-'}</span></td>
-                <td style={{ textAlign: 'center' }}><span className="val-bold">{t('export.doc.from')} {order.sizeFrom} - {t('export.doc.to')} {order.sizeTo}</span></td>
+                <th colSpan={2} className="hdr-light">Buyer Co. Mobile 买方手机</th>
+                <td colSpan={2} className="val-center val-bold">{order.buyerMobile || '-'}</td>
+                <th colSpan={2} className="hdr-light">Fact. Mobile 工厂电话</th>
+                <td colSpan={2} className="val-center val-bold">{factoryInfo.mobile || '-'}</td>
               </tr>
-              {/* SIZE ROW HEADER */}
-              {sizesToRender.length > 0 && (
-                <tr>
-                  <td colSpan={1} style={{ fontWeight: 700, fontSize: 8.5, background: '#eaf2f8' }}>
-                    {englishOnly(order.productName) || 'Product'}_Size<br/><span className="label-cn">{t('export.doc.dress_size')}</span>
-                  </td>
-                  {sizesToRender.map((size, i) => (
-                    <td key={size} colSpan={i === sizesToRender.length - 1 ? (7 - sizesToRender.length) || 1 : 1} style={{ textAlign: 'center', fontWeight: 700, background: '#eaf2f8' }}>{size}</td>
-                  ))}
-                  {sizesToRender.length < 6 && Array.from({ length: Math.max(0, 6 - sizesToRender.length) }).map((_, i) => (
-                    <td key={`empty-${i}`} style={{ background: '#eaf2f8' }}></td>
-                  ))}
-                </tr>
-              )}
-              {/* MEASUREMENTS */}
+              <tr>
+                <th colSpan={2} className="hdr-light">Customer ID 客户编号</th>
+                <td colSpan={2} className="val-center val-bold">{order.buyerNumber || order.buyerCode || '-'}</td>
+                <th colSpan={2} className="hdr-light">Fact. Address 工厂地址</th>
+                <td colSpan={2} className="val-center val-bold">{factoryInfo.address || '-'}</td>
+              </tr>
+
+              {/* ═══ ROW 5: PRODUCT COLUMNS ═══ */}
+              <tr>
+                <th className="hdr-blue">Product Name<br/>产品名称</th>
+                <th className="hdr-blue">Model No.<br/>款号</th>
+                <th className="hdr-blue">Barcode No.<br/>条形码</th>
+                <th className="hdr-blue">Prod Price<br/>产品价格</th>
+                <th className="hdr-blue">Prod Qty<br/>数量</th>
+                <th className="hdr-blue">Size Qty.<br/>码数</th>
+                <th className="hdr-blue">Prod Sizes<br/>码段</th>
+                <th className="hdr-blue">Carton Size<br/>纸箱尺寸</th>
+                <th className="hdr-blue">Plastic Bag Size<br/>胶袋尺寸</th>
+                <th className="hdr-blue">CTN Qty & Packaging<br/>纸箱数量&包装</th>
+              </tr>
+
+              {/* ═══ ROW 6: PRODUCT VALUES ═══ */}
+              <tr>
+                <td className="val-center val-bold bg-light-blue">{englishOnly(order.productName) || '-'}</td>
+                <td className="val-center val-bold bg-cyan" style={{ fontSize: '15px' }}>{order.barcode || '-'}</td>
+                <td className="val-center val-bold" style={{ fontSize: '15px' }}>{order.barcode ? `100${order.barcode}` : '-'}</td>
+                <td className="val-center val-bold">¥ {order.productPrice || '-'}</td>
+                <td className="val-center val-bold">{order.totalQuantity || '-'}</td>
+                <td className="val-center val-bold">{sizesToRender.length || '-'}</td>
+                <td className="val-center val-bold">From {order.sizeFrom || '-'} - To {order.sizeTo || '-'}</td>
+                <td className="val-center val-bold">{order.cartonSize || '-'}</td>
+                <td className="val-center val-bold">{order.plasticBagSize || '-'}</td>
+                <td className="val-center val-bold">{order.cartonQty || '-'}ctn * {order.cartonPackage || '-'}pcs</td>
+              </tr>
+
+              {/* ═══ MEASUREMENTS BLOCK ═══ */}
               {(() => {
+                let totalRows = 0;
+                const parts = order.groupedMeasurements ? Object.keys(order.groupedMeasurements) : (order.measurements ? ['Product'] : []);
+                
+                parts.forEach(part => {
+                  totalRows += 1; 
+                  if (order.groupedMeasurements) {
+                    totalRows += Object.keys(order.groupedMeasurements[part] || {}).length;
+                  } else {
+                    totalRows += Object.keys(order.measurements || {}).length;
+                  }
+                });
+
+                if (totalRows === 0) totalRows = 2;
+
                 const rows = [];
-                if (order.groupedMeasurements && Object.keys(order.groupedMeasurements).length > 0) {
-                  Object.keys(order.groupedMeasurements).forEach(part => {
-                    rows.push(
-                      <tr key={`header-${part}`}>
-                        <td colSpan={7} style={{ background: '#d5dbdb', fontWeight: 800, fontSize: 11, textAlign: 'center', color: '#111', padding: '2px 0' }}>{part}</td>
-                      </tr>
-                    );
-                    Object.keys(order.groupedMeasurements[part]).forEach((mName, i) => {
-                      rows.push(
-                        <tr key={`m-${part}-${i}`}>
-                          <td style={{ fontWeight: 600, fontSize: 10 }}>{mName}</td>
-                          {sizesToRender.map((s, idx) => (
-                            <td key={s} colSpan={idx === sizesToRender.length - 1 ? (7 - sizesToRender.length) || 1 : 1} style={{ textAlign: 'center', fontWeight: order.groupedMeasurements[part][mName]?.[s] ? 600 : 400, color: order.groupedMeasurements[part][mName]?.[s] ? '#111' : '#bbb' }}>
-                              {order.groupedMeasurements[part][mName]?.[s] || ''}
-                            </td>
-                          ))}
-                          {sizesToRender.length < 6 && Array.from({ length: Math.max(0, 6 - sizesToRender.length) }).map((_, idx) => <td key={`emp-${part}-${idx}`}></td>)}
-                        </tr>
-                      );
-                    });
-                  });
-                } else if (order.measurements) {
-                  Object.keys(order.measurements).forEach((mName, i) => {
-                    rows.push(
-                      <tr key={`legacy-${i}`}>
-                        <td style={{ fontWeight: 600, fontSize: 10 }}>{mName}</td>
-                        {sizesToRender.map((s, idx) => (
-                          <td key={s} colSpan={idx === sizesToRender.length - 1 ? (7 - sizesToRender.length) || 1 : 1} style={{ textAlign: 'center', fontWeight: order.measurements[mName]?.[s] ? 600 : 400, color: order.measurements[mName]?.[s] ? '#111' : '#bbb' }}>
-                            {order.measurements[mName]?.[s] || ''}
-                          </td>
-                        ))}
-                        {sizesToRender.length < 6 && Array.from({ length: Math.max(0, 6 - sizesToRender.length) }).map((_, idx) => <td key={`emp-legacy-${idx}`}></td>)}
-                      </tr>
-                    );
-                  });
+                let isFirstRow = true;
+
+                if (parts.length === 0) {
+                  rows.push(
+                    <tr key="empty-m1">
+                      <th className="hdr-grey">Size<br/>尺寸</th>
+                      <td colSpan={7} style={{ border: 'none', background: '#fff' }}></td>
+                      <td colSpan={2} rowSpan={2} style={{ textAlign: 'center', verticalAlign: 'middle', padding: '4px', borderLeft: '3px solid #000' }}>
+                           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'center' }}>
+                             {order.productImages?.slice(0, 2).map((img, idx) => <img key={idx} src={img.url} alt="product" crossOrigin="anonymous" style={{ maxHeight: '130px', objectFit: 'contain' }} />)}
+                             {tmImage && <img src={tmImage} alt="trademark" crossOrigin="anonymous" style={{ maxHeight: '60px', objectFit: 'contain', marginTop: order.productImages?.length > 0 ? '10px' : '0' }} />}
+                           </div>
+                      </td>
+                    </tr>
+                  );
+                  rows.push(
+                    <tr key="empty-m2">
+                      <td style={{ height: '40px' }}></td>
+                      <td colSpan={7} style={{ border: 'none', background: '#fff' }}></td>
+                    </tr>
+                  );
+                  return rows;
                 }
+
+                parts.forEach(part => {
+                  const partSizes = sizesToRender.slice(0, 7);
+                  rows.push(
+                    <tr key={`part-hdr-${part}`}>
+                      <th className="hdr-grey">{part}_Size<br/>尺寸</th>
+                      {partSizes.map(s => <th key={s} className="hdr-grey">{s}</th>)}
+                      {partSizes.length < 7 && (
+                        <td colSpan={7 - partSizes.length} style={{ border: 'none', background: '#fff' }}></td>
+                      )}
+                      
+                      {isFirstRow && (
+                        <td colSpan={2} rowSpan={totalRows} style={{ textAlign: 'center', verticalAlign: 'middle', padding: '4px', borderLeft: '3px solid #000' }}>
+                           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'center' }}>
+                             {order.productImages?.slice(0, 2).map((img, idx) => <img key={idx} src={img.url} alt="product" crossOrigin="anonymous" style={{ maxHeight: '130px', objectFit: 'contain' }} />)}
+                             {tmImage && <img src={tmImage} alt="trademark" crossOrigin="anonymous" style={{ maxHeight: '60px', objectFit: 'contain', marginTop: order.productImages?.length > 0 ? '10px' : '0' }} />}
+                           </div>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                  isFirstRow = false;
+
+                  const measurementsObj = order.groupedMeasurements ? order.groupedMeasurements[part] : order.measurements;
+                  Object.keys(measurementsObj || {}).forEach(mName => {
+                    rows.push(
+                      <tr key={`m-${part}-${mName}`}>
+                        <td className="val-bold val-left" style={{ paddingLeft: '6px' }}>{mName}</td>
+                        {partSizes.map(s => (
+                           <td key={s} className="val-center val-bold">{measurementsObj[mName]?.[s] || ''}</td>
+                        ))}
+                        {partSizes.length < 7 && (
+                          <td colSpan={7 - partSizes.length} style={{ border: 'none', background: '#fff' }}></td>
+                        )}
+                      </tr>
+                    );
+                  });
+                });
                 return rows;
               })()}
-            </tbody>
-          </table>
 
-          {/* ═══ ROW 3: FABRICS + COLORS + BARCODES + PACKAGING ═══ */}
-          <table className="inv-table" style={{ marginBottom: 4 }}>
-            <tbody>
+              {/* ═══ FABRICS & CONDITIONS ═══ */}
               <tr>
-                {/* LEFT: Fabric & Materials */}
-                <td style={{ width: '30%', verticalAlign: 'top', padding: 0 }}>
-                  <table className="inv-table" style={{ border: 'none', width: '100%' }}>
-                    <tbody>
-                      <tr><td colSpan={2} className="sec-hdr">{t('export.doc.fabric_kind')}</td></tr>
-                      {order.productFabric && (
-                        <tr><td style={{ fontWeight: 600, fontSize: 8 }}>{order.productFabric}</td><td></td></tr>
-                      )}
-                      {order.materials && order.materials.filter(m => m.name).map((mat, i) => (
-                        <tr key={i}>
-                          <td style={{ fontWeight: 600 }}>{mat.name}</td>
-                          <td style={{ textAlign: 'center', fontWeight: 700 }}>{mat.percentage}%</td>
-                        </tr>
-                      ))}
-                      {/* Barcode Label section removed as requested */}
-                      {/* Packaging Conditions */}
-                      <tr><td colSpan={2} className="sec-hdr" style={{ background: '#555' }}>{t('entry.tabs.packaging') || 'Packaging Conditions'}</td></tr>
-                      <tr>
-                        <td colSpan={2}>
-                          {order.packagingConditions && Object.keys(order.packagingConditions).length > 0 ? (
-                            <div style={{ padding: '4px' }}>
-                              {order.packagingConditions.cond1 && (
-                                <div className="cond-item">{t('export.doc.cond1_text', { val1: order.packagingConditions.cond1_val1 || '-', val2: order.packagingConditions.cond1_val2 || '-' })}</div>
-                              )}
-                              {order.packagingConditions.cond2 && (
-                                <div className="cond-item">{t('export.doc.cond2_text', { val1: order.packagingConditions.cond2_val1 || '-', val2: order.packagingConditions.cond2_val2 || '-' })}</div>
-                              )}
-                              {lookups.packagingConditionsList?.filter(c => order.packagingConditions[c]).map((c, i) => (
-                                <div key={i} className="cond-item">✓ {c}</div>
-                              ))}
-                            </div>
-                          ) : (
-                            <div style={{ textAlign: 'center', color: '#999', fontSize: 9 }}>-</div>
-                          )}
-                        </td>
-                      </tr>
-                      {/* CTN Packaging */}
-                      <tr><td colSpan={2} className="sec-hdr-green">{t('export.doc.ctn_packaging')}</td></tr>
-                      <tr><td style={{ fontSize: 8.5 }}>{t('export.doc.carton_details')}</td><td className="val-bold">{order.cartonQty || '-'} pcs / {order.cartonPackage || '-'}</td></tr>
-                      <tr><td style={{ fontSize: 8.5 }}>{t('export.doc.carton_size')}</td><td className="val-bold">{order.cartonSize || '0'}</td></tr>
-                      <tr><td style={{ fontSize: 8.5 }}>{t('export.doc.plastic_bag')}</td><td className="val-bold">{order.plasticBagSize || '0'}</td></tr>
-                    </tbody>
-                  </table>
+                <th colSpan={5} className="hdr-blue">Fabrics Kind & Material 面料种类&材质</th>
+                <th colSpan={3} className="hdr-blue">Conditions 状况</th>
+                <th colSpan={2} className="hdr-blue">Order Remarks 细节</th>
+              </tr>
+              
+              <tr>
+                <td colSpan={5} className="val-center val-bold bg-light-blue" style={{ fontSize: '14px' }}>
+                  {order.productFabric || 'Chiffon 雪纺'}
                 </td>
-
-                {/* MIDDLE: Colors Distribution */}
-                <td style={{ width: '42%', verticalAlign: 'top', padding: 0 }}>
-                  <table className="inv-table" style={{ border: 'none', width: '100%' }}>
-                    <tbody>
-                      <tr>
-                        <td className="sec-hdr" style={{ width: '18%' }}>{t('export.doc.colors_qty')}</td>
-                        <td className="sec-hdr" style={{ textAlign: 'center' }}>{t('export.doc.colors_zh')}</td>
-                        <td className="sec-hdr" style={{ textAlign: 'center' }}>{t('export.doc.qty_zh')}</td>
-                        <td className="sec-hdr" style={{ textAlign: 'center' }}>{t('export.doc.color_barcodes')}</td>
-                      </tr>
-                      {activeColors.length > 0 ? activeColors.map((colorName, idx) => {
-                        const colorQuery = Array.isArray(lookups.colors) ? lookups.colors.find(c => c.name === colorName) : null;
-                        const hex = colorQuery ? colorQuery.hex : '#ccc';
-                        const rowSum = sizesToRender.reduce((sum, s) => sum + (parseInt(order.colorDistribution[colorName]?.[s]) || 0), 0);
-                        const colorCode = colorName.substring(0, 3).toUpperCase();
-                        return (
-                          <tr key={idx}>
-                            {idx === 0 && <td rowSpan={activeColors.length} style={{ textAlign: 'center', fontWeight: 900, fontSize: 14 }}>{activeColors.length}</td>}
-                            <td><span className="color-dot-c" style={{ backgroundColor: hex }}></span> {colorName}</td>
-                            <td style={{ textAlign: 'center', fontWeight: 700 }}>{rowSum}</td>
-                            <td style={{ textAlign: 'center', fontFamily: 'monospace', fontSize: 9 }}>{order.barcode ? `100${order.barcode}-${colorCode}` : '-'}</td>
-                          </tr>
-                        );
-                      }) : (
-                        <tr><td colSpan={4} style={{ textAlign: 'center', color: '#aaa', padding: 6 }}>No colors specified</td></tr>
-                      )}
-                    </tbody>
-                  </table>
+                <td colSpan={3} rowSpan={3} style={{ verticalAlign: 'top', padding: '8px', fontSize: '12px', color: '#c0392b', fontWeight: 800 }}>
+                  {order.packagingConditions?.cond1 && <div style={{ marginBottom: '4px' }}>* {t('export.doc.cond1_text', { val1: order.packagingConditions.cond1_val1 || '-', val2: order.packagingConditions.cond1_val2 || '-' })}</div>}
+                  {order.packagingConditions?.cond2 && <div style={{ marginBottom: '4px' }}>* {t('export.doc.cond2_text', { val1: order.packagingConditions.cond2_val1 || '-', val2: order.packagingConditions.cond2_val2 || '-' })}</div>}
+                  {lookups.packagingConditionsList?.filter(c => order.packagingConditions?.[c]).map((c, i) => <div key={i} style={{ marginBottom: '4px' }}>* {c}</div>)}
                 </td>
+                <td colSpan={2} rowSpan={3} style={{ verticalAlign: 'top', padding: '8px', fontSize: '12px', fontWeight: 800 }}>
+                  {order.remarks || ''}
+                </td>
+              </tr>
+              
+              <tr>
+                <th className="hdr-light" style={{ width: '13%' }}>Fabric Composition<br/>面料成分</th>
+                {[0,1,2,3].map(i => (
+                  <td key={i} className="val-center val-bold">
+                     {order.materials?.[i]?.name || ''}
+                  </td>
+                ))}
+              </tr>
+              <tr>
+                <th className="hdr-light">Percentage<br/>百分比</th>
+                {[0,1,2,3].map(i => (
+                  <td key={i} className="val-center val-bold">
+                     {order.materials?.[i] ? `${order.materials[i].percentage}%` : ''}
+                  </td>
+                ))}
+              </tr>
 
-                {/* RIGHT: Conditions & Remarks */}
-                <td style={{ width: '28%', verticalAlign: 'top', padding: 3 }}>
-                  {/* Product Images */}
-                  {order.productImages && order.productImages.length > 0 && (
-                    <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginBottom: 6 }}>
-                      {order.productImages.slice(0, 2).map((img, idx) => (
-                        <img key={idx} src={img.url} alt={img.name || `Product ${idx+1}`} crossOrigin="anonymous" style={{ width: 110, height: 130, objectFit: 'cover', borderRadius: 4, border: '1px solid #ccc' }} />
-                      ))}
+              {/* ═══ COLORS QTY & BARCODES ═══ */}
+              <tr>
+                <th colSpan={2} className="hdr-blue">Colors Qty 颜色数量</th>
+                <td colSpan={8} className="val-center val-bold bg-light-blue" style={{ fontSize: '16px' }}>
+                   {activeColors.length || '0'}
+                </td>
+              </tr>
+              
+              {(() => {
+                if (activeColors.length === 0) return null;
+                
+                // Determine number of chunks (each chunk is 6 colors)
+                const CHUNK_SIZE = 6;
+                const numChunks = Math.ceil(activeColors.length / CHUNK_SIZE);
+                const chunks = [];
+                for (let i = 0; i < numChunks; i++) {
+                  const chunkColors = [];
+                  for (let j = 0; j < CHUNK_SIZE; j++) {
+                    const colorIndex = i * CHUNK_SIZE + j;
+                    if (colorIndex < activeColors.length) {
+                      chunkColors.push(activeColors[colorIndex]);
+                    } else {
+                      chunkColors.push(null);
+                    }
+                  }
+                  chunks.push(chunkColors);
+                }
+                
+                const getColSpans = (total, count) => {
+                  if (count === 0) return [];
+                  const base = Math.floor(total / count);
+                  const rem = total % count;
+                  return Array(count).fill(0).map((_, i) => base + (i < rem ? 1 : 0));
+                };
+                
+                return chunks.map((chunk, chunkIndex) => {
+                  const spans = getColSpans(8, chunk.length);
+                  return (
+                    <React.Fragment key={`color-chunk-${chunkIndex}`}>
+                      <tr>
+                        <th colSpan={2} className="hdr-light" style={{ borderTop: chunkIndex > 0 ? '3px solid #000' : '1px solid #000' }}>Colors 颜色</th>
+                        {chunk.map((c, i) => {
+                           let hex = '';
+                           if (c) {
+                             const cInfo = lookups.colors?.find(color => typeof color === 'object' ? color.name === c : color === c);
+                             if (cInfo && typeof cInfo === 'object' && cInfo.hex) hex = cInfo.hex;
+                           }
+                           return (
+                             <td key={`c-${i}`} colSpan={spans[i]} className={c ? "val-center val-bold bg-light-blue" : ""} style={{ borderTop: chunkIndex > 0 ? '3px solid #000' : '1px solid #000' }}>
+                               {c ? (
+                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                                   {hex && <div style={{ width: '14px', height: '14px', borderRadius: '50%', backgroundColor: hex, border: '1px solid #000', flexShrink: 0 }} />}
+                                   <span>{c}</span>
+                                 </div>
+                               ) : ''}
+                             </td>
+                           );
+                        })}
+                      </tr>
+                      <tr>
+                        <th colSpan={2} className="hdr-light">Qty 数量</th>
+                        {chunk.map((c, i) => {
+                           if (!c) return <td key={`q-${i}`} colSpan={spans[i]}></td>;
+                           const qty = sizesToRender.reduce((sum, s) => sum + (parseInt(order.colorDistribution[c]?.[s]) || 0), 0);
+                           return <td key={`q-${i}`} colSpan={spans[i]} className="val-center val-bold bg-light-blue">{qty}</td>;
+                        })}
+                      </tr>
+                      <tr>
+                        <th colSpan={2} className="hdr-light">Color Barcodes<br/>颜色条形码</th>
+                        {chunk.map((c, i) => {
+                           if (!c) return <td key={`b-${i}`} colSpan={spans[i]}></td>;
+                           const code = c.substring(0, 3).toUpperCase();
+                           return <td key={`b-${i}`} colSpan={spans[i]} className="val-center val-bold">
+                              {order.barcode ? `100${order.barcode}-${code}` : '-'}
+                           </td>;
+                        })}
+                      </tr>
+                      <tr>
+                        <th colSpan={2} className="hdr-light" style={{ height: '70px', verticalAlign: 'middle' }}>Fabrics Samples<br/>样板面料</th>
+                        {chunk.map((_, i) => (
+                           <td key={`s-${i}`} colSpan={spans[i]}></td>
+                        ))}
+                      </tr>
+                    </React.Fragment>
+                  );
+                });
+              })()}
+
+              {/* ═══ SIGNATURES ═══ */}
+              <tr>
+                <td colSpan={10} style={{ borderTop: '3px solid #000', padding: '15px 30px', backgroundColor: '#fff' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', paddingTop: '10px' }}>
+                    
+                    <div>
+                      <div style={{ marginBottom: '25px', fontSize: '14px', fontWeight: 800 }}>
+                        Name 名字 <span style={{ color: '#c0392b', marginLeft: '40px' }}>Buyer 买方</span>
+                      </div>
+                      <div style={{ fontSize: '14px', fontWeight: 800, display: 'flex', alignItems: 'flex-end' }}>
+                        Signature 签名 
+                        <div style={{ display: 'inline-block', width: '180px', borderBottom: '2px solid #000', marginLeft: '15px' }}></div>
+                      </div>
                     </div>
-                  )}
-                  {/* Fabric Samples Label */}
-                  <div style={{ padding: '3px 6px', background: '#eaf2f8', border: '1px solid #1a5276', borderRadius: 3, textAlign: 'center', fontSize: 11, fontWeight: 700, color: '#1a5276' }}>
-                    {t('export.doc.fabric_samples')}
+                    
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ color: '#c0392b', fontWeight: 800, fontSize: '14px', marginBottom: '25px' }}>Coordinator 协调员</div>
+                      <div style={{ display: 'inline-block', width: '220px', borderBottom: '2px solid #000' }}></div>
+                    </div>
+                    
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ color: '#c0392b', fontWeight: 800, fontSize: '14px', marginBottom: '25px' }}>Factory 工厂</div>
+                      <div style={{ display: 'inline-block', width: '220px', borderBottom: '2px solid #000' }}></div>
+                    </div>
+
                   </div>
-                  {/* Sale Type */}
-                  {order.saleType && (
-                    <div style={{ marginTop: 6, fontSize: 9, background: '#f3f4f6', padding: '4px', borderRadius: 3, fontWeight: 600, textAlign: 'center' }}>
-                      {t('export.doc.sale_type')} {order.saleType}
-                      {order.saleType === 'جملة وتجزئة' && ` (${order.wholesalePercentage}%/${order.retailPercentage}%)`}
-                    </div>
-                  )}
                 </td>
               </tr>
             </tbody>
           </table>
-
-          {/* ═══ ROW 4: REMARKS ═══ */}
-          {order.remarks && (
-            <div className="remarks-box">
-              <strong>{t('export.doc.order_remarks')}</strong> {order.remarks}
-            </div>
-          )}
-
-          {/* ═══ SIGNATURES ═══ */}
-          <div className="sign-row">
-            <div className="sign-box-c">
-              <div style={{ fontSize: 8, fontWeight: 600, marginBottom: 2 }}>{t('export.doc.name_zh')}</div>
-              <div className="sign-line-c"></div>
-              <div className="sign-label-c">{t('export.doc.buyer_sign')}</div>
-            </div>
-            <div className="sign-box-c">
-              <div style={{ fontSize: 8, fontWeight: 600, marginBottom: 2 }}>{t('export.doc.signature_zh')}</div>
-              <div className="sign-line-c"></div>
-              <div className="sign-label-c">{t('export.doc.coordinator_sign')}</div>
-            </div>
-            <div className="sign-box-c">
-              <div style={{ fontSize: 8, fontWeight: 600, marginBottom: 2 }}>{t('export.doc.signature_zh')}</div>
-              <div className="sign-line-c"></div>
-              <div className="sign-label-c">{t('export.doc.factory_sign')}</div>
-            </div>
-          </div>
-
-          <div style={{ marginTop: 4, fontStyle: 'italic', color: '#aaa', fontSize: 7, textAlign: 'center' }}>
-            {t('export.doc.system_generated')} {order.serialNumber}-{Date.now().toString().slice(-4)}
-          </div>
         </div>
       )}
     </div>

@@ -360,8 +360,8 @@ const AdminDashboard = () => {
       border: '1px solid var(--border-color)',
       boxShadow: '0 4px 16px rgba(0, 0, 0, 0.25)',
       position: 'sticky',
-      top: '1rem',
-      maxHeight: 'calc(100vh - 8rem)',
+      top: '7.5rem',
+      maxHeight: 'calc(100vh - 9rem)',
       overflowY: 'auto',
     },
     sidebarLabel: {

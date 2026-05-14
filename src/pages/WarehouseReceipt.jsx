@@ -8,10 +8,12 @@ import { CustomDateInput } from '../components/CustomDateInput';
 import { englishOnly } from '../utils/textUtils';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { useAuth } from '../context/AuthContext';
 
 const WarehouseReceipt = () => {
   const { t } = useTranslation();
   const { lookups } = useAppData();
+  const { hasPermission } = useAuth();
   const [orders, setOrders] = useState([]);
   const [receivings, setReceivings] = useState([]);
   const [filteredData, setFilteredData] = useState([]);
@@ -368,12 +370,15 @@ const WarehouseReceipt = () => {
             {t('warehouse.results.preview')} <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', fontWeight: 'normal' }}>({filteredData.length} {t('warehouse.results.models_count')})</span>
            </h3>
            <div style={{ display: 'flex', gap: '1rem' }}>
+              {hasPermission('warehouse', 'export') && (<>
               <button className="btn btn-outline" onClick={() => window.print()} style={{ color: 'var(--text-main)', borderColor: 'var(--border-color)' }}>
                   <Printer size={20} /> {t('warehouse.results.print_btn')}
               </button>
               <button className="btn" onClick={exportToPDF} style={{ backgroundColor: '#ef4444', color: 'white', boxShadow: '0 4px 15px rgba(239, 68, 68, 0.3)' }}>
                   <Download size={20} /> {t('warehouse.results.download_pdf')}
               </button>
+              </>
+              )}
            </div>
         </div>
       )}

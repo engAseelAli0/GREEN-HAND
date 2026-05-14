@@ -11,6 +11,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { analyzeOrder, buildOperationalIntelligence } from '../utils/orderIntelligence';
 import { activitySummary, formatActivityTime } from '../utils/activityLog';
+import { useAuth } from '../context/AuthContext';
 
 const calculateTotalPiecesCount = (orderData) => {
   if (!orderData) return 0;
@@ -29,6 +30,7 @@ const calculateTotalPiecesCount = (orderData) => {
 const ReportsPortal = () => {
   const { t } = useTranslation();
   const { lookups } = useAppData();
+  const { hasPermission } = useAuth();
   const [orders, setOrders] = useState([]);
   const [receivings, setReceivings] = useState([]);
   const [filteredOrders, setFilteredOrders] = useState([]);
@@ -571,12 +573,16 @@ const ReportsPortal = () => {
           <p style={{ color: 'var(--text-muted)' }}>{t('reports.subtitle')}</p>
         </div>
         <div style={{ display: 'flex', gap: '1rem' }}>
-          <button className="btn" onClick={exportToExcel} style={{ backgroundColor: '#10b981', color: 'white', boxShadow: '0 4px 15px rgba(16, 185, 129, 0.3)' }}>
-            <Download size={20} /> {t('reports.export_excel')}
-          </button>
-          <button className="btn" onClick={exportToPDF} style={{ backgroundColor: '#ef4444', color: 'white', boxShadow: '0 4px 15px rgba(239, 68, 68, 0.3)' }}>
-            <Printer size={20} /> {t('reports.export_pdf')}
-          </button>
+          {hasPermission('reports', 'export') && (
+            <>
+              <button className="btn" onClick={exportToExcel} style={{ backgroundColor: '#10b981', color: 'white', boxShadow: '0 4px 15px rgba(16, 185, 129, 0.3)' }}>
+                <Download size={20} /> {t('reports.export_excel')}
+              </button>
+              <button className="btn" onClick={exportToPDF} style={{ backgroundColor: '#ef4444', color: 'white', boxShadow: '0 4px 15px rgba(239, 68, 68, 0.3)' }}>
+                <Printer size={20} /> {t('reports.export_pdf')}
+              </button>
+            </>
+          )}
         </div>
       </div>
 

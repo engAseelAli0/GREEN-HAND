@@ -6,7 +6,8 @@ import { useTranslation } from 'react-i18next';
 import LanguageSelector from './components/LanguageSelector';
 import ThemeToggle from './components/ThemeToggle';
 import { useAuth } from './context/AuthContext';
-import { LogOut, User } from 'lucide-react';
+import { LogOut, User, Key } from 'lucide-react';
+import ChangePasswordModal from './components/ChangePasswordModal';
 
 const NAV_PAGES = [
   { path: '/entry', labelKey: 'nav.entry', icon: Edit3, color: 'var(--accent-color)' },
@@ -26,6 +27,7 @@ const AppLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [showNavDropdown, setShowNavDropdown] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
   const navDropdownRef = useRef(null);
   const { user, logout, hasAccess } = useAuth();
 
@@ -76,6 +78,9 @@ const AppLayout = () => {
                 <User size={16} />
                 <span style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>{user.username}</span>
               </div>
+              <button onClick={() => setShowChangePassword(true)} className="btn btn-outline" style={{ padding: '0.4rem 0.6rem', color: 'var(--accent-color)', borderColor: 'rgba(212, 175, 55, 0.3)' }} title="تغيير كلمة المرور">
+                <Key size={16} />
+              </button>
               <button onClick={() => { logout(); navigate('/login'); }} className="btn btn-outline" style={{ padding: '0.4rem 0.6rem', color: '#ef4444', borderColor: '#ef4444' }} title={t('auth.logout')}>
                 <LogOut size={16} />
               </button>
@@ -211,6 +216,9 @@ const AppLayout = () => {
           },
         }}
       />
+      {showChangePassword && user && (
+        <ChangePasswordModal user={user} onClose={() => setShowChangePassword(false)} />
+      )}
     </div>
   );
 };

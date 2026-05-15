@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import * as fabric from 'fabric';
 import { 
   X, Save, Type, Square, Circle as CircleIcon, 
@@ -8,6 +9,7 @@ import {
 } from 'lucide-react';
 
 const ImageEditorModal = ({ isOpen, imageFile, onSave, onCancel }) => {
+  const { t } = useTranslation();
   const canvasRef = useRef(null);
   const fabricCanvas = useRef(null);
   const containerRef = useRef(null);
@@ -174,7 +176,7 @@ const ImageEditorModal = ({ isOpen, imageFile, onSave, onCancel }) => {
   };
 
   const addText = () => {
-    const text = new fabric.IText('اكتب هنا...', {
+    const text = new fabric.IText(t('image_editor.type_here'), {
       left: 200,
       top: 200,
       fontFamily: 'Tajawal',
@@ -233,7 +235,7 @@ const ImageEditorModal = ({ isOpen, imageFile, onSave, onCancel }) => {
   };
 
   const clearAll = () => {
-    if (window.confirm('هل أنت متأكد من مسح جميع الإضافات والتعديلات؟')) {
+    if (window.confirm(t('image_editor.confirm_clear'))) {
       const canvas = fabricCanvas.current;
       const objects = canvas.getObjects();
       // Remove all objects EXCEPT the base image (which has selectable: false)
@@ -353,7 +355,7 @@ const ImageEditorModal = ({ isOpen, imageFile, onSave, onCancel }) => {
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
             <Layers size={20} className="text-gradient" />
-            <h3 style={{ margin: 0, fontSize: '1.2rem' }}>محرر الصور</h3>
+            <h3 style={{ margin: 0, fontSize: '1.2rem' }}>{t('image_editor.title')}</h3>
           </div>
           <button onClick={onCancel} className="btn-outline" style={{ padding: '0.5rem', borderRadius: '50%' }}>
             <X size={20} />
@@ -366,19 +368,19 @@ const ImageEditorModal = ({ isOpen, imageFile, onSave, onCancel }) => {
           justifyContent: 'center', borderBottom: '1px solid var(--border-color)',
           background: 'var(--surface-highlight)'
         }}>
-          <ToolBtn active={activeTool === 'select'} onClick={() => setActiveTool('select')} icon={<MousePointer2 size={18} />} label="تحديد" />
-          <ToolBtn active={activeTool === 'pencil'} onClick={() => setActiveTool('pencil')} icon={<Pencil size={18} />} label="قلم" />
-          <ToolBtn onClick={addRect} icon={<Square size={18} />} label="مربع" />
-          <ToolBtn onClick={addCircle} icon={<CircleIcon size={18} />} label="دائرة" />
-          <ToolBtn onClick={addText} icon={<Type size={18} />} label="نص" />
-          <ToolBtn onClick={() => overlayInputRef.current?.click()} icon={<AddImageIcon size={18} />} label="إضافة صورة" />
-          <ToolBtn onClick={rotateImage} icon={<RotateCw size={18} />} label="تدوير" />
-          <ToolBtn active={showFilters} onClick={() => setShowFilters(!showFilters)} icon={<Sun size={18} />} label="الفلاتر" />
+          <ToolBtn active={activeTool === 'select'} onClick={() => setActiveTool('select')} icon={<MousePointer2 size={18} />} label={t('image_editor.select')} />
+          <ToolBtn active={activeTool === 'pencil'} onClick={() => setActiveTool('pencil')} icon={<Pencil size={18} />} label={t('image_editor.pencil')} />
+          <ToolBtn onClick={addRect} icon={<Square size={18} />} label={t('image_editor.square')} />
+          <ToolBtn onClick={addCircle} icon={<CircleIcon size={18} />} label={t('image_editor.circle')} />
+          <ToolBtn onClick={addText} icon={<Type size={18} />} label={t('image_editor.text')} />
+          <ToolBtn onClick={() => overlayInputRef.current?.click()} icon={<AddImageIcon size={18} />} label={t('image_editor.add_image')} />
+          <ToolBtn onClick={rotateImage} icon={<RotateCw size={18} />} label={t('image_editor.rotate')} />
+          <ToolBtn active={showFilters} onClick={() => setShowFilters(!showFilters)} icon={<Sun size={18} />} label={t('image_editor.filters')} />
           
           <div style={{ width: '1px', height: '24px', background: 'var(--border-color)', margin: '0 0.5rem', alignSelf: 'center' }} />
           
-          <ToolBtn onClick={undo} icon={<Undo2 size={18} />} label="تراجع" disabled={!canUndo} />
-          <ToolBtn onClick={redo} icon={<Redo2 size={18} />} label="إعادة" disabled={!canRedo} />
+          <ToolBtn onClick={undo} icon={<Undo2 size={18} />} label={t('image_editor.undo')} disabled={!canUndo} />
+          <ToolBtn onClick={redo} icon={<Redo2 size={18} />} label={t('image_editor.redo')} disabled={!canRedo} />
           <input 
             type="file" 
             ref={overlayInputRef} 
@@ -415,7 +417,7 @@ const ImageEditorModal = ({ isOpen, imageFile, onSave, onCancel }) => {
                   background: 'linear-gradient(45deg, red, yellow, green, cyan, blue, magenta, red)',
                   border: '2px solid rgba(255,255,255,0.3)'
                 }}
-                title="لون مخصص"
+                title={t('image_editor.custom_color')}
               />
               <Pipette size={14} style={{ position: 'absolute', pointerEvents: 'none', right: '9px', color: '#000', filter: 'drop-shadow(0 0 2px #fff)' }} />
             </div>
@@ -423,8 +425,8 @@ const ImageEditorModal = ({ isOpen, imageFile, onSave, onCancel }) => {
 
           <div style={{ width: '1px', height: '24px', background: 'var(--border-color)', margin: '0 0.5rem', alignSelf: 'center' }} />
           
-          <ToolBtn onClick={deleteSelected} icon={<Trash2 size={18} />} label="مسح العنصر" variant="danger" />
-          <ToolBtn onClick={clearAll} icon={<RotateCcw size={18} />} label="مسح الكل" variant="danger" />
+          <ToolBtn onClick={deleteSelected} icon={<Trash2 size={18} />} label={t('image_editor.delete_selected')} variant="danger" />
+          <ToolBtn onClick={clearAll} icon={<RotateCcw size={18} />} label={t('image_editor.clear_all')} variant="danger" />
         </div>
 
         {/* Filters Panel */}
@@ -435,12 +437,12 @@ const ImageEditorModal = ({ isOpen, imageFile, onSave, onCancel }) => {
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
               <Sun size={18} className="text-muted" />
-              <span style={{ fontSize: '0.85rem' }}>السطوع:</span>
+              <span style={{ fontSize: '0.85rem' }}>{t('image_editor.brightness')}:</span>
               <input type="range" min="-100" max="100" value={brightness} onChange={(e) => applyFilters('brightness', parseInt(e.target.value))} />
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
               <Contrast size={18} className="text-muted" />
-              <span style={{ fontSize: '0.85rem' }}>التباين:</span>
+              <span style={{ fontSize: '0.85rem' }}>{t('image_editor.contrast')}:</span>
               <input type="range" min="-100" max="100" value={contrast} onChange={(e) => applyFilters('contrast', parseInt(e.target.value))} />
             </div>
           </div>
@@ -451,7 +453,7 @@ const ImageEditorModal = ({ isOpen, imageFile, onSave, onCancel }) => {
           flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
           background: '#0a0a0a', position: 'relative', overflow: 'auto'
         }}>
-          {!isLoaded && <div className="text-muted">جاري تحميل المحرر...</div>}
+          {!isLoaded && <div className="text-muted">{t('image_editor.loading')}</div>}
           <canvas ref={canvasRef} />
         </div>
 
@@ -461,10 +463,10 @@ const ImageEditorModal = ({ isOpen, imageFile, onSave, onCancel }) => {
           gap: '1rem', borderTop: '1px solid var(--border-color)',
           background: 'rgba(255, 255, 255, 0.05)'
         }}>
-          <button onClick={onCancel} className="btn-outline" style={{ minWidth: '100px' }}>إلغاء</button>
+          <button onClick={onCancel} className="btn-outline" style={{ minWidth: '100px' }}>{t('auth.cancel')}</button>
           <button onClick={handleSave} className="btn-accent" style={{ minWidth: '140px', gap: '0.5rem' }}>
             <Save size={18} />
-            حفظ التعديلات
+            {t('image_editor.save')}
           </button>
         </div>
       </div>

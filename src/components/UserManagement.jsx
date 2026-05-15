@@ -56,7 +56,7 @@ const UserManagement = () => {
       setUsers(data || []);
     } catch (error) {
       console.error('Error fetching users:', error);
-      toast.error('Failed to load users');
+      toast.error(t('user_mgmt.messages.loading_users_error') || 'Failed to load users');
     } finally {
       setLoading(false);
     }
@@ -97,7 +97,7 @@ const UserManagement = () => {
       fetchUsers();
       if (editId === id) resetForm();
     } catch (error) {
-      toast.error('Error deleting user');
+      toast.error(t('auth.delete_error') || 'Error deleting user');
       console.error(error);
     }
   };
@@ -108,10 +108,10 @@ const UserManagement = () => {
       const newPermissions = { ...user.permissions, __is_suspended: !isCurrentlySuspended };
       const { error } = await supabase.from('system_users').update({ permissions: newPermissions }).eq('id', user.id);
       if (error) throw error;
-      toast.success(!isCurrentlySuspended ? 'تم إيقاف الحساب مؤقتاً' : 'تم تنشيط الحساب');
+      toast.success(!isCurrentlySuspended ? t('user_mgmt.messages.suspend_success') : t('user_mgmt.messages.activate_success'));
       fetchUsers();
     } catch (error) {
-      toast.error('حدث خطأ أثناء تغيير حالة الحساب');
+      toast.error(t('user_mgmt.messages.status_error'));
       console.error(error);
     }
   };
@@ -119,7 +119,7 @@ const UserManagement = () => {
   const handleSave = async (e) => {
     e.preventDefault();
     if (!formData.username) {
-      toast.error('Username is required');
+      toast.error(t('user_mgmt.messages.username_required'));
       return;
     }
 
@@ -159,7 +159,7 @@ const UserManagement = () => {
         toast.success(t('auth.user_saved'));
       } else {
         if (!formData.password) {
-           toast.error('Password is required for new users');
+           toast.error(t('user_mgmt.messages.password_required'));
            return;
         }
         
@@ -197,7 +197,7 @@ const UserManagement = () => {
       resetForm();
       fetchUsers();
     } catch (error) {
-      toast.error(error.message || 'Error saving user');
+      toast.error(error.message || t('user_mgmt.messages.save_error'));
       console.error(error);
     }
   };
@@ -253,7 +253,7 @@ const UserManagement = () => {
   if (loading) return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '4rem', gap: '1rem' }}>
       <div style={{ width: '40px', height: '40px', borderRadius: '50%', border: '3px solid var(--border-color)', borderTopColor: 'var(--accent-color)', animation: 'spin 1s linear infinite' }} />
-      <span style={{ color: 'var(--text-muted)' }}>جاري تحميل المستخدمين...</span>
+      <span style={{ color: 'var(--text-muted)' }}>{t('user_mgmt.loading_users')}</span>
     </div>
   );
 
@@ -276,10 +276,10 @@ const UserManagement = () => {
             <div style={{ padding: '0.5rem', background: 'var(--accent-color)', borderRadius: '12px', color: '#000', display: 'flex' }}>
               <Shield size={24} />
             </div>
-            إدارة صلاحيات النظام
+            {t('user_mgmt.title')}
           </h2>
           <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-            التحكم الكامل في المستخدمين، الصلاحيات، ومستويات الوصول للشاشات
+            {t('user_mgmt.subtitle')}
           </p>
         </div>
         <button 
@@ -288,7 +288,7 @@ const UserManagement = () => {
           style={{ padding: '0.75rem 1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', borderRadius: '12px' }}
         >
           <Plus size={18} />
-          <span>مستخدم جديد</span>
+          <span>{t('user_mgmt.new_user')}</span>
         </button>
       </div>
 
@@ -311,11 +311,11 @@ const UserManagement = () => {
               {isEditing ? <Edit2 size={20} /> : <User size={20} />}
             </div>
             <h3 style={{ margin: 0, fontSize: '1.2rem', color: 'var(--text-strong)' }}>
-              {isEditing ? `تعديل المستخدم: ${formData.username}` : 'إضافة مستخدم جديد'}
+              {isEditing ? t('user_mgmt.edit_user_title', { name: formData.username }) : t('user_mgmt.add_new_user')}
             </h3>
             {isEditing && (
               <span style={{ marginRight: 'auto', padding: '0.25rem 0.75rem', background: 'rgba(212, 175, 55, 0.1)', color: 'var(--accent-color)', borderRadius: '50px', fontSize: '0.8rem', fontWeight: 'bold' }}>
-                وضع التعديل
+                {t('user_mgmt.edit_mode')}
               </span>
             )}
           </div>
@@ -326,7 +326,7 @@ const UserManagement = () => {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 <label style={{ fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  <Fingerprint size={14} /> اسم المستخدم
+                  <Fingerprint size={14} /> {t('user_mgmt.username_label')}
                 </label>
                 <div style={{ position: 'relative' }}>
                   <input
@@ -335,7 +335,7 @@ const UserManagement = () => {
                     style={{ paddingRight: '2.5rem', background: 'var(--bg-color)', height: '45px', fontSize: '1rem' }}
                     value={formData.username}
                     onChange={e => setFormData({...formData, username: e.target.value})}
-                    placeholder="ادخل اسم المستخدم"
+                    placeholder={t('user_mgmt.username_placeholder')}
                     required
                   />
                   <User size={18} style={{ position: 'absolute', right: '0.8rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
@@ -344,7 +344,7 @@ const UserManagement = () => {
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 <label style={{ fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  <Key size={14} /> كلمة المرور {isEditing && <span style={{ fontSize: '0.7rem', color: 'var(--accent-color)', fontWeight: 'normal' }}>(اتركه فارغاً لعدم التغيير)</span>}
+                  <Key size={14} /> {t('user_mgmt.password_label')} {isEditing && <span style={{ fontSize: '0.7rem', color: 'var(--accent-color)', fontWeight: 'normal' }}>{t('user_mgmt.password_hint')}</span>}
                 </label>
                 <div style={{ position: 'relative' }}>
                   <input
@@ -353,7 +353,7 @@ const UserManagement = () => {
                     style={{ paddingRight: '2.5rem', background: 'var(--bg-color)', height: '45px', fontSize: '1rem', fontFamily: 'monospace' }}
                     value={formData.password}
                     onChange={e => setFormData({...formData, password: e.target.value})}
-                    placeholder={isEditing ? '••••••••' : 'كلمة المرور القوية'}
+                    placeholder={isEditing ? '••••••••' : t('user_mgmt.password_placeholder')}
                     required={!isEditing}
                   />
                   <Lock size={18} style={{ position: 'absolute', right: '0.8rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
@@ -364,7 +364,7 @@ const UserManagement = () => {
             {/* Role Selection */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               <label style={{ fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                <Shield size={14} /> دور النظام (Role)
+                <Shield size={14} /> {t('user_mgmt.role_label')}
               </label>
               <div style={{ position: 'relative' }}>
                 <select 
@@ -389,16 +389,16 @@ const UserManagement = () => {
             }}>
               <div style={{ padding: '1rem 1.25rem', background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <Shield size={16} color="var(--accent-color)" /> الصلاحيات المتقدمة
+                  <Shield size={16} color="var(--accent-color)" /> {t('user_mgmt.advanced_permissions')}
                 </span>
               </div>
 
               {formData.role === 'admin' ? (
                 <div style={{ padding: '3rem 2rem', textAlign: 'center', background: 'rgba(34, 197, 94, 0.05)' }}>
                   <Shield size={48} color="#22c55e" style={{ margin: '0 auto 1rem', opacity: 0.8 }} />
-                  <h4 style={{ color: '#22c55e', marginBottom: '0.5rem' }}>صلاحيات مدير النظام</h4>
+                  <h4 style={{ color: '#22c55e', marginBottom: '0.5rem' }}>{t('user_mgmt.admin_perms_title')}</h4>
                   <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', margin: 0 }}>
-                    يمتلك هذا الدور وصولاً كاملاً وتلقائياً لجميع شاشات ووظائف النظام دون قيود.
+                    {t('user_mgmt.admin_perms_desc')}
                   </p>
                 </div>
               ) : (
@@ -427,7 +427,7 @@ const UserManagement = () => {
                           
                           {/* Master View Toggle */}
                           <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '0.5rem' }}>
-                            <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: isVisible ? 'var(--accent-color)' : 'var(--text-muted)' }}>{isVisible ? 'إتاحة الشاشة' : 'حجب الشاشة'}</span>
+                            <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: isVisible ? 'var(--accent-color)' : 'var(--text-muted)' }}>{isVisible ? t('user_mgmt.allow_screen') : t('user_mgmt.block_screen')}</span>
                             <div style={{ 
                               width: '40px', height: '22px', borderRadius: '20px', 
                               background: isVisible ? 'var(--accent-color)' : 'var(--border-color)',
@@ -450,11 +450,11 @@ const UserManagement = () => {
                           pointerEvents: isVisible ? 'auto' : 'none',
                           transition: 'opacity 0.3s'
                         }}>
-                          <CustomCheckbox checked={perms.view} onChange={() => togglePermission(page.id, 'view')} color="var(--accent-color)" icon={Eye} label="عرض" />
-                          <CustomCheckbox checked={perms.add} onChange={() => togglePermission(page.id, 'add')} color="#10b981" icon={Plus} label="إضافة" />
-                          <CustomCheckbox checked={perms.edit} onChange={() => togglePermission(page.id, 'edit')} color="#f59e0b" icon={Edit} label="تعديل" />
-                          <CustomCheckbox checked={perms.delete} onChange={() => togglePermission(page.id, 'delete')} color="#ef4444" icon={Trash} label="حذف" />
-                          <CustomCheckbox checked={perms.export} onChange={() => togglePermission(page.id, 'export')} color="#0ea5e9" icon={Download} label="تصدير" />
+                          <CustomCheckbox checked={perms.view} onChange={() => togglePermission(page.id, 'view')} color="var(--accent-color)" icon={Eye} label={t('user_mgmt.view')} />
+                          <CustomCheckbox checked={perms.add} onChange={() => togglePermission(page.id, 'add')} color="#10b981" icon={Plus} label={t('user_mgmt.add')} />
+                          <CustomCheckbox checked={perms.edit} onChange={() => togglePermission(page.id, 'edit')} color="#f59e0b" icon={Edit} label={t('user_mgmt.edit')} />
+                          <CustomCheckbox checked={perms.delete} onChange={() => togglePermission(page.id, 'delete')} color="#ef4444" icon={Trash} label={t('user_mgmt.delete')} />
+                          <CustomCheckbox checked={perms.export} onChange={() => togglePermission(page.id, 'export')} color="#0ea5e9" icon={Download} label={t('user_mgmt.export')} />
                         </div>
                       </div>
                     );
@@ -467,15 +467,15 @@ const UserManagement = () => {
             <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem' }}>
               <button type="submit" className="btn btn-accent" style={{ flex: 2, height: '48px', fontSize: '1.05rem', fontWeight: 'bold' }}>
                 {isEditing ? (
-                  <><Save size={20} /> حفظ التعديلات</>
+                  <><Save size={20} /> {t('user_mgmt.save_changes')}</>
                 ) : (
-                  <><CheckCircle size={20} /> إنشاء الحساب</>
+                  <><CheckCircle size={20} /> {t('user_mgmt.create_account')}</>
                 )}
               </button>
               
               {isEditing && (
                 <button type="button" onClick={resetForm} className="btn btn-outline" style={{ flex: 1, height: '48px' }}>
-                  <X size={20} /> إلغاء
+                  <X size={20} /> {t('auth.cancel')}
                 </button>
               )}
             </div>
@@ -489,15 +489,15 @@ const UserManagement = () => {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 0.5rem' }}>
             <h3 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-strong)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <User size={18} color="var(--text-muted)" />
-              قائمة المستخدمين ({users.length})
+              {t('user_mgmt.users_list')} ({users.length})
             </h3>
           </div>
 
           {users.length === 0 ? (
             <div style={{ padding: '4rem 2rem', textAlign: 'center', background: 'var(--surface-color)', borderRadius: 'var(--radius-lg)', border: '1px dashed var(--border-color)' }}>
               <AlertTriangle size={48} color="var(--text-muted)" style={{ margin: '0 auto 1rem', opacity: 0.5 }} />
-              <h4 style={{ color: 'var(--text-main)', marginBottom: '0.5rem' }}>لا يوجد مستخدمين</h4>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>ابدأ بإضافة مستخدمين جدد للنظام لتحديد صلاحياتهم.</p>
+              <h4 style={{ color: 'var(--text-main)', marginBottom: '0.5rem' }}>{t('user_mgmt.no_users')}</h4>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>{t('user_mgmt.no_users_desc')}</p>
             </div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1rem' }}>
@@ -557,7 +557,7 @@ const UserManagement = () => {
                               </span>
                               {isSuspended && (
                                 <span style={{ fontSize: '0.7rem', color: '#ef4444', background: 'rgba(239, 68, 68, 0.1)', padding: '0.15rem 0.5rem', borderRadius: '20px', fontWeight: 'bold' }}>
-                                  موقوف
+                                  {t('user_mgmt.suspended')}
                                 </span>
                               )}
                             </div>
@@ -577,7 +577,7 @@ const UserManagement = () => {
                             fontSize: '0.85rem'
                           }}
                         >
-                          <Edit2 size={16} /> تعديل
+                          <Edit2 size={16} /> {t('user_mgmt.edit')}
                         </button>
                         
                         {user.username !== 'admin' && (
@@ -590,7 +590,7 @@ const UserManagement = () => {
                                 color: isSuspended ? '#10b981' : '#f59e0b',
                                 display: 'flex', justifyContent: 'center', alignItems: 'center'
                               }} 
-                              title={isSuspended ? 'تنشيط الحساب' : 'إيقاف الحساب'}
+                              title={isSuspended ? t('user_mgmt.activate_account') : t('user_mgmt.suspend_account')}
                             >
                               {isSuspended ? <PlayCircle size={18} /> : <PauseCircle size={18} />}
                             </button>

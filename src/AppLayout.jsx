@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { Settings, Edit3, Printer, Truck, Factory, Barcode, FileSpreadsheet, Package, ChevronDown } from 'lucide-react';
-import { Toaster } from 'react-hot-toast';
+import { Settings, Edit3, Printer, Truck, Factory, Barcode, FileSpreadsheet, Package, ChevronDown, BarChart3, ClipboardList, Search } from 'lucide-react';
+import { Toaster, toast } from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
 import LanguageSelector from './components/LanguageSelector';
 import ThemeToggle from './components/ThemeToggle';
@@ -9,18 +9,41 @@ import { useAuth } from './context/AuthContext';
 import { LogOut, User, Key } from 'lucide-react';
 import ChangePasswordModal from './components/ChangePasswordModal';
 
-const NAV_PAGES = [
-  { path: '/entry', labelKey: 'nav.entry', icon: Edit3, color: 'var(--accent-color)' },
-  { path: '/export', labelKey: 'nav.export', icon: Printer, color: '#60a5fa' },
-  { path: '/admin', labelKey: 'nav.admin', icon: Settings, color: '#a78bfa' },
-  { path: '/receiving', labelKey: 'nav.receiving', icon: Truck, color: '#4ade80' },
-  { path: '/factory-portal', labelKey: 'nav.factory_portal', icon: Factory, color: '#d4af37' },
-  { path: '/barcodes', labelKey: 'nav.barcodes', icon: Barcode, color: '#fb923c' },
-  { path: '/reports', labelKey: 'nav.reports', icon: Printer, color: '#ec4899' },
-  { path: '/shipping-invoice', labelKey: 'nav.shipping_invoice', icon: FileSpreadsheet, color: '#06b6d4' },
-  { path: '/packing-list', labelKey: 'nav.packing_list', icon: Package, color: '#10b981' },
-  { path: '/warehouse-receipt', labelKey: 'nav.warehouse_receipt', icon: FileSpreadsheet, color: '#f59e0b' },
+const NAV_GROUPS = [
+  {
+    labelKey: 'groups.orders.title',
+    pages: [
+      { path: '/entry', labelKey: 'nav.entry', icon: Edit3, color: 'var(--accent-color)' },
+      { path: '/export', labelKey: 'nav.export', icon: Printer, color: '#60a5fa' },
+    ]
+  },
+  {
+    labelKey: 'groups.factory.title',
+    pages: [
+      { path: '/receiving', labelKey: 'nav.receiving', icon: Truck, color: '#4ade80' },
+      { path: '/factory-portal', labelKey: 'nav.factory_portal', icon: Factory, color: '#d4af37' },
+    ]
+  },
+  {
+    labelKey: 'groups.reports.title',
+    pages: [
+      { path: '/reports', labelKey: 'nav.reports', icon: Printer, color: '#ec4899' },
+      { path: '/shipping-invoice', labelKey: 'nav.shipping_invoice', icon: FileSpreadsheet, color: '#06b6d4' },
+      { path: '/packing-list', labelKey: 'nav.packing_list', icon: Package, color: '#10b981' },
+      { path: '/warehouse-receipt', labelKey: 'nav.warehouse_receipt', icon: FileSpreadsheet, color: '#f59e0b' },
+      { path: '/barcodes', labelKey: 'nav.barcodes', icon: Barcode, color: '#fb923c' },
+    ]
+  },
+  {
+    labelKey: 'groups.admin.title',
+    pages: [
+      { path: '/admin', labelKey: 'nav.admin', icon: Settings, color: '#a78bfa' },
+    ]
+  },
 ];
+
+// Flatten for backward compatibility
+const NAV_PAGES = NAV_GROUPS.flatMap(g => g.pages);
 
 const AppLayout = () => {
   const { t } = useTranslation();
@@ -32,6 +55,14 @@ const AppLayout = () => {
   const { user, logout, hasAccess } = useAuth();
 
   const permittedPages = NAV_PAGES.filter(page => hasAccess(page.path));
+
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -78,7 +109,7 @@ const AppLayout = () => {
                 <User size={16} />
                 <span style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>{user.username}</span>
               </div>
-              <button onClick={() => setShowChangePassword(true)} className="btn btn-outline" style={{ padding: '0.4rem 0.6rem', color: 'var(--accent-color)', borderColor: 'rgba(212, 175, 55, 0.3)' }} title="تغيير كلمة المرور">
+              <button onClick={() => setShowChangePassword(true)} className="btn btn-outline" style={{ padding: '0.4rem 0.6rem', color: 'var(--accent-color)', borderColor: 'rgba(212, 175, 55, 0.3)' }} title={t('auth.change_password')}>
                 <Key size={16} />
               </button>
               <button onClick={() => { logout(); navigate('/login'); }} className="btn btn-outline" style={{ padding: '0.4rem 0.6rem', color: '#ef4444', borderColor: '#ef4444' }} title={t('auth.logout')}>
@@ -125,44 +156,55 @@ const AppLayout = () => {
                     <div style={{ padding: '0.6rem 1rem', borderBottom: '1px solid var(--border-color)', backgroundColor: 'var(--surface-highlight)', fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>
                       {t('quick_jump')}
                     </div>
-                    {permittedPages.map((page) => {
-                      const Icon = page.icon;
-                      const isActive = location.pathname === page.path;
+                    {NAV_GROUPS.map((group, gi) => {
+                      const groupPages = group.pages.filter(p => hasAccess(p.path));
+                      if (groupPages.length === 0) return null;
                       return (
-                        <div
-                          key={page.path}
-                          onClick={() => {
-                            navigate(page.path);
-                            setShowNavDropdown(false);
-                          }}
-                          style={{
-                            display: 'flex', alignItems: 'center', gap: '0.7rem',
-                            padding: '0.65rem 1rem', cursor: 'pointer',
-                            transition: 'background-color 0.15s',
-                            backgroundColor: isActive ? 'rgba(212, 175, 55, 0.1)' : 'transparent',
-                            borderRight: isActive ? '3px solid var(--accent-color)' : '3px solid transparent',
-                            opacity: isActive ? 0.6 : 1,
-                            pointerEvents: isActive ? 'none' : 'auto'
-                          }}
-                          onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)'; }}
-                          onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.backgroundColor = 'transparent'; }}
-                        >
-                          <div style={{
-                            width: '30px', height: '30px', borderRadius: '8px',
-                            backgroundColor: `${page.color}15`,
-                            border: `1px solid ${page.color}30`,
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            flexShrink: 0
-                          }}>
-                            <Icon size={16} color={page.color} />
+                        <div key={gi}>
+                          <div style={{ padding: '0.45rem 1rem', fontSize: '0.7rem', fontWeight: '700', color: 'var(--accent-color)', textTransform: 'uppercase', letterSpacing: '0.05em', backgroundColor: 'rgba(212, 175, 55, 0.04)', borderTop: gi > 0 ? '1px solid var(--border-color)' : 'none' }}>
+                            {t(group.labelKey)}
                           </div>
-                          <span style={{ 
-                            fontSize: '0.88rem', fontWeight: isActive ? 'bold' : '500', 
-                            color: isActive ? 'var(--accent-color)' : 'var(--text-main)' 
-                          }}>
-                            {t(page.labelKey)}
-                            {isActive && <span style={{ fontSize: '0.75rem', marginRight: '0.4rem', opacity: 0.7 }}> {t('you_are_here')}</span>}
-                          </span>
+                          {groupPages.map((page) => {
+                            const Icon = page.icon;
+                            const isActive = location.pathname === page.path;
+                            return (
+                              <div
+                                key={page.path}
+                                onClick={() => {
+                                  navigate(page.path);
+                                  setShowNavDropdown(false);
+                                }}
+                                style={{
+                                  display: 'flex', alignItems: 'center', gap: '0.7rem',
+                                  padding: '0.55rem 1rem 0.55rem 1.4rem', cursor: 'pointer',
+                                  transition: 'background-color 0.15s',
+                                  backgroundColor: isActive ? 'rgba(212, 175, 55, 0.1)' : 'transparent',
+                                  borderRight: isActive ? '3px solid var(--accent-color)' : '3px solid transparent',
+                                  opacity: isActive ? 0.6 : 1,
+                                  pointerEvents: isActive ? 'none' : 'auto'
+                                }}
+                                onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)'; }}
+                                onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.backgroundColor = 'transparent'; }}
+                              >
+                                <div style={{
+                                  width: '28px', height: '28px', borderRadius: '7px',
+                                  backgroundColor: `${page.color}15`,
+                                  border: `1px solid ${page.color}30`,
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  flexShrink: 0
+                                }}>
+                                  <Icon size={14} color={page.color} />
+                                </div>
+                                <span style={{ 
+                                  fontSize: '0.84rem', fontWeight: isActive ? 'bold' : '500', 
+                                  color: isActive ? 'var(--accent-color)' : 'var(--text-main)' 
+                                }}>
+                                  {t(page.labelKey)}
+                                  {isActive && <span style={{ fontSize: '0.72rem', marginRight: '0.4rem', opacity: 0.7 }}> {t('you_are_here')}</span>}
+                                </span>
+                              </div>
+                            );
+                          })}
                         </div>
                       );
                     })}
@@ -218,6 +260,52 @@ const AppLayout = () => {
       />
       {showChangePassword && user && (
         <ChangePasswordModal user={user} onClose={() => setShowChangePassword(false)} />
+      )}
+
+      {/* Global Mobile F9 Search Button */}
+      {isMobile && (
+        <button
+          className="btn"
+          style={{
+            position: 'fixed',
+            bottom: '1.5rem',
+            right: '1.5rem',
+            zIndex: 9999,
+            borderRadius: '50px',
+            padding: '0.8rem 1.25rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            boxShadow: '0 8px 30px rgba(212, 175, 55, 0.4)',
+            background: 'linear-gradient(135deg, #d4af37, #f5d060)',
+            color: '#0d1117',
+            fontWeight: 'bold',
+            fontSize: '1rem',
+            border: 'none',
+          }}
+          onMouseDown={(e) => {
+            // Prevent losing focus on the current input
+            e.preventDefault();
+          }}
+          onClick={(e) => {
+            e.preventDefault();
+            const activeEl = document.activeElement;
+            if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT')) {
+              activeEl.dispatchEvent(new KeyboardEvent('keydown', {
+                key: 'F9',
+                code: 'F9',
+                keyCode: 120,
+                bubbles: true,
+                cancelable: true
+              }));
+            } else {
+              toast.error(t('admin.messages.focus_input_first') || 'الرجاء تحديد حقل أولاً للبحث (F9)');
+            }
+          }}
+        >
+          <Search size={18} />
+          F9
+        </button>
       )}
     </div>
   );

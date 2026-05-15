@@ -29,7 +29,7 @@ const ClearableSelect = ({ value, onChange, children, className = "form-control"
           color: '#ef4444', cursor: 'pointer', padding: '3px', borderRadius: '4px',
           display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10
         }}
-        title={clearTitle || "إلغاء الاختيار"}
+        title={clearTitle || t('entry.actions.clear_selection')}
       >
         <X size={12} strokeWidth={3} />
       </button>
@@ -224,8 +224,8 @@ const DataEntryWizard = () => {
       }
       return '0';
     } catch (err) {
-      console.error('Error fetching order number', err);
-      return '0';
+      toast.error(t('entry.messages.connection_error'), { id: toastId });
+      console.error(err);
     }
   };
 
@@ -255,7 +255,7 @@ const DataEntryWizard = () => {
 
     const modelNum = currentOrder.serialNumber?.trim();
     if (!modelNum) {
-      toast.error('الرجاء إدخال رقم الموديل أولاً قبل رفع الصور');
+      toast.error(t('entry.messages.model_required'));
       return;
     }
 
@@ -379,7 +379,7 @@ const DataEntryWizard = () => {
 
   const handleEditExistingImage = async (index, imgObj) => {
     try {
-      const toastId = toast.loading('جاري تحميل الصورة للتعديل...');
+      const toastId = toast.loading(t('entry.messages.loading_image'));
       const response = await fetch(imgObj.preview || imgObj.url);
       const blob = await response.blob();
       const ext = imgObj.name.split('.').pop() || 'jpg';
@@ -392,12 +392,12 @@ const DataEntryWizard = () => {
       setIsEditorOpen(true);
     } catch (err) {
       console.error(err);
-      toast.error('فشل في تحميل الصورة للتعديل');
+      toast.error(t('entry.messages.load_error'));
     }
   };
 
   const handleRemoveImage = async (index) => {
-    if (!window.confirm('هل أنت متأكد من حذف هذه الصورة؟')) return;
+    if (!window.confirm(t('entry.messages.confirm_delete_image'))) return;
     
     const imgToRemove = productImages[index];
     
@@ -412,7 +412,7 @@ const DataEntryWizard = () => {
     if (imgToRemove.path) {
       try {
         await supabase.storage.from('product_images').remove([imgToRemove.path]);
-        toast.success('تم حذف الصورة بنجاح');
+        toast.success(t('entry.messages.delete_success_image'));
       } catch (err) {
         console.error('Error removing image:', err);
       }
@@ -549,8 +549,8 @@ const DataEntryWizard = () => {
       const orderWithActivity = appendActivity(currentOrder, createActivityItem({
         action: 'create',
         user,
-        note: `تم إنشاء الطلب رقم ${currentOrder.serialNumber}`,
-        meta: { source: 'data-entry' },
+        note: t('activity.notes.created', { serial: currentOrder.serialNumber }),
+        changes: summarizeOrderChanges({}, currentOrder)
       }));
       const payload = {
         serial_number: currentOrder.serialNumber,
@@ -577,7 +577,7 @@ const DataEntryWizard = () => {
       const orderWithActivity = appendActivity(currentOrder, createActivityItem({
         action: 'update',
         user,
-        note: `تم تحديث الطلب رقم ${currentOrder.serialNumber}`,
+        note: t('activity.notes.updated', { serial: currentOrder.serialNumber }),
         changes: summarizeOrderChanges(previous?.order_data, currentOrder),
         meta: { source: 'data-entry', previousSerial: originalSerial },
       }));
@@ -613,7 +613,7 @@ const DataEntryWizard = () => {
          createActivityItem({
            action: 'copy',
            user,
-           note: `تم نسخ الطلب من ${currentOrder.serialNumber} إلى ${newSerial}`,
+           note: t('activity.notes.copied', { from: currentOrder.serialNumber, to: newSerial }),
            meta: { source: 'data-entry', copiedFrom: currentOrder.serialNumber },
          })
        );
@@ -648,7 +648,7 @@ const DataEntryWizard = () => {
       const archiveItem = appendActivity(previous?.order_data || currentOrder, createActivityItem({
         action: 'delete',
         user,
-        note: `تم حذف الطلب رقم ${originalSerial}`,
+        note: t('activity.notes.deleted', { serial: originalSerial }),
         meta: { source: 'data-entry', serial: originalSerial },
       }));
       const deletedArchive = JSON.parse(localStorage.getItem('gh_deleted_activity_archive') || '[]');
@@ -711,7 +711,7 @@ const DataEntryWizard = () => {
       
       const { data: recData } = await supabase.from('receivings').select('receive_data').eq('serial_number', searchVal).single();
       if (recData && recData.receive_data && recData.receive_data.status === t('receiving.info.received')) {
-        toast.error('هذا المنتج قد تم استلامه من قبل المستودع ولا يمكن تعديله', { id: toastId, duration: 4000 });
+        toast.error(t('entry.messages.received_already'), { id: toastId, duration: 4000 });
         return;
       }
 
@@ -890,6 +890,7 @@ const DataEntryWizard = () => {
                     value={currentOrder.serialNumber} 
                     onChange={(e) => handleSerialChange(e.target.value)} 
                     onKeyDown={(e) => e.key === 'Enter' && handleFetch(currentOrder.serialNumber)}
+                    data-enter-ignore="true"
                     placeholder={t('entry.buyer.serial_placeholder')} 
                   />
                   <div style={{ display: 'flex', justifyContent: 'space-between', margin: '4px 0' }}>
@@ -923,18 +924,15 @@ const DataEntryWizard = () => {
 
                 <div className="form-group">
                    <label className="form-label">{t('entry.buyer.company_name')}</label>
-                   <ClearableSelect className="form-control" value={currentOrder.buyerCompany || ''} onChange={(e) => updateOrder('buyerCompany', e.target.value)} clearTitle={t('entry.actions.clear_btn')}>
-                     <option value="">— اختر الشركة —</option>
-                    {lookups.companies?.map((p, i) => {
-                      const val = typeof p === 'object' ? p.name : p;
-                      return <option key={i} value={val}>{val}</option>;
-                    })}
-                  </ClearableSelect>
+                     <select className="form-control" value={currentOrder.buyerCompany || ''} onChange={(e) => updateOrder('buyerCompany', e.target.value)}>
+                        <option value="">{t('entry.actions.select_company_placeholder')}</option>
+                       {lookups.companies?.map((c, i) => <option key={i} value={typeof c === 'object' ? c.name : c}>{typeof c === 'object' ? c.name : c}</option>)}
+                     </select>
                 </div>
                 <div className="form-group">
                    <label className="form-label">{t('entry.buyer.product_name')}</label>
                    <ClearableSelect className="form-control" value={currentOrder.productName} onChange={(e) => updateOrder('productName', e.target.value)} clearTitle={t('entry.actions.clear_btn')}>
-                     <option value="">{t('entry.actions.loading')}</option>
+                     <option value="">{t('entry.buyer.product_name_placeholder')}</option>
                     {lookups.products?.map((p, i) => {
                       const val = typeof p === 'object' ? p.name : p;
                       return <option key={i} value={val}>{val}</option>;
@@ -1154,7 +1152,7 @@ const DataEntryWizard = () => {
                             }}
                             onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.15)'}
                             onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
-                            title="تعديل الصورة"
+                            title={t('entry.actions.edit_image')}
                           >
                             <Edit3 size={14} />
                           </button>
@@ -1234,7 +1232,7 @@ const DataEntryWizard = () => {
                         fontWeight: 'bold',
                         border: '1px solid rgba(212, 175, 55, 0.3)'
                       }}>
-                        {t('entry.colors.color_selected_count', { count: targetSizes.length })}
+                        {t('entry.dates.size_selected_count', { count: targetSizes.length })}
                       </span>
                     )}
                   </div>
@@ -1259,7 +1257,7 @@ const DataEntryWizard = () => {
                             }
                           }
                         }} clearTitle={t('entry.actions.clear_btn')}>
-                          <option value="">{t('entry.actions.loading')}</option>
+                          <option value="">{t('entry.dates.select_size_placeholder')}</option>
                           <option value="MANUAL_TRIGGER" style={{ color: 'var(--accent-color)', fontWeight: 'bold' }}>{t('entry.dates.manual_trigger')}</option>
                           {lookups.sizes?.map((s, i) => <option key={i} value={s}>{s}</option>)}
                         </ClearableSelect>
@@ -1274,7 +1272,7 @@ const DataEntryWizard = () => {
                           }
                           updateOrder('sizeTo', newVal);
                         }} clearTitle={t('entry.actions.clear_btn')}>
-                          <option value="">{t('entry.actions.loading')}</option>
+                          <option value="">{t('entry.dates.select_size_placeholder')}</option>
                           <option value="MANUAL_TRIGGER" style={{ color: 'var(--accent-color)', fontWeight: 'bold' }}>{t('entry.dates.manual_trigger')}</option>
                           {(() => {
                             if (!currentOrder.sizeFrom) return lookups.sizes;
@@ -1391,14 +1389,14 @@ const DataEntryWizard = () => {
                 <div className="form-group" style={{ flex: 1 }}>
                   <label className="form-label">{t('entry.fabrics.fabric_type')}</label>
                   <ClearableSelect className="form-control" value={currentOrder.productFabric || ''} onChange={(e) => updateOrder('productFabric', e.target.value)} clearTitle={t('entry.actions.clear_btn')}>
-                    <option value="">{t('entry.actions.loading')}</option>
+                    <option value="">{t('entry.fabrics.select_fabric_placeholder')}</option>
                     {lookups.fabrics?.map((f, i) => <option key={i} value={f}>{f}</option>)}
                   </ClearableSelect>
                 </div>
                 <div className="form-group" style={{ flex: 1 }}>
                   <label className="form-label">{t('entry.fabrics.trade_mark')}</label>
                   <ClearableSelect className="form-control" value={currentOrder.tradeMark || ''} onChange={(e) => updateOrder('tradeMark', e.target.value)} clearTitle={t('entry.actions.clear_btn')}>
-                    <option value="">{t('entry.actions.loading')}</option>
+                    <option value="">{t('entry.fabrics.select_trademark_placeholder')}</option>
                     {lookups.tradeMarks?.map((t, i) => {
                       const tmName = typeof t === 'object' ? t.name : t;
                       return <option key={i} value={tmName}>{tmName}</option>;
@@ -1453,7 +1451,7 @@ const DataEntryWizard = () => {
                           style={{ opacity: isLocked ? 0.5 : 1, cursor: isLocked ? 'not-allowed' : 'auto' }}
                           clearTitle={t('entry.actions.clear_btn')}
                         >
-                          <option value="">{t('entry.actions.loading')}</option>
+                          <option value="">{t('entry.fabrics.select_material_placeholder')}</option>
                           {lookups.materials?.map((m, j) => <option key={j} value={m}>{m}</option>)}
                         </ClearableSelect>
                         <input 
@@ -2118,7 +2116,7 @@ const DataEntryWizard = () => {
                     />
                   </div>
                   {fetchingSerials ? (
-                      <div style={{ padding: '1rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)' }}>{t('entry.actions.loading')}</div>
+                      <div style={{ padding: '1rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)' }}>{t('entry.actions.fetching')}</div>
                   ) : (
                      (() => {
                        const filteredSerials = serialSearchQuery.trim()

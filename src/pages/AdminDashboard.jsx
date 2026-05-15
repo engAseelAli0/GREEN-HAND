@@ -5,8 +5,10 @@ import { supabase } from '../supabaseClient';
 import toast from 'react-hot-toast';
 import UserManagement from '../components/UserManagement';
 import { compressImage } from '../utils/imageUtils';
+import { useTranslation } from 'react-i18next';
 
 const AdminDashboard = () => {
+  const { t } = useTranslation();
   const { lookups, updateLookup } = useAppData();
   const [activeTab, setActiveTab] = useState('products');
   const [newValue, setNewValue] = useState('');
@@ -39,28 +41,28 @@ const AdminDashboard = () => {
   const allParts = (lookups.componentParts || []).map(p => typeof p === 'object' ? p.name : p).filter(Boolean);
 
   const tabs = [
-    { id: 'products', name: 'المنتجات', icon: ShoppingBag },
-    { id: 'componentParts', name: 'القطع المكونة', icon: Puzzle },
-    { id: 'currencies', name: 'العملات', icon: Banknote },
-    { id: 'fabrics', name: 'الأقمشة', icon: Scissors },
-    { id: 'materials', name: 'مواد القماش', icon: Layers },
-    { id: 'colors', name: 'الألوان', icon: Palette },
-    { id: 'factories', name: 'المصانع (Factories)', icon: Factory },
-    { id: 'companies', name: 'أسماء الشركات', icon: Building },
-    { id: 'sizes', name: 'المقاسات', icon: Ruler },
-    { id: 'cartonPackages', name: 'تعبئة الكرتون', icon: Package },
-    { id: 'cartonSizes', name: 'أحجام الكراتين', icon: Box },
-    { id: 'plasticBagSizes', name: 'أحجام الأكياس', icon: ShoppingCart },
-    { id: 'tradeMarks', name: 'العلامات التجارية', icon: Stamp },
-    { id: 'measurements', name: 'قائمة المقاسات', icon: SlidersHorizontal },
-    { id: 'packagingConditionsList', name: 'شروط التعبئة الإضافية', icon: ListChecks },
-    { id: 'buyerCodes', name: 'رموز المشترين', icon: Tag },
-    { id: 'system_users', name: 'إدارة المستخدمين', icon: Shield }
+    { id: 'products', name: t('admin.tabs.products'), icon: ShoppingBag },
+    { id: 'componentParts', name: t('admin.tabs.componentParts'), icon: Puzzle },
+    { id: 'currencies', name: t('admin.tabs.currencies'), icon: Banknote },
+    { id: 'fabrics', name: t('admin.tabs.fabrics'), icon: Scissors },
+    { id: 'materials', name: t('admin.tabs.materials'), icon: Layers },
+    { id: 'colors', name: t('admin.tabs.colors'), icon: Palette },
+    { id: 'factories', name: t('admin.tabs.factories'), icon: Factory },
+    { id: 'companies', name: t('admin.tabs.companies'), icon: Building },
+    { id: 'sizes', name: t('admin.tabs.sizes'), icon: Ruler },
+    { id: 'cartonPackages', name: t('admin.tabs.cartonPackages'), icon: Package },
+    { id: 'cartonSizes', name: t('admin.tabs.cartonSizes'), icon: Box },
+    { id: 'plasticBagSizes', name: t('admin.tabs.plasticBagSizes'), icon: ShoppingCart },
+    { id: 'tradeMarks', name: t('admin.tabs.tradeMarks'), icon: Stamp },
+    { id: 'measurements', name: t('admin.tabs.measurements'), icon: SlidersHorizontal },
+    { id: 'packagingConditionsList', name: t('admin.tabs.packagingConditionsList'), icon: ListChecks },
+    { id: 'buyerCodes', name: t('admin.tabs.buyerCodes'), icon: Tag },
+    { id: 'system_users', name: t('admin.tabs.system_users'), icon: Shield }
   ];
 
   const handleAddOrEdit = () => {
     if (!newValue.trim()) {
-      toast.error('الرجاء كتابة اسم أو قيمة صالحة');
+      toast.error(t('admin.messages.valid_name_required'));
       return;
     }
     
@@ -68,30 +70,45 @@ const AdminDashboard = () => {
     
     let newItem = newValue.trim();
     if (activeTab === 'products') {
+      const prefix = newValuePrefix.trim();
+      if (prefix && currentList.some((item, idx) => idx !== editIndex && typeof item === 'object' && item.codePrefix === prefix)) {
+        toast.error(t('admin.messages.duplicate_prefix'));
+        return;
+      }
       const partsArr = selectedPartsArr.length > 0 ? [...selectedPartsArr] : [newValue.trim()];
-      newItem = { name: newValue.trim(), codePrefix: newValuePrefix.trim(), parts: partsArr };
+      newItem = { name: newValue.trim(), codePrefix: prefix, parts: partsArr };
     } else if (activeTab === 'measurements') {
       newItem = { name: newValue.trim(), part: selectedProductsArr.length > 0 ? selectedProductsArr.join('، ') : newValuePartAssignment.trim() };
     } else if (activeTab === 'colors') {
       if (!newValueAbbr.trim() || newValueAbbr.trim().length > 7) {
-         toast.error('الرجاء إدخال اختصار لون لا يزيد عن 7 أحرف (مثلاً WHT)');
+         toast.error(t('admin.messages.color_abbr_limit'));
          return;
       }
-      newItem = { name: newValue.trim(), hex: newValueHex, abbr: newValueAbbr.trim().toUpperCase() };
+      const abbr = newValueAbbr.trim().toUpperCase();
+      if (currentList.some((item, idx) => idx !== editIndex && typeof item === 'object' && item.abbr === abbr)) {
+        toast.error(t('admin.messages.duplicate_color_abbr'));
+        return;
+      }
+      newItem = { name: newValue.trim(), hex: newValueHex, abbr };
     } else if (activeTab === 'factories') {
       if (!newValueMobile.trim() || !newValueAddress.trim()) {
-        toast.error('الرجاء تعبئة عنوان وجوال المصنع بوضوح');
+        toast.error(t('admin.messages.factory_info_required'));
+        return;
+      }
+      const code = newValueFactoryCode.trim();
+      if (code && currentList.some((item, idx) => idx !== editIndex && typeof item === 'object' && item.code === code)) {
+        toast.error(t('admin.messages.duplicate_factory_code'));
         return;
       }
       newItem = { 
         name: newValue.trim(), 
         mobile: newValueMobile.trim(), 
         address: newValueAddress.trim(),
-        code: newValueFactoryCode.trim()
+        code
       };
     } else if (activeTab === 'companies') {
       if (!newValueMobile.trim() || !newValueFax.trim()) {
-        toast.error('الرجاء تعبئة رقم الفاكس والجوال للشركة');
+        toast.error(t('admin.messages.company_info_required'));
         return;
       }
       newItem = {
@@ -110,12 +127,12 @@ const AdminDashboard = () => {
       // Edit mode
       currentList[editIndex] = newItem;
       updateLookup(activeTab, currentList);
-      toast.success('تم حفظ التعديل ✏️');
+      toast.success(t('admin.messages.edit_saved'));
       setEditIndex(null);
     } else {
       // Add mode
       updateLookup(activeTab, [...currentList, newItem]);
-      toast.success('تمت الإضافة بنجاح ✅');
+      toast.success(t('admin.messages.add_success'));
     }
     setNewValue('');
     setNewValuePrefix('');
@@ -193,7 +210,7 @@ const AdminDashboard = () => {
     const originalFile = e.target.files[0];
     if (!originalFile) return;
     if (!newValue.trim()) {
-      toast.error('الرجاء كتابة اسم العلامة التجارية أولاً');
+      toast.error(t('admin.messages.trademark_name_required'));
       return;
     }
     setUploadingTmImage(true);
@@ -207,7 +224,7 @@ const AdminDashboard = () => {
         .from('product_images')
         .upload(filePath, file, { upsert: true });
       if (error) {
-        toast.error(`فشل رفع الصورة: ${error.message}`);
+        toast.error(`${t('admin.messages.upload_failed')}: ${error.message}`);
         return;
       }
       const { data: urlData } = supabase.storage
@@ -215,10 +232,10 @@ const AdminDashboard = () => {
         .getPublicUrl(filePath);
       setTradeMarkImageUrl(urlData.publicUrl);
       setTradeMarkImage(URL.createObjectURL(file));
-      toast.success('تم رفع صورة العلامة التجارية بنجاح!');
+      toast.success(t('admin.messages.upload_success'));
     } catch (err) {
       console.error(err);
-      toast.error('خطأ في رفع الصورة!');
+      toast.error(t('admin.messages.upload_error'));
     } finally {
       setUploadingTmImage(false);
       if (tmImageRef.current) tmImageRef.current.value = '';
@@ -229,7 +246,7 @@ const AdminDashboard = () => {
     const currentList = lookups[activeTab] || [];
     const newList = currentList.filter((_, i) => i !== indexToDelete);
     updateLookup(activeTab, newList);
-    toast('تم حذف العنصر 🗑️');
+    toast.success(t('admin.messages.item_deleted'));
     if (editIndex === indexToDelete) cancelEdit();
   };
 
@@ -643,10 +660,10 @@ const AdminDashboard = () => {
           <div style={styles.headerIconWrap}>
             <Sparkles size={22} color="#fff" />
           </div>
-          لوحة التحكم الاستراتيجية
+          {t('admin.title')}
         </div>
         <span style={styles.badge}>
-          {tabs.length} تصنيف نشط
+          {t('admin.active_categories', { count: tabs.length })}
         </span>
       </div>
 
@@ -655,7 +672,7 @@ const AdminDashboard = () => {
         
         {/* ─── Sidebar ─── */}
         <nav style={styles.sidebar}>
-          <div style={styles.sidebarLabel}>التصنيفات والقوائم</div>
+          <div style={styles.sidebarLabel}>{t('admin.categories_and_lists')}</div>
           {tabs.map(tab => {
             const isActive = activeTab === tab.id;
             const TabIcon = tab.icon;
@@ -695,9 +712,9 @@ const AdminDashboard = () => {
           <div style={styles.contentHeader}>
             <div style={styles.contentHeaderTitle}>
               <ActiveIcon size={20} color="var(--accent-color)" />
-              إدارة {activeTabInfo?.name}
+              {t('admin.manage_prefix')} {activeTabInfo?.name}
             </div>
-            {activeTab !== 'system_users' && <span style={styles.badge}>{currentItems.length} عنصر</span>}
+            {activeTab !== 'system_users' && <span style={styles.badge}>{t('admin.items_count', { count: currentItems.length })}</span>}
           </div>
 
           {activeTab === 'system_users' ? (
@@ -708,9 +725,9 @@ const AdminDashboard = () => {
               <div ref={formCardRef} style={styles.formCard}>
             <div style={styles.formTitle}>
               {editIndex !== null ? (
-                <><Edit2 size={16} /> تعديل عنصر موجود</>
+                <><Edit2 size={16} /> {t('admin.edit_item')}</>
               ) : (
-                <><Plus size={16} /> إضافة عنصر جديد</>
+                <><Plus size={16} /> {t('admin.add_item')}</>
               )}
             </div>
 
@@ -718,15 +735,16 @@ const AdminDashboard = () => {
               {/* Main Name Field */}
               <div style={styles.formField}>
                 <label style={styles.formLabel}>
-                  {activeTab === 'factories' ? 'اسم المصنع' : activeTab === 'companies' ? 'اسم الشركة (الترويسة)' : 'اسم العنصر'}
+                  {activeTab === 'factories' ? t('admin.factory_name') : activeTab === 'companies' ? t('admin.company_name_header') : t('admin.item_name')}
                 </label>
                 <input
                   type="text"
                   className="form-control"
-                  placeholder={editIndex !== null ? 'تعديل القيمة...' : 'اكتب هنا...'}
+                  placeholder={editIndex !== null ? t('admin.edit_value') : t('admin.type_here')}
                   value={newValue}
                   onChange={(e) => setNewValue(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleAddOrEdit()}
+                  data-enter-ignore="true"
                   style={{ backgroundColor: 'var(--bg-color)' }}
                 />
               </div>
@@ -735,18 +753,18 @@ const AdminDashboard = () => {
               {activeTab === 'products' && (
                 <>
                   <div style={styles.formField}>
-                    <label style={styles.formLabel}>رقم الكود (Code Prefix)</label>
+                    <label style={styles.formLabel}>{t('admin.code_prefix')}</label>
                     <input
                       type="text"
                       className="form-control"
-                      placeholder="مثلاً: 1000"
+                      placeholder={t('admin.code_prefix_placeholder')}
                       value={newValuePrefix}
                       onChange={(e) => setNewValuePrefix(e.target.value)}
                       style={{ backgroundColor: 'var(--bg-color)' }}
                     />
                   </div>
                   <div style={{ ...styles.formField, gridColumn: '1 / -1' }}>
-                    <label style={styles.formLabel}>القطع المكونة (من قسم القطع المكونة)</label>
+                    <label style={styles.formLabel}>{t('admin.component_parts_hint')}</label>
                     <div style={{ position: 'relative' }}>
                       <button
                         type="button"
@@ -761,7 +779,7 @@ const AdminDashboard = () => {
                           transition: 'border-color 0.2s'
                         }}
                       >
-                        <span>{selectedPartsArr.length > 0 ? selectedPartsArr.join(' + ') : '— اختر القطع المكونة —'}</span>
+                        <span>{selectedPartsArr.length > 0 ? selectedPartsArr.join(' + ') : t('admin.choose_parts')}</span>
                         <ChevronDown size={15} style={{ transform: showPartsDropdown ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s', opacity: 0.6 }} />
                       </button>
                       {showPartsDropdown && (
@@ -773,7 +791,7 @@ const AdminDashboard = () => {
                           maxHeight: '200px', overflowY: 'auto'
                         }}>
                           {allParts.length === 0 ? (
-                            <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>لا توجد قطع مضافة بعد — أضف قطعاً في قسم "القطع المكونة" أولاً</div>
+                            <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>{t('admin.no_parts_added')}</div>
                           ) : allParts.map((partName, idx) => {
                             const isChecked = selectedPartsArr.includes(partName);
                             return (
@@ -939,22 +957,22 @@ const AdminDashboard = () => {
               {activeTab === 'companies' && (
                 <>
                   <div style={styles.formField}>
-                    <label style={styles.formLabel}>رقم الفاكس (Fax)</label>
+                    <label style={styles.formLabel}>{t('admin.fax_number')}</label>
                     <input
                       type="text"
                       className="form-control"
-                      placeholder="مثلاً: (8620)-83265204"
+                      placeholder={t('admin.fax_placeholder')}
                       value={newValueFax}
                       onChange={(e) => setNewValueFax(e.target.value)}
                       style={{ backgroundColor: 'var(--bg-color)' }}
                     />
                   </div>
                   <div style={styles.formField}>
-                    <label style={styles.formLabel}>رقم الجوال (Tel/Mobile)</label>
+                    <label style={styles.formLabel}>{t('admin.mobile_number')}</label>
                     <input
                       type="text"
                       className="form-control"
-                      placeholder="مثلاً: (8620)-83265754"
+                      placeholder={t('admin.mobile_placeholder')}
                       value={newValueMobile}
                       onChange={(e) => setNewValueMobile(e.target.value)}
                       style={{ backgroundColor: 'var(--bg-color)' }}
@@ -967,33 +985,33 @@ const AdminDashboard = () => {
               {activeTab === 'factories' && (
                 <>
                   <div style={styles.formField}>
-                    <label style={styles.formLabel}>كود المصنع</label>
+                    <label style={styles.formLabel}>{t('admin.factory_code')}</label>
                     <input
                       type="text"
                       className="form-control"
-                      placeholder="الكود الخاص بالمصنع..."
+                      placeholder={t('admin.factory_code')}
                       value={newValueFactoryCode}
                       onChange={(e) => setNewValueFactoryCode(e.target.value)}
                       style={{ backgroundColor: 'var(--bg-color)' }}
                     />
                   </div>
                   <div style={styles.formField}>
-                    <label style={styles.formLabel}>رقم التواصل</label>
+                    <label style={styles.formLabel}>{t('admin.factory_mobile')}</label>
                     <input
                       type="text"
                       className="form-control"
-                      placeholder="رقم الجوال..."
+                      placeholder={t('admin.type_here')}
                       value={newValueMobile}
                       onChange={(e) => setNewValueMobile(e.target.value)}
                       style={{ backgroundColor: 'var(--bg-color)' }}
                     />
                   </div>
                   <div style={styles.formField}>
-                    <label style={styles.formLabel}>العنوان</label>
+                    <label style={styles.formLabel}>{t('admin.factory_address')}</label>
                     <input
                       type="text"
                       className="form-control"
-                      placeholder="عنوان المصنع..."
+                      placeholder={t('admin.factory_address_placeholder')}
                       value={newValueAddress}
                       onChange={(e) => setNewValueAddress(e.target.value)}
                       style={{ backgroundColor: 'var(--bg-color)' }}
@@ -1006,22 +1024,22 @@ const AdminDashboard = () => {
               {activeTab === 'colors' && (
                 <>
                   <div style={styles.formField}>
-                    <label style={styles.formLabel}>اللون</label>
+                    <label style={styles.formLabel}>{t('admin.tabs.colors')}</label>
                     <input
                       type="color"
                       className="form-control"
-                      title="تحديد اللون المظهري"
+                      title={t('admin.select_color_title')}
                       value={newValueHex}
                       onChange={(e) => setNewValueHex(e.target.value)}
                       style={{ height: '42px', padding: '4px', cursor: 'pointer', backgroundColor: 'var(--bg-color)' }}
                     />
                   </div>
                   <div style={styles.formField}>
-                    <label style={styles.formLabel}>رمز الكود (مثلاً WHT)</label>
+                    <label style={styles.formLabel}>{t('admin.color_abbr')}</label>
                     <input
                       type="text"
                       className="form-control"
-                      placeholder="WHT"
+                      placeholder={t('admin.color_abbr_placeholder')}
                       value={newValueAbbr}
                       onChange={(e) => setNewValueAbbr(e.target.value.toUpperCase())}
                       style={{ backgroundColor: 'var(--bg-color)' }}
@@ -1034,7 +1052,7 @@ const AdminDashboard = () => {
               {/* TradeMarks image upload */}
               {activeTab === 'tradeMarks' && (
                 <div style={styles.formField}>
-                  <label style={styles.formLabel}>صورة العلامة التجارية</label>
+                  <label style={styles.formLabel}>{t('admin.trademark_image')}</label>
                   <input type="file" ref={tmImageRef} accept="image/*" onChange={handleTradeMarkImageUpload} style={{ display: 'none' }} />
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                     <button
@@ -1045,7 +1063,7 @@ const AdminDashboard = () => {
                       style={{ borderColor: 'rgba(212, 175, 55, 0.3)', gap: '0.5rem', whiteSpace: 'nowrap', flex: 1 }}
                     >
                       <ImagePlus size={18} />
-                      {uploadingTmImage ? 'جاري الرفع...' : 'رفع صورة'}
+                      {uploadingTmImage ? t('admin.uploading') : t('admin.upload_image')}
                     </button>
                     {(tradeMarkImageUrl || tradeMarkImage) && (
                       <img
@@ -1072,15 +1090,15 @@ const AdminDashboard = () => {
               {editIndex !== null ? (
                 <>
                   <button className="btn btn-outline" onClick={cancelEdit} style={{ gap: '0.4rem' }}>
-                    <X size={18} /> إلغاء
+                    <X size={18} /> {t('admin.cancel_edit')}
                   </button>
                   <button className="btn btn-accent" onClick={handleAddOrEdit} style={{ gap: '0.4rem' }}>
-                    <Check size={18} /> حفظ التعديل
+                    <Check size={18} /> {t('admin.edit_and_save')}
                   </button>
                 </>
               ) : (
                 <button className="btn btn-accent" onClick={handleAddOrEdit} style={{ gap: '0.4rem', paddingLeft: '1.5rem', paddingRight: '1.5rem' }}>
-                  <Plus size={18} /> إضافة جديد
+                  <Plus size={18} /> {t('admin.save_and_add')}
                 </button>
               )}
             </div>
@@ -1092,7 +1110,7 @@ const AdminDashboard = () => {
               <Search size={16} style={styles.searchIcon} />
               <input
                 type="text"
-                placeholder="بحث في العناصر..."
+                placeholder={t('admin.quick_search')}
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 style={styles.searchInput}
@@ -1148,7 +1166,7 @@ const AdminDashboard = () => {
                       {canDrag && (
                         <div
                           style={styles.dragHandle}
-                          title="اسحب لإعادة الترتيب"
+                          title={t('admin.reorder_success')}
                           onMouseEnter={e => {
                             e.currentTarget.style.opacity = '1';
                             e.currentTarget.style.color = 'var(--accent-color)';
@@ -1207,7 +1225,7 @@ const AdminDashboard = () => {
                           <span style={styles.metaBadge}>{item.abbr}</span>
                         )}
                         {activeTab === 'products' && typeof item === 'object' && item.codePrefix && (
-                          <span style={styles.metaBadge}>كود: {item.codePrefix}</span>
+                          <span style={styles.metaBadge}>{t('admin.code_prefix')}: {item.codePrefix}</span>
                         )}
                         {activeTab === 'products' && typeof item === 'object' && item.parts && item.parts.length > 0 && (
                           <span style={{ ...styles.metaBadge, background: 'rgba(139, 92, 246, 0.1)', color: '#a78bfa' }}>
@@ -1215,21 +1233,21 @@ const AdminDashboard = () => {
                           </span>
                         )}
                         {activeTab === 'measurements' && typeof item === 'object' && item.part && (
-                          <span style={styles.measurementBadge}>تتبع: {item.part}</span>
+                          <span style={styles.measurementBadge}>{t('admin.fields.track')}: {item.part}</span>
                         )}
                       </div>
 
                       {activeTab === 'factories' && (
                         <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.1rem', display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
                           {item.mobile && <span>{item.mobile} • {item.address}</span>}
-                          {item.code && <span style={{ color: 'var(--accent-color)' }}>كود المصنع: {item.code}</span>}
+                          {item.code && <span style={{ color: 'var(--accent-color)' }}>{t('admin.fields.factory_code')}: {item.code}</span>}
                         </div>
                       )}
 
                       {activeTab === 'companies' && (
                         <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.1rem', display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
-                          {item.fax && <span>فاكس: {item.fax}</span>}
-                          {item.mobile && <span>هاتف: {item.mobile}</span>}
+                          {item.fax && <span>{t('admin.fields.fax')}: {item.fax}</span>}
+                          {item.mobile && <span>{t('admin.fields.mobile')}: {item.mobile}</span>}
                         </div>
                       )}
                     </div>
@@ -1244,7 +1262,7 @@ const AdminDashboard = () => {
                           setAssignSelectedParts(currentParts);
                           setAssignModalOpen(true);
                         }}
-                        title="تحديد القطع المكونة"
+                        title={t('admin.actions.assign_parts')}
                         style={styles.actionBtn}
                         onMouseEnter={e => { e.currentTarget.style.background = 'rgba(139, 92, 246, 0.1)'; e.currentTarget.style.color = '#a78bfa'; }}
                         onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text-muted)'; }}
@@ -1254,7 +1272,7 @@ const AdminDashboard = () => {
                     )}
                     <button
                       onClick={() => startEdit(realIndex, item)}
-                      title="تعديل"
+                      title={t('admin.actions.edit')}
                       style={styles.actionBtn}
                       onMouseEnter={e => { e.currentTarget.style.background = 'rgba(212, 175, 55, 0.1)'; e.currentTarget.style.color = 'var(--accent-color)'; }}
                       onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text-muted)'; }}
@@ -1263,7 +1281,7 @@ const AdminDashboard = () => {
                     </button>
                     <button
                       onClick={() => handleDelete(realIndex)}
-                      title="حذف"
+                      title={t('admin.actions.delete')}
                       style={styles.actionBtn}
                       onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'; e.currentTarget.style.color = '#ef4444'; }}
                       onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text-muted)'; }}
@@ -1294,7 +1312,7 @@ const AdminDashboard = () => {
                   <ActiveIcon size={28} color="rgba(212, 175, 55, 0.4)" />
                 </div>
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', marginTop: '0.25rem' }}>
-                  {searchQuery ? 'لا توجد نتائج مطابقة للبحث' : 'القائمة فارغة تماماً، ابدأ بإضافة العناصر من الأعلى.'}
+                  {searchQuery ? t('admin.no_match') : t('admin.start_adding')}
                 </p>
               </div>
             )}
@@ -1318,10 +1336,10 @@ const AdminDashboard = () => {
           }}>
             <h3 style={{ fontSize: '1.15rem', color: 'var(--text-strong)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <Tag size={20} color="var(--accent-color)" />
-              تحديد القطع المكونة التابعة
+              {t('admin.customize_sizes')}
             </h3>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-              اختر قطعة أو أكثر لربط المقاس ({assignMeasurementIndex !== null ? (typeof currentItems[assignMeasurementIndex] === 'object' ? currentItems[assignMeasurementIndex].name : currentItems[assignMeasurementIndex]) : ''}) بها.
+              {t('admin.component_parts_hint')} ({assignMeasurementIndex !== null ? (typeof currentItems[assignMeasurementIndex] === 'object' ? currentItems[assignMeasurementIndex].name : currentItems[assignMeasurementIndex]) : ''})
             </p>
             
             <div style={{
@@ -1329,7 +1347,7 @@ const AdminDashboard = () => {
               background: 'rgba(0,0,0,0.2)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)'
             }}>
               {allParts.length === 0 ? (
-                <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textAlign: 'center' }}>لا توجد قطع مكونة مضافة بعد</div>
+                <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textAlign: 'center' }}>{t('admin.no_parts_added')}</div>
               ) : (
                 allParts.map((partName, idx) => {
                   const isSelected = assignSelectedParts.includes(partName);
@@ -1368,11 +1386,11 @@ const AdminDashboard = () => {
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
-              <button
+                <button
                 className="btn btn-outline"
                 onClick={() => { setAssignModalOpen(false); setAssignMeasurementIndex(null); }}
               >
-                إلغاء
+                {t('admin.cancel_edit')}
               </button>
               <button
                 className="btn btn-accent"
@@ -1387,10 +1405,10 @@ const AdminDashboard = () => {
                   updateLookup('measurements', currentList);
                   setAssignModalOpen(false);
                   setAssignMeasurementIndex(null);
-                  toast.success('تم ربط المقاس بالقطع المكونة بنجاح ✨');
+                  toast.success(t('admin.messages.edit_saved'));
                 }}
               >
-                حفظ التحديد
+                {t('admin.edit_and_save')}
               </button>
             </div>
           </div>

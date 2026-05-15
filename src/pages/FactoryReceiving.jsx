@@ -290,7 +290,7 @@ const FactoryReceiving = () => {
         const orderWithActivity = appendActivity(orderRow.order_data, createActivityItem({
           action: 'receive',
           user,
-          note: `تم استلام الطلب بإجمالي ${totals.totalProd} قطعة`,
+          note: t('activity.notes.received', { count: totals.totalProd }),
           meta: {
             source: 'factory-receiving',
             cartons: totals.totalCtn,

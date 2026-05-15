@@ -115,13 +115,19 @@ const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [focusedField, setFocusedField] = useState(null);
   const [mounted, setMounted] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const { login } = useAuth();
   const navigate = useNavigate();
   const { t } = useTranslation();
 
   useEffect(() => {
     const timer = setTimeout(() => setMounted(true), 100);
-    return () => clearTimeout(timer);
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handleResize);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('resize', handleResize);
+    };
   }, []);
 
   const handleLogin = async (e) => {
@@ -322,55 +328,59 @@ const Login = () => {
         overflow: 'hidden',
         padding: '1rem'
       }}>
-        <ParticleCanvas />
+        {!isMobile && (
+          <>
+            <ParticleCanvas />
 
-        {/* Ambient orbs */}
-        <div style={{
-          position: 'fixed', top: '10%', left: '5%',
-          width: '350px', height: '350px',
-          background: 'radial-gradient(circle, rgba(212, 175, 55, 0.15) 0%, transparent 70%)',
-          borderRadius: '50%', filter: 'blur(60px)',
-          animation: 'orbPulse 6s ease-in-out infinite', zIndex: 0
-        }} />
-        <div style={{
-          position: 'fixed', bottom: '5%', right: '5%',
-          width: '400px', height: '400px',
-          background: 'radial-gradient(circle, rgba(99, 102, 241, 0.1) 0%, transparent 70%)',
-          borderRadius: '50%', filter: 'blur(80px)',
-          animation: 'orbPulse 8s ease-in-out infinite 2s', zIndex: 0
-        }} />
-        <div style={{
-          position: 'fixed', top: '50%', left: '50%',
-          width: '500px', height: '500px',
-          border: '1px solid rgba(212, 175, 55, 0.04)',
-          borderRadius: '50%',
-          animation: 'ringRotate 40s linear infinite', zIndex: 0
-        }} />
-        <div style={{
-          position: 'fixed', top: '50%', left: '50%',
-          width: '700px', height: '700px',
-          border: '1px solid rgba(212, 175, 55, 0.02)',
-          borderRadius: '50%',
-          animation: 'ringRotate 60s linear infinite reverse', zIndex: 0
-        }} />
+            {/* Ambient orbs */}
+            <div style={{
+              position: 'fixed', top: '10%', left: '5%',
+              width: '350px', height: '350px',
+              background: 'radial-gradient(circle, rgba(212, 175, 55, 0.15) 0%, transparent 70%)',
+              borderRadius: '50%', filter: 'blur(60px)',
+              animation: 'orbPulse 6s ease-in-out infinite', zIndex: 0
+            }} />
+            <div style={{
+              position: 'fixed', bottom: '5%', right: '5%',
+              width: '400px', height: '400px',
+              background: 'radial-gradient(circle, rgba(99, 102, 241, 0.1) 0%, transparent 70%)',
+              borderRadius: '50%', filter: 'blur(80px)',
+              animation: 'orbPulse 8s ease-in-out infinite 2s', zIndex: 0
+            }} />
+            <div style={{
+              position: 'fixed', top: '50%', left: '50%',
+              width: '500px', height: '500px',
+              border: '1px solid rgba(212, 175, 55, 0.04)',
+              borderRadius: '50%',
+              animation: 'ringRotate 40s linear infinite', zIndex: 0
+            }} />
+            <div style={{
+              position: 'fixed', top: '50%', left: '50%',
+              width: '700px', height: '700px',
+              border: '1px solid rgba(212, 175, 55, 0.02)',
+              borderRadius: '50%',
+              animation: 'ringRotate 60s linear infinite reverse', zIndex: 0
+            }} />
 
-        {/* Floating geometric shapes */}
-        {[
-          { top: '15%', left: '10%', size: 60, delay: '0s', dur: '15s', rot: '45deg', opacity: 0.04 },
-          { top: '70%', left: '80%', size: 80, delay: '3s', dur: '20s', rot: '30deg', opacity: 0.03 },
-          { top: '40%', left: '85%', size: 40, delay: '5s', dur: '18s', rot: '60deg', opacity: 0.05 },
-          { top: '80%', left: '15%', size: 50, delay: '2s', dur: '16s', rot: '15deg', opacity: 0.04 },
-        ].map((s, i) => (
-          <div key={i} style={{
-            position: 'fixed', top: s.top, left: s.left,
-            width: `${s.size}px`, height: `${s.size}px`,
-            border: `1px solid rgba(212, 175, 55, ${s.opacity * 5})`,
-            borderRadius: i % 2 === 0 ? '12px' : '50%',
-            transform: `rotate(${s.rot})`,
-            animation: `floatShape ${s.dur} ease-in-out infinite ${s.delay}`,
-            zIndex: 0, opacity: s.opacity * 3
-          }} />
-        ))}
+            {/* Floating geometric shapes */}
+            {[
+              { top: '15%', left: '10%', size: 60, delay: '0s', dur: '15s', rot: '45deg', opacity: 0.04 },
+              { top: '70%', left: '80%', size: 80, delay: '3s', dur: '20s', rot: '30deg', opacity: 0.03 },
+              { top: '40%', left: '85%', size: 40, delay: '5s', dur: '18s', rot: '60deg', opacity: 0.05 },
+              { top: '80%', left: '15%', size: 50, delay: '2s', dur: '16s', rot: '15deg', opacity: 0.04 },
+            ].map((s, i) => (
+              <div key={i} style={{
+                position: 'fixed', top: s.top, left: s.left,
+                width: `${s.size}px`, height: `${s.size}px`,
+                border: `1px solid rgba(212, 175, 55, ${s.opacity * 5})`,
+                borderRadius: i % 2 === 0 ? '12px' : '50%',
+                transform: `rotate(${s.rot})`,
+                animation: `floatShape ${s.dur} ease-in-out infinite ${s.delay}`,
+                zIndex: 0, opacity: s.opacity * 3
+              }} />
+            ))}
+          </>
+        )}
 
         <Toaster 
           position="top-center"
@@ -474,7 +484,7 @@ const Login = () => {
                 color: 'var(--text-muted)', fontSize: '0.95rem',
                 lineHeight: '1.6', maxWidth: '280px', margin: '0 auto'
               }}>
-                {t('auth.login_desc') || 'أدخل بيانات الاعتماد الخاصة بك للوصول إلى النظام'}
+                {t('auth.login_desc')}
               </p>
             </div>
 
@@ -510,6 +520,7 @@ const Login = () => {
                     placeholder={t('auth.username')}
                     required
                     autoComplete="username"
+                    enterKeyHint="next"
                   />
                 </div>
               </div>
@@ -545,6 +556,7 @@ const Login = () => {
                     placeholder={t('auth.password')}
                     required
                     autoComplete="current-password"
+                    enterKeyHint="done"
                   />
                   <button
                     type="button"
@@ -573,7 +585,7 @@ const Login = () => {
                       </svg>
                     )}
                   </div>
-                  تذكرني (Remember Me)
+                  {t('auth.remember_me')} (Remember Me)
                 </label>
               </div>
 
@@ -589,7 +601,7 @@ const Login = () => {
                       <svg width="22" height="22" viewBox="0 0 22 22" style={{ animation: 'loginSpinner 0.8s linear infinite' }}>
                         <circle cx="11" cy="11" r="9" stroke="#0d1117" strokeWidth="2.5" fill="none" strokeDasharray="42" strokeDashoffset="14" strokeLinecap="round" />
                       </svg>
-                      جاري تسجيل الدخول...
+                      {t('auth.logging_in')}
                     </span>
                   ) : (
                     <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.6rem', position: 'relative', zIndex: 1 }}>

@@ -37,6 +37,81 @@ document.addEventListener('keydown', function(e) {
   }
 });
 
+// ═══════════════════════════════════════════════════════════════════
+// Global Enter-key → Move to next field (Desktop Enter + Mobile "Next/Go")
+// Works automatically on ALL input/select fields across the entire app.
+// Skips: textareas, readonly, disabled, hidden, and fields with
+// custom Enter handlers (like serial search inputs).
+// Smart form-awareness: if it's the last field in a form, allows submit.
+// ═══════════════════════════════════════════════════════════════════
+document.addEventListener('keydown', function(e) {
+  if (e.key !== 'Enter') return;
+
+  const el = document.activeElement;
+  if (!el) return;
+
+  const tag = el.tagName.toLowerCase();
+
+  // Only handle input and select elements
+  if (tag !== 'input' && tag !== 'select') return;
+
+  // Skip submit/button type inputs (let them submit the form)
+  if (el.type === 'submit' || el.type === 'button' || el.type === 'reset') return;
+
+  // Skip file inputs and color pickers
+  if (el.type === 'file' || el.type === 'color') return;
+
+  // Skip inputs with id="fetchSerialInput" — they have custom Enter handlers for search
+  if (el.id === 'fetchSerialInput') return;
+
+  // Skip inputs that have a specific data attribute to opt-out
+  if (el.dataset.enterIgnore === 'true') return;
+
+  // Don't interfere if Ctrl/Shift/Alt is pressed
+  if (e.ctrlKey || e.shiftKey || e.altKey || e.metaKey) return;
+
+  // Find the form this element belongs to (if any)
+  const parentForm = el.closest('form');
+
+  // Determine the scope: fields within the same form, or all visible fields on the page
+  const scope = parentForm || document;
+
+  // Collect all focusable fields in DOM order within the scope
+  const allFields = Array.from(scope.querySelectorAll(
+    'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="file"]):not([type="checkbox"]):not([type="radio"]):not([type="color"]), select'
+  )).filter(function(field) {
+    // Must be visible, enabled, and not readonly
+    if (field.disabled || field.readOnly) return false;
+    if (field.tabIndex === -1) return false;
+    if (field.offsetParent === null) return false; // hidden by CSS
+    // Check computed visibility
+    const style = window.getComputedStyle(field);
+    if (style.display === 'none' || style.visibility === 'hidden') return false;
+    return true;
+  });
+
+  const currentIndex = allFields.indexOf(el);
+  if (currentIndex === -1) return;
+
+  // Find the next field (skipping textareas)
+  let nextIndex = currentIndex + 1;
+
+  if (nextIndex < allFields.length) {
+    // There IS a next field — navigate to it
+    e.preventDefault();
+    const nextField = allFields[nextIndex];
+    nextField.focus();
+
+    // If it's a text/number input, select all text for easy overwrite
+    if (nextField.tagName.toLowerCase() === 'input' && 
+        (nextField.type === 'text' || nextField.type === 'number' || nextField.type === 'tel' || nextField.type === 'email' || nextField.type === 'url' || nextField.type === 'password')) {
+      nextField.select();
+    }
+  }
+  // If there's no next field and we're in a form: let Enter submit the form naturally (don't preventDefault)
+  // If there's no next field and no form: do nothing (Enter has no effect)
+});
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <ThemeProvider>

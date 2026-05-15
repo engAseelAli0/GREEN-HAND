@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import { Key, Lock, X, Save, ShieldAlert } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import toast from 'react-hot-toast';
+import { useTranslation } from 'react-i18next';
 
 const ChangePasswordModal = ({ user, onClose }) => {
+  const { t } = useTranslation();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -13,17 +15,17 @@ const ChangePasswordModal = ({ user, onClose }) => {
     e.preventDefault();
     
     if (!currentPassword) {
-      toast.error('يرجى إدخال كلمة المرور الحالية');
+      toast.error(t('auth.current_password_required'));
       return;
     }
 
     if (newPassword.length < 6) {
-      toast.error('كلمة المرور يجب أن تكون 6 أحرف على الأقل');
+      toast.error(t('auth.password_min_length'));
       return;
     }
     
     if (newPassword !== confirmPassword) {
-      toast.error('كلمتا المرور غير متطابقتين');
+      toast.error(t('auth.passwords_dont_match'));
       return;
     }
 
@@ -37,11 +39,11 @@ const ChangePasswordModal = ({ user, onClose }) => {
         .single();
         
       if (userError || !userData) {
-        throw new Error('تعذر التحقق من بيانات المستخدم');
+        throw new Error(t('auth.verify_error'));
       }
       
       if (userData.password !== currentPassword) {
-        toast.error('كلمة المرور الحالية غير صحيحة');
+        toast.error(t('auth.current_password_incorrect'));
         setLoading(false);
         return;
       }
@@ -63,11 +65,11 @@ const ChangePasswordModal = ({ user, onClose }) => {
         console.warn('Could not update plain text password in system_users:', dbError);
       }
 
-      toast.success('تم تغيير كلمة المرور بنجاح!');
+      toast.success(t('auth.change_password_success'));
       onClose();
     } catch (error) {
       console.error('Error changing password:', error);
-      toast.error(error.message || 'حدث خطأ أثناء تغيير كلمة المرور');
+      toast.error(error.message || t('auth.change_password_error'));
     } finally {
       setLoading(false);
     }
@@ -97,7 +99,7 @@ const ChangePasswordModal = ({ user, onClose }) => {
         }}>
           <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.1rem', color: 'var(--text-strong)' }}>
             <Key size={18} color="var(--accent-color)" />
-            تغيير كلمة المرور
+            {t('auth.change_password')}
           </h3>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '0.25rem' }}>
             <X size={20} />
@@ -109,7 +111,7 @@ const ChangePasswordModal = ({ user, onClose }) => {
           
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginBottom: '0.5rem' }}>
             <label style={{ fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-muted)' }}>
-              كلمة المرور الحالية
+              {t('auth.current_password')}
             </label>
             <div style={{ position: 'relative' }}>
               <ShieldAlert size={16} style={{ position: 'absolute', left: '0.8rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
@@ -118,9 +120,10 @@ const ChangePasswordModal = ({ user, onClose }) => {
                 className="form-control"
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
-                placeholder="أدخل كلمة المرور الحالية"
+                placeholder={t('auth.current_password')}
                 style={{ paddingLeft: '2.5rem', background: 'var(--bg-color)', border: '1px solid rgba(212, 175, 55, 0.3)' }}
                 required
+                enterKeyHint="next"
               />
             </div>
           </div>
@@ -129,7 +132,7 @@ const ChangePasswordModal = ({ user, onClose }) => {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
             <label style={{ fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-muted)' }}>
-              كلمة المرور الجديدة
+              {t('auth.new_password')}
             </label>
             <div style={{ position: 'relative' }}>
               <Lock size={16} style={{ position: 'absolute', left: '0.8rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
@@ -141,13 +144,14 @@ const ChangePasswordModal = ({ user, onClose }) => {
                 placeholder="••••••••"
                 style={{ paddingLeft: '2.5rem', background: 'var(--bg-color)' }}
                 required
+                enterKeyHint="next"
               />
             </div>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
             <label style={{ fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-muted)' }}>
-              تأكيد كلمة المرور الجديدة
+              {t('auth.confirm_new_password')}
             </label>
             <div style={{ position: 'relative' }}>
               <Lock size={16} style={{ position: 'absolute', left: '0.8rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
@@ -159,6 +163,7 @@ const ChangePasswordModal = ({ user, onClose }) => {
                 placeholder="••••••••"
                 style={{ paddingLeft: '2.5rem', background: 'var(--bg-color)' }}
                 required
+                enterKeyHint="done"
               />
             </div>
           </div>
@@ -166,10 +171,10 @@ const ChangePasswordModal = ({ user, onClose }) => {
           <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.25rem' }}>
             <button type="submit" className="btn btn-accent" disabled={loading} style={{ flex: 1, justifyContent: 'center', gap: '0.4rem' }}>
               <Save size={18} />
-              {loading ? 'جاري الحفظ...' : 'حفظ التغييرات'}
+              {loading ? t('auth.saving') : t('user_mgmt.save_changes')}
             </button>
             <button type="button" onClick={onClose} className="btn btn-outline" style={{ flex: 1, justifyContent: 'center' }}>
-              إلغاء
+              {t('auth.cancel')}
             </button>
           </div>
         </form>

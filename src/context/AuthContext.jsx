@@ -104,13 +104,13 @@ export const AuthProvider = ({ children }) => {
           .single();
           
         if (userCheckError || !userCheck) {
-          toast.error("هذا اليوزر غير موجود");
+          toast.error(t('auth.messages.user_not_found'));
           setLoading(false);
           return false;
         }
         
         if (userCheck.permissions && userCheck.permissions.__is_suspended) {
-          toast.error("هذا الحساب موقوف يرجى التواصل بالادارة");
+          toast.error(t('auth.messages.account_suspended'));
           setLoading(false);
           return false;
         }
@@ -130,7 +130,7 @@ export const AuthProvider = ({ children }) => {
         console.error('Supabase Auth error:', error);
         // Since we already know the user exists, an "Invalid login credentials" means the password is wrong
         if (error.message === 'Invalid login credentials') {
-          toast.error("كلمة السر غير صحيحة");
+          toast.error(t('auth.messages.wrong_password'));
         } else {
           toast.error(error.message);
         }
@@ -143,14 +143,14 @@ export const AuthProvider = ({ children }) => {
       
       // If userObj is null, it means they were deleted/suspended (handled in fetchUserPermissions)
       if (!userObj) {
-        toast.error("هذا الحساب محذوف أو موقف!");
+        toast.error(t('auth.messages.account_deleted_suspended'));
         return false;
       }
       
       return true;
     } catch (err) {
       console.error('Login error:', err);
-      toast.error("حدث خطأ أثناء محاولة تسجيل الدخول");
+      toast.error(t('auth.messages.login_error'));
       setLoading(false);
       return false;
     }

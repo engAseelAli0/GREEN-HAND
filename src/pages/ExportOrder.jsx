@@ -206,7 +206,9 @@ const ExportOrder = () => {
             background:#fff!important; padding:0!important;
             box-shadow:none!important; border:none!important;
             max-width:none!important; border-radius:0!important;
+            zoom: 0.95;
           }
+          html, body { min-height: auto !important; height: auto !important; padding: 0 !important; margin: 0 !important; }
           .no-print { display:none!important; }
           .hdr-blue, .hdr-grey, .hdr-light, .title-cell, .bg-cyan { 
             -webkit-print-color-adjust: exact !important; 
@@ -440,49 +442,37 @@ const ExportOrder = () => {
       {order && (
         <div className="print-doc" id="export-doc" dir="ltr">
           <table className="inv-table-new">
-            <colgroup>
-              <col style={{ width: '13%' }} /> {/* 1: Product Name */}
-              <col style={{ width: '9%' }} />  {/* 2: Model No */}
-              <col style={{ width: '11%' }} /> {/* 3: Barcode */}
-              <col style={{ width: '8%' }} />  {/* 4: Price */}
-              <col style={{ width: '8%' }} />  {/* 5: Qty */}
-              <col style={{ width: '6%' }} />  {/* 6: Size Qty */}
-              <col style={{ width: '13%' }} /> {/* 7: Prod Sizes */}
-              <col style={{ width: '11%' }} /> {/* 8: Carton Size */}
-              <col style={{ width: '1%' }} />  {/* 9: Plastic Bag */}
-              <col style={{ width: '1%' }} /> {/* 10: CTN Qty */}
-            </colgroup>
             <tbody>
               {/* ═══ ROW 1: HEADER ═══ */}
               <tr>
-                <th colSpan={2} className="hdr-blue">Order No. 订单号码</th>
+                <th colSpan={1} className="hdr-blue">Order No. 订单号码</th>
                 <td colSpan={2} className="val-center val-bold">{order.orderNumber || '-'}</td>
                 <th colSpan={2} className="hdr-blue">Request Date 订单日期</th>
-                <td colSpan={1} className="val-center val-bold">{formatDate(order.requestDate)}</td>
+                <td colSpan={2} className="val-center val-bold">{formatDate(order.requestDate)}</td>
                 <th colSpan={2} className="hdr-blue">Delivery Date 交货日期</th>
                 <td colSpan={1} className="val-center val-bold">{formatDate(order.deliveryDate)}</td>
               </tr>
 
               {/* ═══ ROW 2-4: BUYER & FACTORY INFO ═══ */}
               <tr>
-                <th colSpan={2} rowSpan={3} className="title-cell">
+                <th colSpan={1} rowSpan={3} className="title-cell">
                   <div style={{ fontSize: '20px', fontWeight: 900, marginBottom: '6px' }}>Product Order</div>
                   <div style={{ fontSize: '20px', fontWeight: 900 }}>产品订单</div>
                 </th>
                 <th colSpan={2} className="hdr-light">Buyer Co. Name 买方公司名称</th>
-                <td colSpan={2} className="val-center val-bold">{order.buyerCompany || '-'}</td>
+                <td colSpan={3} className="val-center val-bold">{order.buyerCompany || '-'}</td>
                 <th colSpan={2} className="hdr-light">Fact. Name 工厂名字</th>
                 <td colSpan={2} className="val-center val-bold">{factoryInfo.name || '-'}</td>
               </tr>
               <tr>
                 <th colSpan={2} className="hdr-light">Buyer Co. Mobile 买方手机</th>
-                <td colSpan={2} className="val-center val-bold">{order.buyerMobile || '-'}</td>
+                <td colSpan={3} className="val-center val-bold">{order.buyerMobile || '-'}</td>
                 <th colSpan={2} className="hdr-light">Fact. Mobile 工厂电话</th>
                 <td colSpan={2} className="val-center val-bold">{factoryInfo.mobile || '-'}</td>
               </tr>
               <tr>
                 <th colSpan={2} className="hdr-light">Customer ID 客户编号</th>
-                <td colSpan={2} className="val-center val-bold">{order.buyerNumber || order.buyerCode || '-'}</td>
+                <td colSpan={3} className="val-center val-bold">{order.buyerNumber || order.buyerCode || '-'}</td>
                 <th colSpan={2} className="hdr-light">Fact. Address 工厂地址</th>
                 <td colSpan={2} className="val-center val-bold">{factoryInfo.address || '-'}</td>
               </tr>
@@ -503,7 +493,7 @@ const ExportOrder = () => {
 
               {/* ═══ ROW 6: PRODUCT VALUES ═══ */}
               <tr>
-                <td className="val-center val-bold bg-light-blue">{englishOnly(order.productName) || '-'}</td>
+                <td className="val-center val-bold hdr-grey">{englishOnly(order.productName) || '-'}</td>
                 <td className="val-center val-bold bg-cyan" style={{ fontSize: '15px' }}>{order.barcode || '-'}</td>
                 <td className="val-center val-bold" style={{ fontSize: '15px' }}>{order.barcode ? `100${order.barcode}` : '-'}</td>
                 <td className="val-center val-bold">¥ {order.productPrice || '-'}</td>
@@ -512,7 +502,22 @@ const ExportOrder = () => {
                 <td className="val-center val-bold">From {order.sizeFrom || '-'} - To {order.sizeTo || '-'}</td>
                 <td className="val-center val-bold">{order.cartonSize || '-'}</td>
                 <td className="val-center val-bold">{order.plasticBagSize || '-'}</td>
-                <td className="val-center val-bold">{order.cartonQty || '-'}ctn * {order.cartonPackage || '-'}pcs</td>
+                <td className="val-center val-bold">
+                  {(() => {
+                    const getFirstNum = (str) => {
+                      if (!str) return null;
+                      const match = String(str).match(/\d+(\.\d+)?/);
+                      return match ? match[0] : null;
+                    };
+                    const qNum = getFirstNum(order.cartonQty);
+                    const pNum = getFirstNum(order.cartonPackage);
+                    if (!qNum && !pNum) return '-';
+                    if (qNum && pNum) return `${qNum} Carton × ${pNum} Pcs`;
+                    if (qNum) return `${qNum} Carton`;
+                    if (pNum) return `${pNum} Pcs`;
+                    return '-';
+                  })()}
+                </td>
               </tr>
 
               {/* ═══ MEASUREMENTS BLOCK ═══ */}
@@ -560,7 +565,7 @@ const ExportOrder = () => {
                   const partSizes = sizesToRender.slice(0, 7);
                   rows.push(
                     <tr key={`part-hdr-${part}`}>
-                      <th className="hdr-grey">{part}_Size<br/>尺寸</th>
+                      <th className="hdr-grey">{part} 尺寸</th>
                       {partSizes.map(s => <th key={s} className="hdr-grey">{s}</th>)}
                       {partSizes.length < 7 && (
                         <td colSpan={7 - partSizes.length} style={{ border: 'none', background: '#fff' }}></td>
@@ -618,17 +623,17 @@ const ExportOrder = () => {
               </tr>
               
               <tr>
-                <th className="hdr-light" style={{ width: '13%' }}>Fabric Composition<br/>面料成分</th>
-                {[0,1,2,3].map(i => (
-                  <td key={i} className="val-center val-bold">
+                <th className="hdr-light" style={{ backgroundColor: '#d0dbe5' }}>Fabric Composition 面料成分</th>
+                {[0,1,2].map(i => (
+                  <td key={i} colSpan={i === 0 ? 2 : 1} className="val-center val-bold">
                      {order.materials?.[i]?.name || ''}
                   </td>
                 ))}
               </tr>
               <tr>
-                <th className="hdr-light">Percentage<br/>百分比</th>
-                {[0,1,2,3].map(i => (
-                  <td key={i} className="val-center val-bold">
+                <th className="hdr-light" style={{ backgroundColor: '#d0dbe5' }}>Percentage 百分比</th>
+                {[0,1,2].map(i => (
+                  <td key={i} colSpan={i === 0 ? 2 : 1} className="val-center val-bold" style={{ color: order.materials?.[i] ? '#38761d' : 'inherit' }}>
                      {order.materials?.[i] ? `${order.materials[i].percentage}%` : ''}
                   </td>
                 ))}
@@ -636,8 +641,8 @@ const ExportOrder = () => {
 
               {/* ═══ COLORS QTY & BARCODES ═══ */}
               <tr>
-                <th colSpan={2} className="hdr-blue">Colors Qty 颜色数量</th>
-                <td colSpan={8} className="val-center val-bold bg-light-blue" style={{ fontSize: '16px' }}>
+                <th colSpan={1} className="hdr-blue">Colors Qty 颜色数量</th>
+                <td colSpan={9} className="val-center val-bold bg-light-blue" style={{ fontSize: '16px' }}>
                    {activeColors.length || '0'}
                 </td>
               </tr>
@@ -645,8 +650,8 @@ const ExportOrder = () => {
               {(() => {
                 if (activeColors.length === 0) return null;
                 
-                // Determine number of chunks (each chunk is 6 colors)
-                const CHUNK_SIZE = 6;
+                // Determine number of chunks (each chunk is 9 colors)
+                const CHUNK_SIZE = 9;
                 const numChunks = Math.ceil(activeColors.length / CHUNK_SIZE);
                 const chunks = [];
                 for (let i = 0; i < numChunks; i++) {
@@ -670,11 +675,11 @@ const ExportOrder = () => {
                 };
                 
                 return chunks.map((chunk, chunkIndex) => {
-                  const spans = getColSpans(8, chunk.length);
+                  const spans = getColSpans(9, chunk.length);
                   return (
                     <React.Fragment key={`color-chunk-${chunkIndex}`}>
                       <tr>
-                        <th colSpan={2} className="hdr-light" style={{ borderTop: chunkIndex > 0 ? '3px solid #000' : '1px solid #000' }}>Colors 颜色</th>
+                        <th colSpan={1} className="hdr-light" style={{ borderTop: chunkIndex > 0 ? '3px solid #000' : '1px solid #000' }}>Colors 颜色</th>
                         {chunk.map((c, i) => {
                            let hex = '';
                            if (c) {
@@ -694,7 +699,7 @@ const ExportOrder = () => {
                         })}
                       </tr>
                       <tr>
-                        <th colSpan={2} className="hdr-light">Qty 数量</th>
+                        <th colSpan={1} className="hdr-light">Qty 数量</th>
                         {chunk.map((c, i) => {
                            if (!c) return <td key={`q-${i}`} colSpan={spans[i]}></td>;
                            const qty = sizesToRender.reduce((sum, s) => sum + (parseInt(order.colorDistribution[c]?.[s]) || 0), 0);
@@ -702,17 +707,18 @@ const ExportOrder = () => {
                         })}
                       </tr>
                       <tr>
-                        <th colSpan={2} className="hdr-light">Color Barcodes<br/>颜色条形码</th>
+                        <th colSpan={1} className="hdr-light">Color Barcodes<br/>颜色条形码</th>
                         {chunk.map((c, i) => {
                            if (!c) return <td key={`b-${i}`} colSpan={spans[i]}></td>;
-                           const code = c.substring(0, 3).toUpperCase();
-                           return <td key={`b-${i}`} colSpan={spans[i]} className="val-center val-bold">
-                              {order.barcode ? `100${order.barcode}-${code}` : '-'}
+                           const cInfo = lookups.colors?.find(color => typeof color === 'object' ? color.name === c : color === c);
+                           const code = (cInfo && typeof cInfo === 'object') ? (cInfo.abbr || cInfo.code || '') : '';
+                           return <td key={`b-${i}`} colSpan={spans[i]} className="val-center val-bold" style={{ whiteSpace: 'nowrap' }}>
+                              {order.barcode ? `${order.barcode}${code ? '-' + code : ''}` : '-'}
                            </td>;
                         })}
                       </tr>
                       <tr>
-                        <th colSpan={2} className="hdr-light" style={{ height: '70px', verticalAlign: 'middle' }}>Fabrics Samples<br/>样板面料</th>
+                        <th colSpan={1} className="hdr-light" style={{ height: '70px', verticalAlign: 'middle' }}>Fabrics Samples<br/>样板面料</th>
                         {chunk.map((_, i) => (
                            <td key={`s-${i}`} colSpan={spans[i]}></td>
                         ))}

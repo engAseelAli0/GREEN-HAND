@@ -1,56 +1,59 @@
+import i18n from '../i18n';
+
 const MAX_ACTIVITY_ITEMS = 80;
 
 const ACTION_META = {
-  create: { label: 'إنشاء الطلب', color: '#38bdf8' },
-  update: { label: 'تحديث الطلب', color: '#f59e0b' },
-  copy: { label: 'نسخ الطلب', color: '#a78bfa' },
-  delete: { label: 'حذف الطلب', color: '#fb7185' },
-  barcode_print: { label: 'طباعة الباركود', color: '#22c55e' },
-  barcode_sample: { label: 'طباعة عينة باركود', color: '#0ea5e9' },
-  receive: { label: 'استلام المصنع', color: '#34d399' },
+  create: { label: () => i18n.t('activity.create'), color: '#38bdf8' },
+  update: { label: () => i18n.t('activity.update'), color: '#f59e0b' },
+  copy: { label: () => i18n.t('activity.copy'), color: '#a78bfa' },
+  delete: { label: () => i18n.t('activity.delete'), color: '#fb7185' },
+  barcode_print: { label: () => i18n.t('activity.barcode_print'), color: '#22c55e' },
+  barcode_sample: { label: () => i18n.t('activity.barcode_sample'), color: '#0ea5e9' },
+  receive: { label: () => i18n.t('activity.receive'), color: '#34d399' },
 };
 
 const importantFields = [
-  ['productName', 'اسم المنتج'],
-  ['factoryId', 'المصنع'],
-  ['totalQuantity', 'إجمالي الكمية'],
-  ['deliveryDate', 'تاريخ التسليم'],
-  ['productPrice', 'السعر'],
-  ['currency', 'العملة'],
-  ['cartonPackage', 'تعبئة الكرتون'],
-  ['cartonQty', 'عدد الكراتين'],
-  ['barcode', 'الباركود الأساسي'],
+  ['productName', 'activity.fields.productName'],
+  ['factoryId', 'activity.fields.factoryId'],
+  ['totalQuantity', 'activity.fields.totalQuantity'],
+  ['deliveryDate', 'activity.fields.deliveryDate'],
+  ['productPrice', 'activity.fields.productPrice'],
+  ['currency', 'activity.fields.currency'],
+  ['cartonPackage', 'activity.fields.cartonPackage'],
+  ['cartonQty', 'activity.fields.cartonQty'],
+  ['barcode', 'activity.fields.barcode'],
 ];
 
 export const getActorName = (user) => user?.username || user?.email || 'system';
 
 export const summarizeOrderChanges = (before = {}, after = {}) => {
   const changes = [];
-  importantFields.forEach(([key, label]) => {
+  importantFields.forEach(([key, keyLabel]) => {
     const prev = String(before?.[key] ?? '');
     const next = String(after?.[key] ?? '');
-    if (prev !== next) changes.push({ field: key, label, from: prev || '-', to: next || '-' });
+    if (prev !== next) changes.push({ field: key, label: i18n.t(keyLabel), from: prev || '-', to: next || '-' });
   });
 
   const beforeColors = Object.keys(before?.colorDistribution || {}).length;
   const afterColors = Object.keys(after?.colorDistribution || {}).length;
   if (beforeColors !== afterColors) {
-    changes.push({ field: 'colorDistribution', label: 'عدد الألوان', from: String(beforeColors), to: String(afterColors) });
+    changes.push({ field: 'colorDistribution', label: i18n.t('activity.fields.color_count'), from: String(beforeColors), to: String(afterColors) });
   }
 
   return changes.slice(0, 8);
 };
 
 export const createActivityItem = ({ action, user, note, changes = [], meta = {} }) => {
-  const actionMeta = ACTION_META[action] || { label: action, color: '#94a3b8' };
+  const actionMeta = ACTION_META[action] || { label: () => action, color: '#94a3b8' };
+  const label = typeof actionMeta.label === 'function' ? actionMeta.label() : actionMeta.label;
   return {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     action,
-    actionLabel: actionMeta.label,
+    actionLabel: label,
     color: actionMeta.color,
     actor: getActorName(user),
     at: new Date().toISOString(),
-    note: note || actionMeta.label,
+    note: note || label,
     changes,
     meta,
   };
@@ -78,7 +81,7 @@ export const activitySummary = (items = []) => {
 export const formatActivityTime = (iso) => {
   if (!iso) return '-';
   try {
-    return new Date(iso).toLocaleString('ar-SA', {
+    return new Date(iso).toLocaleString(i18n.language === 'ar' ? 'ar-SA' : (i18n.language === 'zh' ? 'zh-CN' : 'en-GB'), {
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',

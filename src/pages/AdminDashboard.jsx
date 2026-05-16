@@ -654,9 +654,31 @@ const AdminDashboard = () => {
 
   return (
     <div style={styles.root} className="fade-in">
+      <style>{`
+        @media (max-width: 900px) {
+          .admin-body { flex-direction: column !important; }
+          .admin-sidebar {
+            width: 100% !important;
+            position: static !important;
+            max-height: none !important;
+            flex-direction: row !important;
+            overflow-x: auto !important;
+            overflow-y: hidden !important;
+            padding: 0.65rem !important;
+            gap: 0.25rem !important;
+          }
+          .admin-sidebar > div:first-child { display: none !important; }
+          .admin-sidebar button { white-space: nowrap; font-size: 0.8rem !important; padding: 0.5rem 0.7rem !important; }
+          .admin-sidebar button span:not(:first-child) { display: none; }
+        }
+        @media (max-width: 600px) {
+          .admin-header { padding: 1rem !important; }
+          .admin-header-title { font-size: 1.1rem !important; }
+        }
+      `}</style>
       {/* ═══ Header ═══ */}
-      <div style={styles.header}>
-        <div style={styles.headerTitle}>
+      <div style={styles.header} className="admin-header">
+        <div style={styles.headerTitle} className="admin-header-title">
           <div style={styles.headerIconWrap}>
             <Sparkles size={22} color="#fff" />
           </div>
@@ -668,10 +690,10 @@ const AdminDashboard = () => {
       </div>
 
       {/* ═══ Body ═══ */}
-      <div style={styles.body}>
+      <div style={styles.body} className="admin-body">
         
         {/* ─── Sidebar ─── */}
-        <nav style={styles.sidebar}>
+        <nav style={styles.sidebar} className="admin-sidebar">
           <div style={styles.sidebarLabel}>{t('admin.categories_and_lists')}</div>
           {tabs.map(tab => {
             const isActive = activeTab === tab.id;

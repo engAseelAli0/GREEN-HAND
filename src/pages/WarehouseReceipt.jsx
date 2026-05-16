@@ -306,7 +306,7 @@ const WarehouseReceipt = () => {
   return (
     <div className="fade-in" style={{ padding: '0 1rem', paddingBottom: '5rem' }}>
       
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <h1 className="text-gradient" style={{ fontSize: '2.2rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
             <FileText size={35} color="var(--accent-color)" /> {t('warehouse.title')}
@@ -369,7 +369,7 @@ const WarehouseReceipt = () => {
            <h3 style={{ margin: 0, color: 'var(--text-strong)' }}>
             {t('warehouse.results.preview')} <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', fontWeight: 'normal' }}>({filteredData.length} {t('warehouse.results.models_count')})</span>
            </h3>
-           <div style={{ display: 'flex', gap: '1rem' }}>
+           <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
               {hasPermission('warehouse', 'export') && (<>
               <button className="btn btn-outline" onClick={() => window.print()} style={{ color: 'var(--text-main)', borderColor: 'var(--border-color)' }}>
                   <Printer size={20} /> {t('warehouse.results.print_btn')}
@@ -604,7 +604,7 @@ const WarehouseReceipt = () => {
             </table>
 
             {/* Footer Summary */}
-            <div className="footer-summary" style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1.5rem', padding: '1rem', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '0.9rem', fontWeight: 'bold', color: '#334155' }}>
+            <div className="footer-summary" style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1.5rem', padding: '1rem', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '0.9rem', fontWeight: 'bold', color: '#334155', flexWrap: 'wrap', gap: '1rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <span style={{ color: '#ef4444' }}>{t('warehouse.footer.shipping_date_zh')}</span>
                     <span>{t('warehouse.footer.shipping_date')}:</span>

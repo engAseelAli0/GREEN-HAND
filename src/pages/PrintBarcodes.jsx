@@ -1167,6 +1167,21 @@ const PrintBarcodes = () => {
                 </div>
               )}
             </div>
+            <button
+              className="inline-f9-btn"
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                const input = document.getElementById('fetchSerialInput');
+                if (input) {
+                  input.focus();
+                  input.dispatchEvent(new KeyboardEvent('keydown', { key: 'F9', code: 'F9', keyCode: 120, bubbles: true, cancelable: true }));
+                }
+              }}
+            >
+              <Search size={15} strokeWidth={2.5} />
+              F9
+            </button>
             <button className="bc-generate-btn" onClick={() => handleFetchOrder()} disabled={loading}>
               <Sparkles size={18} />
               {loading ? t('print.search.loading') : t('print.search.generate_btn')}

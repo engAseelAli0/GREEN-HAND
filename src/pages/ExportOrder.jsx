@@ -291,7 +291,7 @@ const ExportOrder = () => {
 
       {/* Control Navigation - No Print */}
       <div className="card no-print" style={{ marginBottom: '2rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end', flex: 1 }}>
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end', flex: 1, flexWrap: 'wrap' }}>
           <div className="form-group" style={{ marginBottom: 0, flex: 1, maxWidth: '300px' }}>
             <label className="form-label">{t('export.fetch_label')}</label>
             <div style={{ display: 'flex', gap: '0.5rem', position: 'relative' }}>
@@ -305,6 +305,21 @@ const ExportOrder = () => {
                 onKeyDown={handleF9Press}
                 autoComplete="off"
               />
+              <button
+                className="inline-f9-btn"
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  const input = document.getElementById('fetchSerialInput');
+                  if (input) {
+                    input.focus();
+                    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'F9', code: 'F9', keyCode: 120, bubbles: true, cancelable: true }));
+                  }
+                }}
+              >
+                <Search size={15} strokeWidth={2.5} />
+                F9
+              </button>
               <button className="btn btn-primary" onClick={() => handleFetch()}>
                 <Search size={20} /> {t('export.fetch_btn')}
               </button>

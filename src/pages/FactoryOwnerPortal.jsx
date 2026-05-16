@@ -259,7 +259,7 @@ const FactoryOwnerPortal = () => {
             <Factory size={40} color="var(--accent-color)" />
             {t('owner.title')}
           </h1>
-          <p style={{ color: 'var(--text-muted)', margin: '0.5rem 0 0', paddingRight: '3.5rem' }}>
+          <p style={{ color: 'var(--text-muted)', margin: '0.5rem 0 0' }}>
             {t('owner.desc')}
           </p>
         </div>
@@ -267,7 +267,7 @@ const FactoryOwnerPortal = () => {
 
       {/* ─── SEARCH SECTION ─── */}
       <div className="card" style={{ marginBottom: '2rem', border: '1px solid var(--accent-color)', boxShadow: '0 8px 30px rgba(212, 175, 55, 0.1)' }}>
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end' }}>
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
             <label className="form-label">{t('owner.search.label')}</label>
             <div style={{ position: 'relative' }}>
@@ -389,6 +389,21 @@ const FactoryOwnerPortal = () => {
               )}
             </div>
           </div>
+          <button
+            className="inline-f9-btn"
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => {
+              const input = document.getElementById('fetchSerialInput');
+              if (input) {
+                input.focus();
+                input.dispatchEvent(new KeyboardEvent('keydown', { key: 'F9', code: 'F9', keyCode: 120, bubbles: true, cancelable: true }));
+              }
+            }}
+          >
+            <Search size={15} strokeWidth={2.5} />
+            F9
+          </button>
           <button className="btn btn-primary" onClick={() => handleSearch()} disabled={isSearching} style={{ padding: '14px 30px', fontSize: '1.1rem' }}>
             {isSearching ? <div className="spinner" style={{ width: '22px', height: '22px', border: '3px solid #fff', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} /> : t('owner.search.btn')}
           </button>

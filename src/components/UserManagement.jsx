@@ -149,7 +149,6 @@ const UserManagement = () => {
 
         const updateData = {
           username: formData.username,
-          password: formData.password || oldUser.password,
           role: formData.role,
           allowed_pages: allowedPagesArray,
           permissions: { ...formData.permissions, __auth_email: authEmailToUse }
@@ -183,7 +182,6 @@ const UserManagement = () => {
 
         const { error: dbError } = await supabase.from('system_users').insert([{
           username: formData.username,
-          password: formData.password,
           role: formData.role,
           allowed_pages: allowedPagesArray,
           permissions: formData.permissions

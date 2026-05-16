@@ -56,13 +56,7 @@ const AppLayout = () => {
 
   const permittedPages = NAV_PAGES.filter(page => hasAccess(page.path));
 
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
 
-  useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth <= 768);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -262,51 +256,70 @@ const AppLayout = () => {
         <ChangePasswordModal user={user} onClose={() => setShowChangePassword(false)} />
       )}
 
+      <style>{`
+        .mobile-f9-fab {
+          display: none;
+          position: fixed;
+          bottom: 2rem;
+          right: 2rem;
+          z-index: 99999;
+          border-radius: 50px;
+          padding: 1rem 1.5rem;
+          align-items: center;
+          gap: 0.6rem;
+          box-shadow: 0 10px 40px rgba(212, 175, 55, 0.5);
+          background: linear-gradient(135deg, #d4af37, #f5d060);
+          color: #0d1117 !important;
+          font-weight: 800;
+          font-size: 1.1rem;
+          border: 2px solid rgba(255, 255, 255, 0.2);
+          cursor: pointer;
+          transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+          animation: fabBounceIn 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        @keyframes fabBounceIn {
+          from { transform: scale(0) translateY(40px); opacity: 0; }
+          to { transform: scale(1) translateY(0); opacity: 1; }
+        }
+
+        .mobile-f9-fab:active {
+          transform: scale(0.9);
+        }
+
+        @media (max-width: 1024px) {
+          .mobile-f9-fab {
+            display: flex;
+          }
+        }
+      `}</style>
+
       {/* Global Mobile F9 Search Button */}
-      {isMobile && (
-        <button
-          className="btn"
-          style={{
-            position: 'fixed',
-            bottom: '1.5rem',
-            right: '1.5rem',
-            zIndex: 9999,
-            borderRadius: '50px',
-            padding: '0.8rem 1.25rem',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            boxShadow: '0 8px 30px rgba(212, 175, 55, 0.4)',
-            background: 'linear-gradient(135deg, #d4af37, #f5d060)',
-            color: '#0d1117',
-            fontWeight: 'bold',
-            fontSize: '1rem',
-            border: 'none',
-          }}
-          onMouseDown={(e) => {
-            // Prevent losing focus on the current input
-            e.preventDefault();
-          }}
-          onClick={(e) => {
-            e.preventDefault();
-            const activeEl = document.activeElement;
-            if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT')) {
-              activeEl.dispatchEvent(new KeyboardEvent('keydown', {
-                key: 'F9',
-                code: 'F9',
-                keyCode: 120,
-                bubbles: true,
-                cancelable: true
-              }));
-            } else {
-              toast.error(t('admin.messages.focus_input_first') || 'الرجاء تحديد حقل أولاً للبحث (F9)');
-            }
-          }}
-        >
-          <Search size={18} />
-          F9
-        </button>
-      )}
+      <button
+        className="mobile-f9-fab"
+        onMouseDown={(e) => {
+          // Prevent losing focus on the current input
+          e.preventDefault();
+        }}
+        onClick={(e) => {
+          e.preventDefault();
+          const activeEl = document.activeElement;
+          if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT')) {
+            activeEl.dispatchEvent(new KeyboardEvent('keydown', {
+              key: 'F9',
+              code: 'F9',
+              keyCode: 120,
+              bubbles: true,
+              cancelable: true
+            }));
+          } else {
+            toast.error(t('admin.messages.focus_input_first') || 'الرجاء تحديد حقل أولاً للبحث (F9)');
+          }
+        }}
+      >
+        <Search size={22} strokeWidth={3} />
+        <span>F9</span>
+      </button>
     </div>
   );
 };

@@ -2294,7 +2294,12 @@ const DataEntryWizard = () => {
           </div>
 
           <div className="tab-content-wrapper">
-            {renderTabContent()}
+            <div style={{ 
+              pointerEvents: (isEditMode && !hasPermission('entry', 'edit')) || (!isEditMode && !hasPermission('entry', 'add')) ? 'none' : 'auto', 
+              opacity: (isEditMode && !hasPermission('entry', 'edit')) || (!isEditMode && !hasPermission('entry', 'add')) ? 0.7 : 1 
+            }}>
+              {renderTabContent()}
+            </div>
 
             <div className="tab-nav-arrows">
               <button className="tab-nav-arrow" onClick={goPrev} disabled={currentTabIdx === 0}>
@@ -2367,7 +2372,11 @@ const DataEntryWizard = () => {
           </div>
 
           {TABS.map((tab) => (
-            <div key={tab.id} id={`scroll-section-${tab.id}`} style={{ scrollMarginTop: '5rem' }}>
+            <div key={tab.id} id={`scroll-section-${tab.id}`} style={{ 
+              scrollMarginTop: '5rem',
+              pointerEvents: (isEditMode && !hasPermission('entry', 'edit')) || (!isEditMode && !hasPermission('entry', 'add')) ? 'none' : 'auto', 
+              opacity: (isEditMode && !hasPermission('entry', 'edit')) || (!isEditMode && !hasPermission('entry', 'add')) ? 0.7 : 1 
+            }}>
               {renderTabContent(tab.id)}
             </div>
           ))}

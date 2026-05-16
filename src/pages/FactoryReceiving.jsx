@@ -614,14 +614,15 @@ const FactoryReceiving = () => {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
               <div style={{ background: 'rgba(212,175,55,0.05)', padding: '12px 16px', borderRadius: '10px', border: '1px solid rgba(212,175,55,0.3)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('receiving.info.status')}</span>
-                <select 
+                 <select 
                    className="form-control" 
                    value={productInfo.productStatus} 
                    onChange={e => setProductInfo({...productInfo, productStatus: e.target.value})} 
+                   disabled={!(hasPermission('receiving', 'add') || hasPermission('receiving', 'edit'))}
                    style={{ 
                      padding: '4px', marginTop: '4px', fontWeight: 'bold', border: 'none', background: 'transparent',
                      color: productInfo.productStatus === t('receiving.info.received') ? '#16a34a' : '#dc2626',
-                     cursor: 'pointer'
+                     cursor: (hasPermission('receiving', 'add') || hasPermission('receiving', 'edit')) ? 'pointer' : 'not-allowed'
                    }}
                 >
                   <option value={t('receiving.info.not_received')}>{t('receiving.info.not_received')}</option>
@@ -687,7 +688,8 @@ const FactoryReceiving = () => {
                     padding: '1rem', borderRadius: '12px', 
                     border: pkg.active ? '1px solid var(--border-color)' : '1px dashed var(--border-color)',
                     transition: 'all 0.3s ease',
-                    opacity: pkg.active ? 1 : 0.8
+                    opacity: pkg.active ? 1 : 0.8,
+                    pointerEvents: (hasPermission('receiving', 'add') || hasPermission('receiving', 'edit')) ? 'auto' : 'none'
                   }}>
                     {/* Package Header with Checkbox */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -785,7 +787,11 @@ const FactoryReceiving = () => {
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '1rem', marginTop: '1.5rem' }}>
               {colors.filter(c => c.colorName).map((c, i) => (
-                <div key={i} style={{ background: 'var(--surface-highlight)', border: '1px solid var(--border-color)', borderRadius: '10px', overflow: 'hidden' }}>
+                <div key={i} style={{ 
+                    background: 'var(--surface-highlight)', border: '1px solid var(--border-color)', borderRadius: '10px', overflow: 'hidden',
+                    pointerEvents: (hasPermission('receiving', 'add') || hasPermission('receiving', 'edit')) ? 'auto' : 'none',
+                    opacity: (hasPermission('receiving', 'add') || hasPermission('receiving', 'edit')) ? 1 : 0.7
+                }}>
                   <div style={{ background: 'var(--surface-color)', padding: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontSize: '0.85rem', fontWeight: 'bold', borderBottom: '1px solid var(--border-color)' }}>
                     <div style={{ width: '16px', height: '16px', borderRadius: '50%', border: '1px solid rgba(255,255,255,0.2)', backgroundColor: extractColorCSS(c.colorName), flexShrink: 0 }}></div>
                     {c.colorName}

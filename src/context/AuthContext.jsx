@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next';
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
-  useTranslation();
+  const { t } = useTranslation();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -98,9 +98,7 @@ export const AuthProvider = ({ children }) => {
       let email = `${username}@greenhand.local`;
       if (username !== 'admin') {
         const { data: userCheck, error: userCheckError } = await supabase
-          .from('system_users')
-          .select('id, permissions')
-          .eq('username', username)
+          .rpc('get_user_prelogin_info', { lookup_username: username })
           .single();
           
         if (userCheckError || !userCheck) {

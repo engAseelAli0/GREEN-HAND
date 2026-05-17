@@ -243,21 +243,21 @@ const ExportOrder = () => {
           color: #fff !important;
           font-weight: 800;
           text-align: center;
-          font-size: 13px;
+          font-size: 15px;
         }
         .hdr-grey {
           background-color: #d5dbdb !important;
           color: #000 !important;
           font-weight: 800;
           text-align: center;
-          font-size: 13px;
+          font-size: 15px;
         }
         .hdr-light {
           background-color: #f2f2f2 !important;
           color: #000 !important;
           font-weight: 800;
           text-align: center;
-          font-size: 12px;
+          font-size: 14px;
         }
         .title-cell {
           background-color: #1a5276 !important;
@@ -269,12 +269,12 @@ const ExportOrder = () => {
         /* Values */
         .val-center {
           text-align: center;
-          font-size: 13px;
+          font-size: 15px;
           vertical-align: middle;
         }
         .val-left {
           text-align: left;
-          font-size: 13px;
+          font-size: 15px;
           vertical-align: middle;
         }
         .val-bold {
@@ -465,7 +465,7 @@ const ExportOrder = () => {
                 <th colSpan={2} className="hdr-blue">Request Date 订单日期</th>
                 <td colSpan={2} className="val-center val-bold">{formatDate(order.requestDate)}</td>
                 <th colSpan={2} className="hdr-blue">Delivery Date 交货日期</th>
-                <td colSpan={1} className="val-center val-bold">{formatDate(order.deliveryDate)}</td>
+                <td colSpan={2} className="val-center val-bold">{formatDate(order.deliveryDate)}</td>
               </tr>
 
               {/* ═══ ROW 2-4: BUYER & FACTORY INFO ═══ */}
@@ -474,22 +474,22 @@ const ExportOrder = () => {
                   <div style={{ fontSize: '20px', fontWeight: 900, marginBottom: '6px' }}>Product Order</div>
                   <div style={{ fontSize: '20px', fontWeight: 900 }}>产品订单</div>
                 </th>
-                <th colSpan={2} className="hdr-light">Buyer Co. Name 买方公司名称</th>
+                <th colSpan={2} className="hdr-light">Customer Company 客户公司名称</th>
                 <td colSpan={3} className="val-center val-bold">{order.buyerCompany || '-'}</td>
                 <th colSpan={2} className="hdr-light">Fact. Name 工厂名字</th>
-                <td colSpan={2} className="val-center val-bold">{factoryInfo.name || '-'}</td>
+                <td colSpan={3} className="val-center val-bold">{factoryInfo.name || '-'}</td>
               </tr>
               <tr>
-                <th colSpan={2} className="hdr-light">Buyer Co. Mobile 买方手机</th>
-                <td colSpan={3} className="val-center val-bold">{order.buyerMobile || '-'}</td>
+                <th colSpan={2} className="hdr-light">Customer Mobile 客户手机</th>
+                <td colSpan={3} className="val-center val-bold">{order.buyerNumber || '-'}</td>
                 <th colSpan={2} className="hdr-light">Fact. Mobile 工厂电话</th>
-                <td colSpan={2} className="val-center val-bold">{factoryInfo.mobile || '-'}</td>
+                <td colSpan={3} className="val-center val-bold">{factoryInfo.mobile || '-'}</td>
               </tr>
               <tr>
-                <th colSpan={2} className="hdr-light">Customer ID 客户编号</th>
-                <td colSpan={3} className="val-center val-bold">{order.buyerNumber || order.buyerCode || '-'}</td>
+                <th colSpan={2} className="hdr-light">Customer Code 客户代码</th>
+                <td colSpan={3} className="val-center val-bold">{order.buyerMobile || '-'}</td>
                 <th colSpan={2} className="hdr-light">Fact. Address 工厂地址</th>
-                <td colSpan={2} className="val-center val-bold">{factoryInfo.address || '-'}</td>
+                <td colSpan={3} className="val-center val-bold">{factoryInfo.address || '-'}</td>
               </tr>
 
               {/* ═══ ROW 5: PRODUCT COLUMNS ═══ */}
@@ -497,8 +497,9 @@ const ExportOrder = () => {
                 <th className="hdr-blue">Product Name<br/>产品名称</th>
                 <th className="hdr-blue">Model No.<br/>款号</th>
                 <th className="hdr-blue">Barcode No.<br/>条形码</th>
-                <th className="hdr-blue">Prod Price<br/>产品价格</th>
                 <th className="hdr-blue">Prod Qty<br/>数量</th>
+                 <th className="hdr-blue">Prod Price<br/>产品价格</th>
+                <th className="hdr-blue">Total Price<br/>总价</th>
                 <th className="hdr-blue">Size Qty.<br/>码数</th>
                 <th className="hdr-blue">Prod Sizes<br/>码段</th>
                 <th className="hdr-blue">Carton Size<br/>纸箱尺寸</th>
@@ -509,10 +510,11 @@ const ExportOrder = () => {
               {/* ═══ ROW 6: PRODUCT VALUES ═══ */}
               <tr>
                 <td className="val-center val-bold hdr-grey">{englishOnly(order.productName) || '-'}</td>
-                <td className="val-center val-bold bg-cyan" style={{ fontSize: '15px' }}>{order.barcode || '-'}</td>
-                <td className="val-center val-bold" style={{ fontSize: '15px' }}>{order.barcode ? `100${order.barcode}` : '-'}</td>
-                <td className="val-center val-bold">¥ {order.productPrice || '-'}</td>
+                <td className="val-center val-bold bg-cyan">{order.serialNumber || '-'}</td>
+                <td className="val-center val-bold">{order.barcode ? `${order.barcode}` : '-'}</td>
                 <td className="val-center val-bold">{order.totalQuantity || '-'}</td>
+                <td className="val-center val-bold">¥ {order.productPrice || '-'}</td>
+                <td className="val-center val-bold bg-light-blue">¥ {order.productPrice && order.totalQuantity ? (parseFloat(order.productPrice) * parseFloat(order.totalQuantity)).toFixed(2) : '-'}</td>
                 <td className="val-center val-bold">{sizesToRender.length || '-'}</td>
                 <td className="val-center val-bold">From {order.sizeFrom || '-'} - To {order.sizeTo || '-'}</td>
                 <td className="val-center val-bold">{order.cartonSize || '-'}</td>
@@ -558,7 +560,7 @@ const ExportOrder = () => {
                   rows.push(
                     <tr key="empty-m1">
                       <th className="hdr-grey">Size<br/>尺寸</th>
-                      <td colSpan={7} style={{ border: 'none', background: '#fff' }}></td>
+                      <td colSpan={8} style={{ border: 'none', background: '#fff' }}></td>
                       <td colSpan={2} rowSpan={2} style={{ textAlign: 'center', verticalAlign: 'middle', padding: '4px', borderLeft: '3px solid #000' }}>
                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'center' }}>
                              {order.productImages?.slice(0, 2).map((img, idx) => <img key={idx} src={img.url} alt="product" crossOrigin="anonymous" style={{ maxHeight: '130px', objectFit: 'contain' }} />)}
@@ -570,20 +572,20 @@ const ExportOrder = () => {
                   rows.push(
                     <tr key="empty-m2">
                       <td style={{ height: '40px' }}></td>
-                      <td colSpan={7} style={{ border: 'none', background: '#fff' }}></td>
+                      <td colSpan={8} style={{ border: 'none', background: '#fff' }}></td>
                     </tr>
                   );
                   return rows;
                 }
 
                 parts.forEach(part => {
-                  const partSizes = sizesToRender.slice(0, 7);
+                  const partSizes = sizesToRender.slice(0, 8);
                   rows.push(
                     <tr key={`part-hdr-${part}`}>
                       <th className="hdr-grey">{part} 尺寸</th>
                       {partSizes.map(s => <th key={s} className="hdr-grey">{s}</th>)}
-                      {partSizes.length < 7 && (
-                        <td colSpan={7 - partSizes.length} style={{ border: 'none', background: '#fff' }}></td>
+                      {partSizes.length < 8 && (
+                        <td colSpan={8 - partSizes.length} style={{ border: 'none', background: '#fff' }}></td>
                       )}
                       
                       {isFirstRow && (
@@ -606,8 +608,8 @@ const ExportOrder = () => {
                         {partSizes.map(s => (
                            <td key={s} className="val-center val-bold">{measurementsObj[mName]?.[s] || ''}</td>
                         ))}
-                        {partSizes.length < 7 && (
-                          <td colSpan={7 - partSizes.length} style={{ border: 'none', background: '#fff' }}></td>
+                        {partSizes.length < 8 && (
+                          <td colSpan={8 - partSizes.length} style={{ border: 'none', background: '#fff' }}></td>
                         )}
                       </tr>
                     );
@@ -617,47 +619,58 @@ const ExportOrder = () => {
               })()}
 
               {/* ═══ FABRICS & CONDITIONS ═══ */}
-              <tr>
-                <th colSpan={5} className="hdr-blue">Fabrics Kind & Material 面料种类&材质</th>
-                <th colSpan={3} className="hdr-blue">Conditions 状况</th>
-                <th colSpan={2} className="hdr-blue">Order Remarks 细节</th>
-              </tr>
-              
-              <tr>
-                <td colSpan={5} className="val-center val-bold bg-light-blue" style={{ fontSize: '14px' }}>
-                  {order.productFabric || 'Chiffon 雪纺'}
-                </td>
-                <td colSpan={3} rowSpan={3} style={{ verticalAlign: 'top', padding: '8px', fontSize: '12px', color: '#c0392b', fontWeight: 800 }}>
-                  {order.packagingConditions?.cond1 && <div style={{ marginBottom: '4px' }}>* {t('export.doc.cond1_text', { val1: order.packagingConditions.cond1_val1 || '-', val2: order.packagingConditions.cond1_val2 || '-' })}</div>}
-                  {order.packagingConditions?.cond2 && <div style={{ marginBottom: '4px' }}>* {t('export.doc.cond2_text', { val1: order.packagingConditions.cond2_val1 || '-', val2: order.packagingConditions.cond2_val2 || '-' })}</div>}
-                  {lookups.packagingConditionsList?.filter(c => order.packagingConditions?.[c]).map((c, i) => <div key={i} style={{ marginBottom: '4px' }}>* {c}</div>)}
-                </td>
-                <td colSpan={2} rowSpan={3} style={{ verticalAlign: 'top', padding: '8px', fontSize: '12px', fontWeight: 800 }}>
-                  {order.remarks || ''}
-                </td>
-              </tr>
-              
-              <tr>
-                <th className="hdr-light" style={{ backgroundColor: '#d0dbe5' }}>Fabric Composition 面料成分</th>
-                {[0,1,2].map(i => (
-                  <td key={i} colSpan={i === 0 ? 2 : 1} className="val-center val-bold">
-                     {order.materials?.[i]?.name || ''}
-                  </td>
-                ))}
-              </tr>
-              <tr>
-                <th className="hdr-light" style={{ backgroundColor: '#d0dbe5' }}>Percentage 百分比</th>
-                {[0,1,2].map(i => (
-                  <td key={i} colSpan={i === 0 ? 2 : 1} className="val-center val-bold" style={{ color: order.materials?.[i] ? '#38761d' : 'inherit' }}>
-                     {order.materials?.[i] ? `${order.materials[i].percentage}%` : ''}
-                  </td>
-                ))}
-              </tr>
+              {(() => {
+                const numMaterials = [0, 1, 2].filter(i => order.materials && order.materials[i] && order.materials[i].name).length;
+                const actualMaterials = Math.max(1, numMaterials);
+                const fabricColSpan = 2 + 2 + (actualMaterials - 1); // 2 for header, 2 for first material, 1 for each additional
+                const conditionsColSpan = 11 - 2 - fabricColSpan; // 11 total columns, 2 for Order Remarks
+
+                return (
+                  <React.Fragment>
+                    <tr>
+                      <th colSpan={fabricColSpan} className="hdr-blue">Fabrics Kind & Material 面料种类&材质</th>
+                      <th colSpan={conditionsColSpan} className="hdr-blue">Conditions 状况</th>
+                      <th colSpan={2} className="hdr-blue">Order Remarks 细节</th>
+                    </tr>
+                    
+                    <tr>
+                      <td colSpan={fabricColSpan} className="val-center val-bold bg-light-blue" style={{ fontSize: '14px' }}>
+                        {order.productFabric || 'Chiffon 雪纺'}
+                      </td>
+                      <td colSpan={conditionsColSpan} rowSpan={3} style={{ verticalAlign: 'top', padding: '8px', fontSize: '12px', color: '#c0392b', fontWeight: 800 }}>
+                        {order.packagingConditions?.cond1 && <div style={{ marginBottom: '4px' }}>* {t('export.doc.cond1_text', { val1: order.packagingConditions.cond1_val1 || '-', val2: order.packagingConditions.cond1_val2 || '-' })}</div>}
+                        {order.packagingConditions?.cond2 && <div style={{ marginBottom: '4px' }}>* {t('export.doc.cond2_text', { val1: order.packagingConditions.cond2_val1 || '-', val2: order.packagingConditions.cond2_val2 || '-' })}</div>}
+                        {lookups.packagingConditionsList?.filter(c => order.packagingConditions?.[c]).map((c, i) => <div key={i} style={{ marginBottom: '4px' }}>* {c}</div>)}
+                      </td>
+                      <td colSpan={2} rowSpan={3} style={{ verticalAlign: 'top', padding: '8px', fontSize: '12px', fontWeight: 800 }}>
+                        {order.remarks || ''}
+                      </td>
+                    </tr>
+                    
+                    <tr>
+                      <th colSpan={2} className="hdr-light" style={{ backgroundColor: '#d0dbe5' }}>Fabric Composition 面料成分</th>
+                      {[0,1,2].slice(0, actualMaterials).map(i => (
+                        <td key={i} colSpan={i === 0 ? 2 : 1} className="val-center val-bold">
+                           {order.materials?.[i]?.name || ''}
+                        </td>
+                      ))}
+                    </tr>
+                    <tr>
+                      <th colSpan={2} className="hdr-light" style={{ backgroundColor: '#d0dbe5' }}>Percentage 百分比</th>
+                      {[0,1,2].slice(0, actualMaterials).map(i => (
+                        <td key={i} colSpan={i === 0 ? 2 : 1} className="val-center val-bold" style={{ color: order.materials?.[i] ? '#38761d' : 'inherit' }}>
+                           {order.materials?.[i] ? `${order.materials[i].percentage}%` : ''}
+                        </td>
+                      ))}
+                    </tr>
+                  </React.Fragment>
+                );
+              })()}
 
               {/* ═══ COLORS QTY & BARCODES ═══ */}
               <tr>
                 <th colSpan={1} className="hdr-blue">Colors Qty 颜色数量</th>
-                <td colSpan={9} className="val-center val-bold bg-light-blue" style={{ fontSize: '16px' }}>
+                <td colSpan={10} className="val-center val-bold bg-light-blue" style={{ fontSize: '16px' }}>
                    {activeColors.length || '0'}
                 </td>
               </tr>
@@ -690,7 +703,7 @@ const ExportOrder = () => {
                 };
                 
                 return chunks.map((chunk, chunkIndex) => {
-                  const spans = getColSpans(9, chunk.length);
+                  const spans = getColSpans(10, chunk.length);
                   return (
                     <React.Fragment key={`color-chunk-${chunkIndex}`}>
                       <tr>
@@ -745,7 +758,7 @@ const ExportOrder = () => {
 
               {/* ═══ SIGNATURES ═══ */}
               <tr>
-                <td colSpan={10} style={{ borderTop: '3px solid #000', padding: '15px 30px', backgroundColor: '#fff' }}>
+                <td colSpan={11} style={{ borderTop: '3px solid #000', padding: '15px 30px', backgroundColor: '#fff' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', paddingTop: '10px' }}>
                     
                     <div>

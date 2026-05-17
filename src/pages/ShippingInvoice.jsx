@@ -23,6 +23,7 @@ const ShippingInvoice = () => {
     companyName: 'ARABIAN FRIENDSHIP TRADING CO.,LIMITED',
     tel: 'Tel:(8620)-83265754',
     fax: 'FAX:(8620)-83265204',
+    address: '',
     invoiceNo: '',
     branch: '',
     date: localDate
@@ -192,7 +193,13 @@ const ShippingInvoice = () => {
           const { data: recData } = await supabase.from('receivings').select('serial_number, receive_data').in('serial_number', serialsToCheck);
           const receivedMap = new Map();
           recData?.forEach(r => {
-              if (r.receive_data && r.receive_data.status === 'مستلمة') {
+              const isReceivedStatus = r.receive_data && r.receive_data.status && typeof r.receive_data.status === 'string' && (
+                  r.receive_data.status.includes('Received') ||
+                  r.receive_data.status === 'مستلمة' ||
+                  r.receive_data.status === '已收货' ||
+                  r.receive_data.status === t('receiving.info.received')
+              );
+              if (isReceivedStatus) {
                   receivedMap.set(r.serial_number, true);
               }
           });
@@ -382,10 +389,10 @@ const ShippingInvoice = () => {
       utils.book_append_sheet(wb, ws, "Shipping Invoice");
       
       writeFile(wb, `Shipping_Invoice_${headerInfo.invoiceNo || 'Export'}.xlsx`);
-      toast.success('تم تحميل ملف الإكسل بنجاح');
+      toast.success(t('excel_export_success'));
     } catch (error) {
       console.error('Error exporting to Excel:', error);
-      toast.error('حدث خطأ أثناء تحميل ملف الإكسل');
+      toast.error(t('excel_export_error'));
     }
   };
 
@@ -544,8 +551,9 @@ const ShippingInvoice = () => {
                {headerInfo.companyName}
              </div>
              <div className="company-tel" style={{ display: 'flex', justifyContent: 'center', gap: '2rem', color: 'var(--text-muted)', fontWeight: 'bold', direction: 'ltr' }}>
-               <span>{headerInfo.fax}</span>
-               <span>{headerInfo.tel}</span>
+               {headerInfo.fax && <span>{headerInfo.fax}</span>}
+               {headerInfo.tel && <span>{headerInfo.tel}</span>}
+               {headerInfo.address && <span>{headerInfo.address}</span>}
              </div>
            </div>
 
@@ -567,8 +575,10 @@ const ShippingInvoice = () => {
                        setHeaderInfo({
                          ...headerInfo,
                          companyName: comp.name || '',
-                         fax: comp.fax ? `FAX:${comp.fax} :FAX` : '',
-                         tel: comp.mobile ? `Tel:${comp.mobile} :Tel` : ''
+                         fax: comp.fax ? `FAX:${comp.fax} ` : '',
+                         tel: comp.mobile ? `Tel:${comp.mobile} ` : '',
+                         address: comp.address || '',
+                         branch: comp.address || ''
                        });
                        setShowCompanyDropdown(false);
                      }}
@@ -583,6 +593,7 @@ const ShippingInvoice = () => {
                      <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '0.25rem', direction: 'ltr' }}>
                        {comp.fax && <span>FAX: {comp.fax} | </span>}
                        {comp.mobile && <span>Tel: {comp.mobile}</span>}
+                       {comp.address && <span> | {comp.address}</span>}
                      </div>
                    </div>
                  ))
@@ -639,15 +650,44 @@ const ShippingInvoice = () => {
                      <td style={{ border: '1px solid var(--border-color)', padding: '5px', fontWeight: 'bold' }}>{index + 1}</td>
                      
                      <td style={{ border: '1px solid var(--border-color)', padding: '5px', position: 'relative' }}>
-                        <input 
-                          className="serial-input"
-                          type="text" 
-                          value={row.serial} 
-                          onChange={e => handleRowChange(row.id, 'serial', e.target.value)}
-                          onKeyDown={e => handleSerialKeyDown(e, row.id)}
-                          placeholder={t('shipping.table.serial_placeholder')}
-                          style={{ width: '100%', background: 'transparent', border: 'none', color: highlightedSerials.includes(row.serial.trim()) ? '#ef4444' : 'var(--text-main)', textAlign: 'center', fontWeight: 'bold' }}
-                        />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                           <input 
+                             className="serial-input"
+                             type="text" 
+                             value={row.serial} 
+                             onChange={e => handleRowChange(row.id, 'serial', e.target.value)}
+                             onKeyDown={e => handleSerialKeyDown(e, row.id)}
+                             placeholder={t('shipping.table.serial_placeholder')}
+                             style={{ flex: 1, background: 'transparent', border: 'none', color: highlightedSerials.includes(row.serial.trim()) ? '#ef4444' : 'var(--text-main)', textAlign: 'center', fontWeight: 'bold', minWidth: 0 }}
+                           />
+                           <button
+                             className="no-print"
+                             type="button"
+                             onClick={(e) => {
+                               const input = e.currentTarget.previousSibling;
+                               const syntheticEvent = {
+                                 key: 'F9',
+                                 preventDefault: () => {},
+                                 target: input
+                               };
+                               handleSerialKeyDown(syntheticEvent, row.id);
+                             }}
+                             style={{
+                               background: 'transparent',
+                               border: 'none',
+                               color: 'var(--accent-color)',
+                               cursor: 'pointer',
+                               padding: '2px',
+                               display: 'flex',
+                               alignItems: 'center',
+                               justifyContent: 'center',
+                               flexShrink: 0
+                             }}
+                             title="F9 Search"
+                           >
+                             <Search size={14} />
+                           </button>
+                        </div>
                         {activeF9RowId === row.id && showSerialsList && (
                           <div style={{
                             position: 'fixed', top: f9Position.top, left: f9Position.left, transform: 'translateX(-50%)',

@@ -144,7 +144,10 @@ const AppLayout = () => {
                     border: '2px solid var(--accent-color)',
                     borderRadius: 'var(--radius-md)',
                     boxShadow: 'var(--shadow-lg)',
-                    zIndex: 9999, overflow: 'hidden',
+                    zIndex: 9999,
+                    maxHeight: 'calc(100vh - 90px)',
+                    overflowY: 'auto',
+                    overflowX: 'hidden',
                     animation: 'fadeIn 0.15s ease'
                   }}>
                     <div style={{ padding: '0.6rem 1rem', borderBottom: '1px solid var(--border-color)', backgroundColor: 'var(--surface-highlight)', fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 'bold' }}>

@@ -370,104 +370,166 @@ const ReportsPortal = () => {
     XLSX.writeFile(workbook, `Report_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
+  const getFactoryDetails = (factoryId) => {
+    const factory = Array.isArray(lookups.factories) ? lookups.factories.find(f => (f.name === factoryId || f === factoryId)) : null;
+    if (factory && typeof factory === 'object') {
+      return { name: factory.name || '', mobile: factory.mobile || '', address: factory.address || '', code: factory.code || '' };
+    }
+    return { name: factoryId || '', mobile: '', address: '', code: '' };
+  };
+
   const exportToPDF = async () => {
     if (filteredOrders.length === 0) return toast.error(t('reports.messages.no_data_export'));
-    
     const toastId = toast.loading(t('reports.messages.preparing_pdf'));
-
     try {
-       const pdf = new jsPDF({
-         orientation: 'landscape',
-         unit: 'mm',
-         format: 'a4',
-       });
-
-       const pageW = pdf.internal.pageSize.getWidth();
-       const margin = 10;
-
-       // === Title ===
-       pdf.setFontSize(18);
-       pdf.setFont('helvetica', 'bold');
-       pdf.text('Orders Report', pageW / 2, 16, { align: 'center' });
-       pdf.setFontSize(10);
-       pdf.setFont('helvetica', 'normal');
-       pdf.text(`Generated: ${new Date().toLocaleDateString()} | Total: ${filteredOrders.length} orders`, pageW / 2, 23, { align: 'center' });
-       pdf.setDrawColor(30, 41, 59);
-       pdf.setLineWidth(0.5);
-       pdf.line(margin, 26, pageW - margin, 26);
-
-       // === Data Table ===
-       const tblHead = [[
-         '#', 
-         t('reports.table.cols.serial'), 
-         t('reports.table.cols.product'), 
-         t('reports.table.cols.buyer'), 
-         t('reports.table.cols.factory'), 
-         t('reports.excel_headers.factory_code'), 
-         t('reports.excel_headers.sizes'), 
-         t('reports.table.cols.total_qty'), 
-         t('reports.excel_headers.unit_price'), 
-         t('reports.excel_headers.currency'), 
-         t('reports.excel_headers.total_price'), 
-         t('reports.table.cols.order_date'), 
-         t('reports.excel_headers.delivery_date')
-       ]];
-
-       const tblBody = filteredOrders.map((order, idx) => {
+       const firstData = filteredOrders[0]?.order_data || {};
+       const fDet = getFactoryDetails(firstData.factoryId);
+       const custCode = firstData.buyerMobile || firstData.buyerId || '-';
+       const custMobile = firstData.buyerNumber || firstData.buyerMobile || '-';
+       const reqDate = firstData.requestDate || new Date().toISOString().split('T')[0];
+       const delDate = firstData.deliveryDate || '-';
+       let lastCN = parseInt(localStorage.getItem('gh_pdf_contract_counter') || '0', 10);
+       lastCN += 1;
+       localStorage.setItem('gh_pdf_contract_counter', String(lastCN));
+       const contNo = String(lastCN).padStart(5, '0');
+       const fD = (d) => { if (!d || d === '-') return '-'; const p = d.split('-'); return p.length === 3 ? p[2]+'/'+p[1]+'/'+p[0] : d; };
+       let gQty = 0, gAmt = 0;
+       const cur = firstData.currency || 'RMB';
+       const rows = filteredOrders.map((order, idx) => {
          const d = order.order_data || {};
-         const computedTotal = calculateTotalPiecesCount(d);
-         const qty = computedTotal > 0 ? computedTotal : (parseInt(d.totalQuantity) || 0);
-         const totalPrice = (parseFloat(d.productPrice || 0) * qty) || 0;
-         return [
-           idx + 1,
-           order.serial_number || '-',
-           englishOnly(d.productName) || '-',
-           d.buyerCompany || '-',
-           d.factoryId || '-',
-           getFactoryCode(d.factoryId) || '-',
-           `${d.sizeFrom || '-'} - ${d.sizeTo || '-'}`,
-           qty,
-           d.productPrice || 0,
-           d.currency || '-',
-           totalPrice.toLocaleString(undefined, { minimumFractionDigits: 2 }),
-           d.requestDate || '-',
-           d.deliveryDate || '-',
-         ];
+         const ct = calculateTotalPiecesCount(d);
+         const qty = ct > 0 ? ct : (parseInt(d.totalQuantity) || 0);
+         const pr = parseFloat(d.productPrice || 0);
+         const tp = pr * qty;
+         const clrs = d.colorDistribution ? Object.keys(d.colorDistribution).length : 0;
+         const sr = (d.sizeFrom || '-') + ' - ' + (d.sizeTo || '-');
+         const bc = d.barcode || '';
+         let sc = 0;
+         if (d.colorDistribution) { const ss = new Set(); Object.values(d.colorDistribution).forEach(c => { if (c && typeof c === 'object') Object.keys(c).forEach(s => ss.add(s)); }); sc = ss.size; }
+         gQty += qty; gAmt += tp;
+         return { n: idx+1, sn: order.serial_number||'-', bc: bc||'-', pn: englishOnly(d.productName)||'-', clrs, sc, sr, qty, cur: d.currency||'RMB', pr, tp };
        });
-
-       autoTable(pdf, {
-         startY: 30,
-         head: tblHead,
-         body: tblBody,
-         theme: 'grid',
-         headStyles: { fillColor: [226, 232, 240], textColor: [15, 23, 42], fontStyle: 'bold', fontSize: 7, halign: 'center', cellPadding: 2.5 },
-         styles: { fontSize: 7, cellPadding: 2, halign: 'center', font: 'helvetica', overflow: 'linebreak' },
-         columnStyles: {
-           0: { cellWidth: 8 },
-           1: { cellWidth: 16 },
-           2: { cellWidth: 40, halign: 'left' },
-           3: { cellWidth: 25, halign: 'left' },
-           4: { cellWidth: 22, halign: 'left' },
-           5: { cellWidth: 16 },
-           6: { cellWidth: 20 },
-           7: { cellWidth: 16 },
-           8: { cellWidth: 16 },
-           9: { cellWidth: 14 },
-           10: { cellWidth: 22 },
-           11: { cellWidth: 22 },
-           12: { cellWidth: 22 },
-         },
-         margin: { left: margin, right: margin },
-          didDrawPage: () => {
-           // Footer on each page
-           pdf.setFontSize(7);
-           pdf.setFont('helvetica', 'normal');
-           pdf.text(`Page ${pdf.internal.getNumberOfPages()}`, pageW - margin, pdf.internal.pageSize.getHeight() - 5, { align: 'right' });
-         },
+       const el = document.createElement('div');
+       el.style.cssText = 'position:fixed;left:-9999px;top:0;width:950px;background:#fff;padding:18px 22px;font-family:"Microsoft YaHei",SimHei,SimSun,Inter,sans-serif;color:#000;font-size:13px;line-height:1.4;direction:ltr;text-align:left;-webkit-font-smoothing:antialiased;';
+       const b = 'border:1px solid #000;padding:5px 4px;font-weight:600;';
+       const tc = b+'text-align:center;font-size:12px;';
+       const bl = b+'text-align:left;font-size:12px;';
+       const hr = b+'font-weight:900;text-align:center;font-size:11px;background:#b41e1e;color:#fff;';
+       const hg = b+'font-weight:800;text-align:center;font-size:12px;background:#e6e6e6;color:#000;';
+       const empCnt = Math.max(0, 20 - rows.length);
+       let empH = '';
+       const eCell = '<td style="'+tc+'height:20px;"></td>';
+       for (let i = 0; i < empCnt; i++) empH += '<tr>'+eCell.repeat(12)+'</tr>';
+       let dH = '';
+       rows.forEach(r => {
+         dH += '<tr>'+
+           '<td style="'+tc+'">'+r.n+'</td>'+
+           '<td style="'+tc+'">'+r.sn+'</td>'+
+           '<td style="'+tc+'font-size:10px;">'+r.bc+'</td>'+
+           '<td style="'+bl+'word-break:break-word;white-space:normal;">'+r.pn+'</td>'+
+           '<td style="'+tc+'">'+r.clrs+'</td>'+
+           '<td style="'+tc+'">'+(r.sc>0?r.sc:'-')+'</td>'+
+           '<td style="'+tc+'font-size:10px;">'+r.sr+'</td>'+
+           '<td style="'+tc+'font-weight:800;">'+r.qty+'</td>'+
+           '<td style="'+tc+'font-size:10px;">'+r.cur+'</td>'+
+           '<td style="'+tc+'">'+(r.pr?r.pr.toFixed(2):'0.00')+'</td>'+
+           '<td style="'+tc+'font-weight:800;">'+(r.tp>0?r.tp.toLocaleString(undefined,{minimumFractionDigits:2}):'0.00')+'</td>'+
+           '<td style="'+tc+'"></td>'+
+         '</tr>';
        });
-
-       pdf.save(`Report_${new Date().toISOString().split('T')[0]}.pdf`);
-       
+       const tbs = 'border-collapse:collapse;width:100%;border:2px solid #000;';
+       el.innerHTML =
+         '<div style="text-align:center;margin-bottom:10px;">'+
+           '<span style="font-size:32px;font-weight:900;color:#b41e1e;letter-spacing:1px;">Order Contract \u8BA2\u5355\u5408\u540C</span>'+
+         '</div>'+
+         '<table style="'+tbs+'"><tbody>'+
+           '<tr>'+
+             '<td style="'+bl+'white-space:nowrap;width:1%;"><b>Fact. Name \u5DE5\u5382\u540D\u5B57\uFF1A</b></td>'+
+             '<td style="'+tc+'font-weight:800;font-size:14px;">'+(fDet.name||'-')+'</td>'+
+             '<td style="'+tc+'background:#b41e1e;color:#fff;font-weight:900;font-size:13px;white-space:nowrap;width:1%;">Cont No.</td>'+
+             '<td style="'+tc+'font-weight:900;font-size:15px;width:15%;">'+contNo+'</td>'+
+           '</tr>'+
+           '<tr>'+
+             '<td style="'+bl+'white-space:nowrap;"><b>Fact. Mobile \u5DE5\u5382\u7535\u8BDD\uFF1A</b></td>'+
+             '<td style="'+tc+'font-weight:800;">'+(fDet.mobile||'-')+'</td>'+
+             '<td style="'+bl+'white-space:nowrap;"><b>Cust. Code \u5BA2\u6237\u4EE3\u7801:</b></td>'+
+             '<td style="'+tc+'font-weight:800;">'+custCode+'</td>'+
+           '</tr>'+
+           '<tr>'+
+             '<td style="'+bl+'white-space:nowrap;"><b>Fact. Address \u5DE5\u5382\u5730\u5740\uFF1A</b></td>'+
+             '<td style="'+tc+'font-weight:800;font-size:10px;">'+(fDet.address||'-')+'</td>'+
+             '<td style="'+bl+'white-space:nowrap;"><b>Cust. Mobile \u5BA2\u6237\u624B\u673A\uFF1A</b></td>'+
+             '<td style="'+tc+'font-weight:800;">'+custMobile+'</td>'+
+           '</tr>'+
+         '</tbody></table>'+
+         '<table style="'+tbs+'border-top:none;"><tbody>'+
+           '<tr>'+
+             '<td style="'+hg+'width:25%;">Request Date \u8BA2\u5355\u65E5\u671F</td>'+
+             '<td style="'+tc+'font-weight:800;font-size:13px;width:25%;">'+fD(reqDate)+'</td>'+
+             '<td style="'+hg+'width:25%;">Delivery Date \u4EA4\u8D27\u65E5\u671F</td>'+
+             '<td style="'+tc+'font-weight:800;font-size:13px;width:25%;">'+fD(delDate)+'</td>'+
+           '</tr>'+
+         '</tbody></table>'+
+         '<table style="'+tbs+'border-top:none;"><tbody>'+
+           '<tr>'+
+             '<td style="'+hr+'width:4%;">\u6570\u5B57<br/>No</td>'+
+             '<td style="'+hr+'width:7%;">\u6B3E\u53F7<br/>Model No.</td>'+
+             '<td style="'+hr+'width:10%;">\u6761\u5F62\u7801<br/>Barcode No.</td>'+
+             '<td style="'+hr+'">\u4EA7\u54C1\u540D\u79F0<br/>Product Name</td>'+
+             '<td style="'+hr+'width:5%;">\u989C\u8272<br/>Colors</td>'+
+             '<td style="'+hr+'width:4%;">\u5C3A\u5BF8<br/>Size</td>'+
+             '<td style="'+hr+'width:8%;">\u7801\u6BB5<br/>Prod Sizes</td>'+
+             '<td style="'+hr+'width:6%;">\u6570\u91CF<br/>Prod Qty</td>'+
+             '<td style="'+hr+'width:5%;">\u8D27\u5E01<br/>Currency</td>'+
+             '<td style="'+hr+'width:7%;">\u4EA7\u54C1\u4EF7\u683C<br/>Prod Price</td>'+
+             '<td style="'+hr+'width:10%;">\u603B\u91D1\u989D<br/>Tot. Amount</td>'+
+             '<td style="'+hr+'width:9%;">\u8BA2\u5355\u5907\u6CE8<br/>Order Notes</td>'+
+           '</tr>'+
+           dH + empH +
+           '<tr style="background:#e6e6e6;">'+
+             '<td style="'+tc+'font-weight:900;">Total \u5408\u8BA1</td>'+
+             '<td style="'+tc+'font-weight:900;">'+rows.length+' Items</td>'+
+             '<td style="'+tc+'"></td><td style="'+tc+'"></td><td style="'+tc+'"></td><td style="'+tc+'"></td><td style="'+tc+'"></td>'+
+             '<td style="'+tc+'font-weight:900;">'+gQty.toLocaleString()+' PCS</td>'+
+             '<td style="'+tc+'"></td><td style="'+tc+'"></td>'+
+             '<td style="'+tc+'font-weight:900;">'+gAmt.toLocaleString(undefined,{minimumFractionDigits:2})+' '+cur+'</td>'+
+             '<td style="'+tc+'"></td>'+
+           '</tr>'+
+         '</tbody></table>'+
+         '<table style="border-collapse:collapse;width:100%;border:2px solid #000;border-top:none;"><tbody>'+
+           '<tr><td style="'+bl+'background:#e6e6e6;font-weight:800;">Conditions \u72B6\u51B5\uFF1A</td></tr>'+
+           '<tr><td style="'+bl+'height:90px;vertical-align:top;"></td></tr>'+
+         '</tbody></table>'+
+         '<table style="border-collapse:collapse;width:100%;border:2px solid #000;border-top:none;"><tbody><tr>'+
+           '<td style="'+bl+'width:25%;padding:12px 8px;">'+
+             '<div style="font-weight:800;font-size:12px;margin-bottom:18px;">Name \u540D\u5B57</div>'+
+             '<div style="font-weight:800;font-size:12px;">Signature \u7B7E\u540D</div>'+
+           '</td>'+
+           '<td style="'+tc+'width:25%;padding:12px 8px;vertical-align:top;">'+
+             '<div style="color:#b41e1e;font-weight:800;font-size:12px;margin-bottom:18px;">Buyer \u4E70\u65B9</div>'+
+             '<div style="border-bottom:2px solid #000;width:80%;margin:0 auto;height:20px;"></div>'+
+           '</td>'+
+           '<td style="'+tc+'width:25%;padding:12px 8px;vertical-align:top;">'+
+             '<div style="color:#b41e1e;font-weight:800;font-size:12px;margin-bottom:18px;">Coordinator \u534F\u8C03\u5458</div>'+
+             '<div style="border-bottom:2px solid #000;width:80%;margin:0 auto;height:20px;"></div>'+
+           '</td>'+
+           '<td style="'+tc+'width:25%;padding:12px 8px;vertical-align:top;">'+
+             '<div style="color:#b41e1e;font-weight:800;font-size:12px;margin-bottom:18px;">Factory \u5DE5\u5382</div>'+
+             '<div style="border-bottom:2px solid #000;width:80%;margin:0 auto;height:20px;"></div>'+
+           '</td>'+
+         '</tr></tbody></table>';
+       document.body.appendChild(el);
+       const { default: html2canvas } = await import('html2canvas');
+       const canvas = await html2canvas(el, { scale: 3, useCORS: true, logging: false, backgroundColor: '#ffffff' });
+       document.body.removeChild(el);
+       const imgData = canvas.toDataURL('image/jpeg', 1.0);
+       const pW = 210;
+       const pM = 5;
+       const cW = pW - pM * 2;
+       const cH = (canvas.height * cW) / canvas.width;
+       const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [pW, Math.max(cH + pM * 2, 297)] });
+       pdf.addImage(imgData, 'JPEG', pM, pM, cW, cH);
+       pdf.save('Order_Contract_' + contNo + '_' + new Date().toISOString().split('T')[0] + '.pdf');
        toast.success(t('reports.messages.pdf_success'), { id: toastId });
     } catch (err) {
        toast.error(t('reports.messages.pdf_error'), { id: toastId });

@@ -10,32 +10,35 @@ import { CustomDateInput } from '../components/CustomDateInput';
 import ImageEditorModal from '../components/ImageEditorModal';
 import { appendActivity, createActivityItem, summarizeOrderChanges } from '../utils/activityLog';
 
-const ClearableSelect = ({ value, onChange, children, className = "form-control", style, disabled, clearTitle }) => (
-  <div style={{ position: 'relative', width: '100%', ...style }}>
-    <select className={className} value={value || ''} onChange={onChange} disabled={disabled}>
-      {children}
-    </select>
-    {value && !disabled && (
-      <button 
-        type="button"
-        onMouseDown={(e) => {
-          e.preventDefault(); 
-          e.stopPropagation();
-          onChange({ target: { value: '' } });
-        }}
-        style={{
-          position: 'absolute', left: '35px', top: '50%', transform: 'translateY(-50%)',
-          background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)',
-          color: '#ef4444', cursor: 'pointer', padding: '3px', borderRadius: '4px',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10
-        }}
-        title={clearTitle || t('entry.actions.clear_selection')}
-      >
-        <X size={12} strokeWidth={3} />
-      </button>
-    )}
-  </div>
-);
+const ClearableSelect = ({ value, onChange, children, className = "form-control", style, disabled, clearTitle }) => {
+  const { t } = useTranslation();
+  return (
+    <div style={{ position: 'relative', width: '100%', ...style }}>
+      <select className={className} value={value || ''} onChange={onChange} disabled={disabled}>
+        {children}
+      </select>
+      {value && !disabled && (
+        <button 
+          type="button"
+          onMouseDown={(e) => {
+            e.preventDefault(); 
+            e.stopPropagation();
+            onChange({ target: { value: '' } });
+          }}
+          style={{
+            position: 'absolute', left: '35px', top: '50%', transform: 'translateY(-50%)',
+            background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)',
+            color: '#ef4444', cursor: 'pointer', padding: '3px', borderRadius: '4px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10
+          }}
+          title={clearTitle || t('entry.actions.clear_selection')}
+        >
+          <X size={12} strokeWidth={3} />
+        </button>
+      )}
+    </div>
+  );
+};
 
 const DataEntryWizard = () => {
   const { t } = useTranslation();
@@ -43,15 +46,12 @@ const DataEntryWizard = () => {
   const { user, hasPermission } = useAuth();
 
   const TABS = [
-    { id: 'buyer', label: t('entry.tabs.buyer'), icon: Hash, num: 1 },
-    { id: 'dates', label: t('entry.tabs.dates'), icon: Calendar, num: 2 },
-    { id: 'fabrics', label: t('entry.tabs.fabrics'), icon: Scissors, num: 3 },
-    { id: 'factory', label: t('entry.tabs.factory'), icon: Box, num: 4 },
-    { id: 'colors', label: t('entry.tabs.colors'), icon: Palette, num: 5 },
-    { id: 'packaging', label: t('entry.tabs.packaging'), icon: CheckSquare, num: 6 },
-    { id: 'measurements', label: t('entry.tabs.measurements'), icon: Ruler, num: 7 },
+    { id: 'basic', label: t('entry.tabs.basic_info'), icon: Hash, num: 1 },
+    { id: 'fabrics_factory', label: t('entry.tabs.fabrics_factory'), icon: Scissors, num: 2 },
+    { id: 'colors_sizes', label: t('entry.tabs.colors_sizes'), icon: Palette, num: 3 },
+    { id: 'packaging', label: t('entry.tabs.packaging'), icon: CheckSquare, num: 4 },
   ];
-  const [activeTab, setActiveTab] = useState('buyer');
+  const [activeTab, setActiveTab] = useState('basic');
   const [selectedColorsArr, setSelectedColorsArr] = useState(() => {
     if (currentOrder?.colorDistribution) {
       return Object.keys(currentOrder.colorDistribution);
@@ -710,7 +710,13 @@ const DataEntryWizard = () => {
       }
       
       const { data: recData } = await supabase.from('receivings').select('receive_data').eq('serial_number', searchVal).single();
-      if (recData && recData.receive_data && recData.receive_data.status === t('receiving.info.received')) {
+      const isReceived = recData && recData.receive_data && recData.receive_data.status && typeof recData.receive_data.status === 'string' && (
+        recData.receive_data.status.includes('Received') ||
+        recData.receive_data.status === 'مستلمة' ||
+        recData.receive_data.status === '已收货' ||
+        recData.receive_data.status === t('receiving.info.received')
+      );
+      if (isReceived) {
         toast.error(t('entry.messages.received_already'), { id: toastId, duration: 4000 });
         return;
       }
@@ -735,7 +741,7 @@ const DataEntryWizard = () => {
     setIsEditMode(false);
     setOriginalSerial('');
     setSerialStatus('checking');
-    setActiveTab('buyer');
+    setActiveTab('basic');
     window.scrollTo({ top: 0, behavior: 'smooth' });
     
     const nextSerial = await fetchNextAvailableSerial();
@@ -870,7 +876,7 @@ const DataEntryWizard = () => {
     const targetTab = tabId || activeTab;
     switch (targetTab) {
 
-      case 'buyer':
+      case 'basic':
         return (
           <div className="tab-panel" key={tabKey}>
             <div className="card">
@@ -929,6 +935,34 @@ const DataEntryWizard = () => {
                        {lookups.companies?.map((c, i) => <option key={i} value={typeof c === 'object' ? c.name : c}>{typeof c === 'object' ? c.name : c}</option>)}
                      </select>
                 </div>
+                {currentOrder.buyerCompany && (() => {
+                  const selectedCompanyObj = Array.isArray(lookups.companies) ? lookups.companies.find(c => (c.name === currentOrder.buyerCompany || c === currentOrder.buyerCompany)) : null;
+                  if (selectedCompanyObj && (selectedCompanyObj.mobile || selectedCompanyObj.fax || selectedCompanyObj.address)) {
+                    return (
+                      <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+                        {selectedCompanyObj.mobile && (
+                          <div className="form-group" style={{ flex: 1, minWidth: '150px', marginBottom: 0 }}>
+                            <label className="form-label" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('admin.company_mobile') || 'Company Mobile'}</label>
+                            <input type="text" className="form-control" value={selectedCompanyObj.mobile} readOnly style={{ backgroundColor: 'var(--bg-color)', opacity: 0.8, borderStyle: 'dashed' }} />
+                          </div>
+                        )}
+                        {selectedCompanyObj.fax && (
+                          <div className="form-group" style={{ flex: 1, minWidth: '150px', marginBottom: 0 }}>
+                            <label className="form-label" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('admin.company_fax') || 'Company Fax'}</label>
+                            <input type="text" className="form-control" value={selectedCompanyObj.fax} readOnly style={{ backgroundColor: 'var(--bg-color)', opacity: 0.8, borderStyle: 'dashed' }} />
+                          </div>
+                        )}
+                        {selectedCompanyObj.address && (
+                          <div className="form-group" style={{ flex: 2, minWidth: '200px', marginBottom: 0 }}>
+                            <label className="form-label" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('admin.company_address') || 'Company Address'}</label>
+                            <input type="text" className="form-control" value={selectedCompanyObj.address} readOnly style={{ backgroundColor: 'var(--bg-color)', opacity: 0.8, borderStyle: 'dashed' }} />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
                 <div className="form-group">
                    <label className="form-label">{t('entry.buyer.product_name')}</label>
                    <ClearableSelect className="form-control" value={currentOrder.productName} onChange={(e) => updateOrder('productName', e.target.value)} clearTitle={t('entry.actions.clear_btn')}>
@@ -1183,16 +1217,12 @@ const DataEntryWizard = () => {
                   <textarea className="form-control" rows="3" placeholder={t('entry.buyer.remarks_placeholder')} value={currentOrder.remarks || ''} onChange={(e) => updateOrder('remarks', e.target.value)}></textarea>
                 </div>
               </div>
-            </div>
-          </div>
-        );
-
-      case 'dates':
-        return (
-          <div className="tab-panel" key={tabKey}>
-            <div className="card">
-              <div className="tab-section-header">
-                <h3><Calendar size={22} /> {t('entry.dates.section_title')}</h3>
+              <hr style={{ margin: '2rem 0', borderColor: 'rgba(212, 175, 55, 0.15)', borderWidth: '1px', borderStyle: 'dashed' }} />
+              
+              <div className="sub-section-header" style={{ marginBottom: '1.25rem' }}>
+                <h4 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--accent-color)', margin: 0, fontSize: '1.05rem', fontWeight: '600' }}>
+                  <Calendar size={18} /> {t('entry.dates.section_title')}
+                </h4>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <CustomDateInput 
@@ -1378,7 +1408,7 @@ const DataEntryWizard = () => {
           </div>
         );
 
-      case 'fabrics':
+      case 'fabrics_factory':
         return (
           <div className="tab-panel" key={tabKey}>
             <div className="card">
@@ -1481,16 +1511,12 @@ const DataEntryWizard = () => {
                   );
                 })}
               </div>
-            </div>
-          </div>
-        );
-
-      case 'factory':
-        return (
-          <div className="tab-panel" key={tabKey}>
-            <div className="card">
-              <div className="tab-section-header">
-                <h3><Box size={22} /> {t('entry.factory.section_title')}</h3>
+              <hr style={{ margin: '2rem 0', borderColor: 'rgba(212, 175, 55, 0.15)', borderWidth: '1px', borderStyle: 'dashed' }} />
+              
+              <div className="sub-section-header" style={{ marginBottom: '1.25rem' }}>
+                <h4 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--accent-color)', margin: 0, fontSize: '1.05rem', fontWeight: '600' }}>
+                  <Box size={18} /> {t('entry.factory.section_title')}
+                </h4>
               </div>
               <div className="form-group">
                 <label className="form-label">{t('entry.factory.factory_select')}</label>
@@ -1574,8 +1600,11 @@ const DataEntryWizard = () => {
           </div>
         );
 
-      case 'colors': {
+      case 'colors_sizes': {
         const sizesReady = (currentOrder.sizeFrom && currentOrder.sizeTo) || (currentOrder.manualSizes && currentOrder.manualSizes.some(s => s.trim() !== ''));
+        const productObj = lookups.products?.find(p => (typeof p === 'object' ? p.name : p) === currentOrder.productName);
+        const partsList = (productObj && productObj.parts && productObj.parts.length > 0) 
+            ? productObj.parts : [currentOrder.productName];
         return (
           <div className="tab-panel" key={tabKey}>
             <div className="card">
@@ -1787,10 +1816,91 @@ const DataEntryWizard = () => {
                   </table>
                 </div>
               )}
-            </div>
+              <hr style={{ margin: '2rem 0', borderColor: 'rgba(212, 175, 55, 0.15)', borderWidth: '1px', borderStyle: 'dashed' }} />
+              
+              <div className="sub-section-header" style={{ marginBottom: '1.25rem' }}>
+                <h4 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--accent-color)', margin: 0, fontSize: '1.05rem', fontWeight: '600' }}>
+                  <Ruler size={18} /> {t('entry.measurements.section_title')}
+                </h4>
+              </div>
+
+              {!currentOrder.productName ? (
+                <div style={{ textAlign: 'center', padding: '3rem 1.5rem', color: 'var(--text-muted)', backgroundColor: 'var(--surface-color)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+                  <Ruler size={48} color="var(--accent-color)" style={{ marginBottom: '1rem', opacity: 0.5 }} />
+                  <h3 style={{ margin: '0 0 0.5rem 0', color: 'var(--text-main)', fontSize: '1.1rem' }}>{t('entry.measurements.no_product_selected')}</h3>
+                  <p style={{ margin: 0, fontSize: '0.9rem' }}>{t('entry.measurements.no_product_hint')}</p>
+                </div>
+              ) : (
+                partsList.map((partName, pIdx) => {
+                  const partMeasurements = (lookups.measurements || []).filter(m => {
+                     if (typeof m === 'object' && m.part) {
+                        return m.part.split('،').map(p => p.trim()).includes(partName.trim()); 
+                     }
+                     return false;
+                  }).map(m => typeof m === 'object' ? m.name : m);
+
+                  return (
+                    <div key={pIdx} style={{ marginBottom: pIdx < partsList.length - 1 ? '1.5rem' : 0 }}>
+                      <div style={{ marginBottom: '0.75rem', fontWeight: 'bold', color: 'var(--accent-color)', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <span>📍</span> {partName}
+                      </div>
+                    <div style={{ overflowX: 'auto', backgroundColor: 'var(--surface-color)', borderRadius: 'var(--radius-md)', padding: '1rem', border: '1px solid var(--border-color)' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '600px' }}>
+                        <thead>
+                          <tr>
+                            <th style={{ padding: '0.75rem', textAlign: 'right', borderBottom: '2px solid var(--border-color)', backgroundColor: 'var(--surface-highlight)', width: '200px' }}>{t('entry.measurements.size_name')}</th>
+                            {targetSizes.map((s, i) => (
+                              <th key={i} style={{ padding: '0.75rem', textAlign: 'center', borderBottom: '2px solid var(--border-color)', backgroundColor: 'var(--surface-highlight)' }}>{s}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {partMeasurements.length === 0 && (
+                            <tr><td colSpan={targetSizes.length + 1} style={{ textAlign: 'center', padding: '1rem', color: 'var(--text-muted)' }}>{t('entry.measurements.no_measurements_hint', { part: partName })}</td></tr>
+                          )}
+                          {partMeasurements.map((mName, i) => (
+                            <tr key={i} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                              <td style={{ padding: '0.75rem', fontWeight: '500', backgroundColor: 'var(--bg-color)' }}>{mName}</td>
+                              {targetSizes.map((size, j) => (
+                                <td key={j} style={{ padding: '0.5rem' }}>
+                                  <input 
+                                     type="text" 
+                                     inputMode="decimal"
+                                     className={`form-control measurement-input-${pIdx}`} 
+                                     value={currentOrder.groupedMeasurements?.[partName]?.[mName]?.[size] || currentOrder.measurements?.[mName]?.[size] || ''} 
+                                     onChange={(e) => {
+                                        let val = e.target.value.replace(/[^0-9.]/g, '');
+                                        const parts = val.split('.');
+                                        if (parts.length > 2) val = parts[0] + '.' + parts.slice(1).join('');
+                                        handleMeasurementChange(partName, mName, size, val);
+                                     }}
+                                     onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                           e.preventDefault();
+                                           const inputs = Array.from(document.querySelectorAll(`.measurement-input-${pIdx}`));
+                                           const currentIndex = inputs.indexOf(e.target);
+                                           if (currentIndex > -1 && currentIndex < inputs.length - 1) {
+                                              inputs[currentIndex + 1].focus();
+                                           }
+                                        }
+                                     }}
+                                     style={{ width: '100%', margin: 'auto', display: 'block', textAlign: 'center' }} 
+                                  />
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
-        );
-      }
+        </div>
+      );
+    }
 
       case 'packaging': {
         const selectedConditions = lookups.packagingConditionsList?.filter(cond => !!currentOrder.packagingConditions?.[cond]) || [];
@@ -1907,93 +2017,7 @@ const DataEntryWizard = () => {
         );
       }
 
-      case 'measurements': {
-        if (!currentOrder.productName) {
-           return (
-             <div className="tab-panel fade-in" key={tabKey}>
-               <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-muted)', backgroundColor: 'var(--surface-color)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
-                 <Ruler size={48} color="var(--accent-color)" style={{ marginBottom: '1rem', opacity: 0.5 }} />
-                 <h3 style={{ margin: '0 0 0.5rem 0', color: 'var(--text-main)' }}>{t('entry.measurements.no_product_selected')}</h3>
-                 <p style={{ margin: 0 }}>{t('entry.measurements.no_product_hint')}</p>
-               </div>
-             </div>
-           );
-        }
 
-        const productObj = lookups.products?.find(p => (typeof p === 'object' ? p.name : p) === currentOrder.productName);
-        const partsList = (productObj && productObj.parts && productObj.parts.length > 0) 
-            ? productObj.parts : [currentOrder.productName];
-        
-        return (
-          <div className="tab-panel" key={tabKey}>
-             {partsList.map((partName, pIdx) => {
-               const partMeasurements = (lookups.measurements || []).filter(m => {
-                  if (typeof m === 'object' && m.part) {
-                     return m.part.split('،').map(p => p.trim()).includes(partName.trim()); 
-                  }
-                  return false;
-               }).map(m => typeof m === 'object' ? m.name : m);
-
-               return (
-                <div className="card" key={pIdx} style={{ marginBottom: '2rem' }}>
-                  <div className="tab-section-header">
-                    <h3><Ruler size={22} /> {t('entry.measurements.section_title')} ({partName})</h3>
-                  </div>
-                  <div style={{ overflowX: 'auto', backgroundColor: 'var(--surface-color)', borderRadius: 'var(--radius-md)', padding: '1rem', border: '1px solid var(--border-color)' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '600px' }}>
-                      <thead>
-                        <tr>
-                          <th style={{ padding: '0.75rem', textAlign: 'right', borderBottom: '2px solid var(--border-color)', backgroundColor: 'var(--surface-highlight)', width: '200px' }}>{t('entry.measurements.size_name')}</th>
-                          {targetSizes.map((s, i) => (
-                            <th key={i} style={{ padding: '0.75rem', textAlign: 'center', borderBottom: '2px solid var(--border-color)', backgroundColor: 'var(--surface-highlight)' }}>{s}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {partMeasurements.length === 0 && (
-                          <tr><td colSpan={targetSizes.length + 1} style={{ textAlign: 'center', padding: '1rem', color: 'var(--text-muted)' }}>{t('entry.measurements.no_measurements_hint', { part: partName })}</td></tr>
-                        )}
-                        {partMeasurements.map((mName, i) => (
-                          <tr key={i} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                            <td style={{ padding: '0.75rem', fontWeight: '500', backgroundColor: 'var(--bg-color)' }}>{mName}</td>
-                            {targetSizes.map((size, j) => (
-                              <td key={j} style={{ padding: '0.5rem' }}>
-                                <input 
-                                   type="text" 
-                                   inputMode="decimal"
-                                   className={`form-control measurement-input-${pIdx}`} 
-                                   value={currentOrder.groupedMeasurements?.[partName]?.[mName]?.[size] || currentOrder.measurements?.[mName]?.[size] || ''} 
-                                   onChange={(e) => {
-                                      let val = e.target.value.replace(/[^0-9.]/g, '');
-                                      const parts = val.split('.');
-                                      if (parts.length > 2) val = parts[0] + '.' + parts.slice(1).join('');
-                                      handleMeasurementChange(partName, mName, size, val);
-                                   }}
-                                   onKeyDown={(e) => {
-                                      if (e.key === 'Enter') {
-                                         e.preventDefault();
-                                         const inputs = Array.from(document.querySelectorAll(`.measurement-input-${pIdx}`));
-                                         const currentIndex = inputs.indexOf(e.target);
-                                         if (currentIndex > -1 && currentIndex < inputs.length - 1) {
-                                            inputs[currentIndex + 1].focus();
-                                         }
-                                      }
-                                   }}
-                                   style={{ width: '100%', margin: 'auto', display: 'block', textAlign: 'center' }} 
-                                />
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-               );
-             })}
-          </div>
-        );
-      }
 
       default:
         return null;

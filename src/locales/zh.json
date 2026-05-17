@@ -1,6 +1,8 @@
 {
   "app_title": "订单管理系统",
   "app_subtitle": "产品与工厂数据追踪",
+  "excel_export_success": "Excel 文件下载成功",
+  "excel_export_error": "下载 Excel 文件时出错",
   "go_to": "前往...",
   "quick_jump": "快速跳转至：",
   "back_to_home": "返回首页",
@@ -54,13 +56,10 @@
   "entry": {
     "title": "生产订单与文档记录",
     "tabs": {
-      "buyer": "买家与产品",
-      "dates": "交期与数量",
-      "fabrics": "面料与成分",
-      "factory": "工厂与包装",
-      "colors": "配比与码数",
-      "packaging": "特殊包装",
-      "measurements": "详细尺寸"
+      "basic_info": "基本信息与排程",
+      "fabrics_factory": "面料与工厂详情",
+      "colors_sizes": "配比、码数与规格说明",
+      "packaging": "特殊包装与确认"
     },
     "buyer": {
       "section_title": "买家及产品基本信息",
@@ -72,11 +71,11 @@
       "available": "✅ 编号可用。",
       "fetch_hint": "按回车键读取产品数据",
       "generated_barcode": "生成的条形码:",
-      "buyer_code": "买家代码或ID",
-      "buyer_code_placeholder": "点击选择买方代码",
-      "buyer_number": "买家编号",
+      "buyer_code": "客户代码",
+      "buyer_code_placeholder": "点击选择客户代码",
+      "buyer_number": "手机号码",
       "model_number": "产品款号 (Model Number)",
-      "company_name": "买家公司名称",
+      "company_name": "客户公司名称",
       "product_name_placeholder": "点击选择产品名称",
       "product_name": "产品名称",
       "price_currency": "单价 / 币种",
@@ -119,7 +118,7 @@
        "section_title": "面料与成分明细",
        "fabric_type": "产品面料",
        "trade_mark": "商标/品牌",
-       "material": "织物成分",
+       "material": "面料成分",
        "select_fabric_placeholder": "点击选择面料",
        "select_trademark_placeholder": "点击选择商标",
        "select_material_placeholder": "点击选择材料"
@@ -131,8 +130,8 @@
        "factory_code": "工厂代码",
        "factory_mobile": "工厂手机号",
        "factory_address": "工厂地址",
-       "carton_package": "装箱配比",
-       "carton_quantity": "整箱数量 (Pcs)",
+       "carton_package": "每箱件数",
+       "carton_quantity": "总箱数",
        "carton_size": "纸箱尺寸",
        "plastic_bag_size": "胶袋尺寸",
        "auto_calc_placeholder": "自动计算...",
@@ -620,7 +619,7 @@
     "header": {
       "buyer": "买家：",
       "invoice_no": "发票号码：",
-      "branch": "分行：",
+      "branch": "公司地址：",
       "date": "日期：",
       "list_title": "发票列表"
     },
@@ -709,7 +708,7 @@
       "fax": "传真:",
       "buyer": "买方:",
       "invoice_no": "发票号码:",
-      "branch": "分支:",
+      "branch": "公司地址:",
       "date": "日期:",
       "list_title": "装箱单"
     },
@@ -929,8 +928,9 @@
     "factory_mobile": "工厂手机",
     "factory_address": "工厂地址",
     "factory_address_placeholder": "例如: 广州市工厂街",
-    "company_mobile": "公司手机",
+    "company_mobile": "公司电话",
     "company_fax": "公司传真",
+    "company_address": "公司地址",
     "trademark_image": "品牌图片",
     "upload_image": "上传图片...",
     "uploading": "正在上传...",

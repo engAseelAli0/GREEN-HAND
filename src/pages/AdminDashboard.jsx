@@ -114,7 +114,8 @@ const AdminDashboard = () => {
       newItem = {
         name: newValue.trim(),
         fax: newValueFax.trim(),
-        mobile: newValueMobile.trim()
+        mobile: newValueMobile.trim(),
+        address: newValueAddress.trim()
       };
     } else if (activeTab === 'tradeMarks') {
       newItem = { 
@@ -174,6 +175,7 @@ const AdminDashboard = () => {
       setNewValue(item.name || item);
       setNewValueFax(item.fax || '');
       setNewValueMobile(item.mobile || '');
+      setNewValueAddress(item.address || '');
     } else if (activeTab === 'tradeMarks' && typeof item === 'object') {
       setNewValue(item.name || '');
       setTradeMarkImageUrl(item.imageUrl || '');
@@ -280,7 +282,7 @@ const AdminDashboard = () => {
           setEditIndex(editIndex + 1);
         }
       }
-      toast.success('تم إعادة ترتيب العنصر بنجاح ✨');
+      toast.success(t('admin.messages.reorder_success'));
     }
     setDragIndex(null);
     setDragOverIndex(null);
@@ -979,24 +981,35 @@ const AdminDashboard = () => {
               {activeTab === 'companies' && (
                 <>
                   <div style={styles.formField}>
-                    <label style={styles.formLabel}>{t('admin.fax_number')}</label>
+                    <label style={styles.formLabel}>{t('admin.company_fax')}</label>
                     <input
                       type="text"
                       className="form-control"
-                      placeholder={t('admin.fax_placeholder')}
+                      placeholder={t('admin.company_fax')}
                       value={newValueFax}
                       onChange={(e) => setNewValueFax(e.target.value)}
                       style={{ backgroundColor: 'var(--bg-color)' }}
                     />
                   </div>
                   <div style={styles.formField}>
-                    <label style={styles.formLabel}>{t('admin.mobile_number')}</label>
+                    <label style={styles.formLabel}>{t('admin.company_mobile')}</label>
                     <input
                       type="text"
                       className="form-control"
-                      placeholder={t('admin.mobile_placeholder')}
+                      placeholder={t('admin.company_mobile')}
                       value={newValueMobile}
                       onChange={(e) => setNewValueMobile(e.target.value)}
+                      style={{ backgroundColor: 'var(--bg-color)' }}
+                    />
+                  </div>
+                  <div style={styles.formField}>
+                    <label style={styles.formLabel}>{t('admin.company_address') || 'Address'}</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      placeholder={t('admin.type_here')}
+                      value={newValueAddress}
+                      onChange={(e) => setNewValueAddress(e.target.value)}
                       style={{ backgroundColor: 'var(--bg-color)' }}
                     />
                   </div>
@@ -1270,6 +1283,7 @@ const AdminDashboard = () => {
                         <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.1rem', display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
                           {item.fax && <span>{t('admin.fields.fax')}: {item.fax}</span>}
                           {item.mobile && <span>{t('admin.fields.mobile')}: {item.mobile}</span>}
+                          {item.address && <span>{t('admin.factory_address') || 'Address'}: {item.address}</span>}
                         </div>
                       )}
                     </div>

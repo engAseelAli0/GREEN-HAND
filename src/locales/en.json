@@ -1,6 +1,8 @@
 {
   "app_title": "Order Management System",
   "app_subtitle": "Product and Factory Data Tracking",
+  "excel_export_success": "Excel file downloaded successfully",
+  "excel_export_error": "An error occurred while downloading the Excel file",
   "go_to": "Go to...",
   "quick_jump": "Quick Jump to:",
   "back_to_home": "Back to Home",
@@ -54,13 +56,10 @@
   "entry": {
     "title": "Production Orders & Documentation",
     "tabs": {
-      "buyer": "Buyer & Product",
-      "dates": "Dates & Quantity",
-      "fabrics": "Fabrics & Materials",
-      "factory": "Factory & Packaging",
-      "colors": "Colors & Sizes",
-      "packaging": "Packaging Conditions",
-      "measurements": "Detailed Measurements"
+      "basic_info": "Basic Info & Schedule",
+      "fabrics_factory": "Fabrics & Factory Details",
+      "colors_sizes": "Colors & Sizes Specifications",
+      "packaging": "Special Packaging Conditions"
     },
     "buyer": {
       "section_title": "Buyer & Product Information",
@@ -72,11 +71,11 @@
       "available": "✅ Number available for use.",
       "fetch_hint": "Press Enter to fetch product data",
       "generated_barcode": "Generated Barcode:",
-      "buyer_code": "Buyer Code or ID",
-      "buyer_code_placeholder": "Click to select buyer code",
-      "buyer_number": "Buyer Number",
+      "buyer_code": "Customer Code",
+      "buyer_code_placeholder": "Click to select customer code",
+      "buyer_number": "Mobile Number",
       "model_number": "Product Number (Model)",
-      "company_name": "Buyer Company Name",
+      "company_name": "Customer Company Name",
       "product_name_placeholder": "Click to select product name",
       "product_name": "Product Name",
       "price_currency": "Price / Currency",
@@ -119,7 +118,7 @@
       "section_title": "Fabrics & Materials Details",
       "fabric_type": "Product Fabrics",
       "trade_mark": "Trade Mark",
-      "material": "Fabric Composition",
+      "material": "Textile Composition",
       "select_fabric_placeholder": "Click to select fabric",
       "select_trademark_placeholder": "Click to select trademark",
       "select_material_placeholder": "Click to select material"
@@ -131,8 +130,8 @@
       "factory_code": "Factory Code",
       "factory_mobile": "Factory Mobile",
       "factory_address": "Factory Address",
-      "carton_package": "Carton Packaging",
-      "carton_quantity": "Carton Quantity (Pcs)",
+      "carton_package": "Pcs Per Carton",
+      "carton_quantity": "Total Cartons",
       "carton_size": "Carton Size",
       "plastic_bag_size": "Plastic Bag Sizes",
       "auto_calc_placeholder": "Calculated automatically...",
@@ -197,10 +196,8 @@
       "save_success": "Order saved successfully!",
       "save_error": "Error saving data",
       "confirm_delete": "Are you sure you want to delete this order permanently?",
-      "delete_success": "Order deleted successfully",
       "delete_error": "Error deleting order",
       "copy_success": "Order copied successfully",
-      "material_limit_error": "Total percentage cannot exceed 100% (Remaining: {{allowed}}%)",
       "missing_serial": "Serial data missing",
       "connection_error": "Connection error",
       "serial_check_error": "Error checking serial",
@@ -226,9 +223,7 @@
       "tabs_tooltip": "Switch to tabs view",
       "prev": "Previous",
       "next": "Next",
-      "fetching": "Loading..."
-    },
-    "messages": {
+      "fetching": "Loading...",
       "confirm_clear": "⚠️ Are you sure you want to clear all data and start a new order?\n\nAll entered fields will be erased and the form will be reset completely.",
       "confirm_delete": "Are you sure you want to delete order No ({{serial}}) entirely?\n\n- Data will be permanently removed from the database.\n- The Item No will be released for reuse.\n- All associated images will be deleted.",
       "enter_serial_first": "Please enter an Item Number first before uploading images",
@@ -641,7 +636,7 @@
     "header": {
       "buyer": "Buyer:",
       "invoice_no": "Invoice No.:",
-      "branch": "Branch:",
+      "branch": "Company Address:",
       "date": "Date:",
       "list_title": "Invoice List"
     },
@@ -730,7 +725,7 @@
       "fax": "FAX:",
       "buyer": "Buyer:",
       "invoice_no": "Invoice No.:",
-      "branch": "Branch:",
+      "branch": "Company Address:",
       "date": "Date:",
       "list_title": "Packing List"
     },
@@ -952,6 +947,7 @@
     "factory_address_placeholder": "e.g. Factory St, Guangzhou",
     "company_mobile": "Company Mobile",
     "company_fax": "Company Fax",
+    "company_address": "Company Address",
     "trademark_image": "Trademark Image",
     "upload_image": "Upload Image...",
     "uploading": "Uploading...",

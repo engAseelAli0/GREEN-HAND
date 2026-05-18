@@ -27,6 +27,7 @@ const NAV_GROUPS = [
   {
     labelKey: 'groups.reports.title',
     pages: [
+      { path: '/analytics', labelKey: 'nav.analytics', icon: BarChart3, color: '#ec4899' },
       { path: '/reports', labelKey: 'nav.reports', icon: Printer, color: '#ec4899' },
       { path: '/shipping-invoice', labelKey: 'nav.shipping_invoice', icon: FileSpreadsheet, color: '#06b6d4' },
       { path: '/packing-list', labelKey: 'nav.packing_list', icon: Package, color: '#10b981' },

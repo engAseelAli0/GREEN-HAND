@@ -1216,6 +1216,11 @@ const DataEntryWizard = () => {
                   <label className="form-label">{t('entry.buyer.remarks')}</label>
                   <textarea className="form-control" rows="3" placeholder={t('entry.buyer.remarks_placeholder')} value={currentOrder.remarks || ''} onChange={(e) => updateOrder('remarks', e.target.value)}></textarea>
                 </div>
+
+                <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                  <label className="form-label" style={{ color: 'var(--accent-color)', fontWeight: 'bold' }}>{t('entry.buyer.contract_notes')}</label>
+                  <textarea className="form-control" rows="2" placeholder={t('entry.buyer.contract_notes_placeholder')} value={currentOrder.contractNotes || ''} onChange={(e) => updateOrder('contractNotes', e.target.value)}></textarea>
+                </div>
               </div>
               <hr style={{ margin: '2rem 0', borderColor: 'rgba(212, 175, 55, 0.15)', borderWidth: '1px', borderStyle: 'dashed' }} />
               

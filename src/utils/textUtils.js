@@ -38,6 +38,15 @@ export const englishOnly = (name) => {
 };
 
 /**
+ * Extract only the Chinese characters from a string.
+ */
+export const chineseOnly = (name) => {
+  if (!name) return '';
+  const match = name.toString().match(/[\u4e00-\u9fff\u3400-\u4dbf\u3000-\u303f]+/g);
+  return match ? match.join(' ') : '';
+};
+
+/**
  * Maps color names to CSS colors for UI display.
  * Handles English, Arabic, and mixed string formats.
  */

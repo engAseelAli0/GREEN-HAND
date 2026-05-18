@@ -43,6 +43,7 @@ const PAGE_GROUPS = [
     titleKey: 'groups.reports.title',
     descKey: 'groups.reports.desc',
     pages: [
+      { path: '/analytics', icon: BarChart3, color: '#ec4899', titleKey: 'nav.analytics' },
       { path: '/reports', icon: BarChart3, color: '#ec4899', titleKey: 'nav.reports' },
       { path: '/shipping-invoice', icon: FileSpreadsheet, color: '#06b6d4', titleKey: 'nav.shipping_invoice' },
       { path: '/packing-list', icon: Package, color: '#10b981', titleKey: 'nav.packing_list' },

@@ -13,6 +13,7 @@ import ReportsPortal from './pages/ReportsPortal'
 import ShippingInvoice from './pages/ShippingInvoice'
 import PackingList from './pages/PackingList'
 import WarehouseReceipt from './pages/WarehouseReceipt'
+import AnalyticsDashboard from './pages/AnalyticsDashboard'
 import Login from './pages/Login'
 import Unauthorized from './pages/Unauthorized'
 import { AuthProvider } from './context/AuthContext'
@@ -134,6 +135,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                 <Route path="shipping-invoice" element={<ProtectedRoute><ShippingInvoice /></ProtectedRoute>} />
                 <Route path="packing-list" element={<ProtectedRoute><PackingList /></ProtectedRoute>} />
                 <Route path="warehouse-receipt" element={<ProtectedRoute><WarehouseReceipt /></ProtectedRoute>} />
+                <Route path="analytics" element={<ProtectedRoute><AnalyticsDashboard /></ProtectedRoute>} />
               </Route>
             </Routes>
           </BrowserRouter>

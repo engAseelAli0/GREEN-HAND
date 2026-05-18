@@ -6,10 +6,10 @@ import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
 import { CustomDateInput } from '../components/CustomDateInput';
 import * as XLSX from 'xlsx';
-import { englishOnly } from '../utils/textUtils';
+import { englishOnly, chineseOnly } from '../utils/textUtils';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { analyzeOrder, buildOperationalIntelligence } from '../utils/orderIntelligence';
+import { analyzeOrder } from '../utils/orderIntelligence';
 import { activitySummary, formatActivityTime } from '../utils/activityLog';
 import { useAuth } from '../context/AuthContext';
 
@@ -37,74 +37,10 @@ const ReportsPortal = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
   const [sortConfig, setSortConfig] = useState({ key: 'serial_number', direction: 'desc' });
-  const intelligence = useMemo(
-    () => buildOperationalIntelligence(filteredOrders, receivings, lookups),
-    [filteredOrders, receivings, lookups]
-  );
   const receivingMap = useMemo(
     () => new Map(receivings.map(item => [item.serial_number, item])),
     [receivings]
   );
-  const executiveDashboard = useMemo(() => {
-    const receivingBySerial = new Map(receivings.map(item => [item.serial_number, item]));
-    const factoryMap = new Map();
-    const productMap = new Map();
-    let totalValue = 0;
-    let delayedOrders = 0;
-
-    filteredOrders.forEach(order => {
-      const data = order.order_data || {};
-      const factoryName = data.factoryId || 'غير محدد';
-      const productName = englishOnly(data.productName) || data.productName || 'غير محدد';
-      const qty = calculateTotalPiecesCount(data) || parseInt(data.totalQuantity, 10) || 0;
-      const value = qty * (parseFloat(data.productPrice) || 0);
-      const insight = analyzeOrder(order, receivingBySerial.get(order.serial_number), lookups);
-      const isDelayed = insight.stage === 'overdue';
-      totalValue += value;
-      if (isDelayed) delayedOrders += 1;
-
-      const factoryStats = factoryMap.get(factoryName) || {
-        name: factoryName,
-        orders: 0,
-        quantity: 0,
-        value: 0,
-        delayed: 0,
-        received: 0,
-        health: 0,
-      };
-      factoryStats.orders += 1;
-      factoryStats.quantity += qty;
-      factoryStats.value += value;
-      factoryStats.delayed += isDelayed ? 1 : 0;
-      factoryStats.received += insight.stage === 'received' ? 1 : 0;
-      factoryStats.health += insight.healthScore;
-      factoryMap.set(factoryName, factoryStats);
-
-      const productStats = productMap.get(productName) || { name: productName, orders: 0, quantity: 0, value: 0 };
-      productStats.orders += 1;
-      productStats.quantity += qty;
-      productStats.value += value;
-      productMap.set(productName, productStats);
-    });
-
-    const factories = [...factoryMap.values()]
-      .map(item => ({
-        ...item,
-        avgHealth: item.orders ? Math.round(item.health / item.orders) : 0,
-        delayRate: item.orders ? Math.round((item.delayed / item.orders) * 100) : 0,
-        receiveRate: item.orders ? Math.round((item.received / item.orders) * 100) : 0,
-      }))
-      .sort((a, b) => b.orders - a.orders);
-
-    return {
-      totalValue,
-      delayedOrders,
-      factories,
-      bestFactories: [...factories].sort((a, b) => b.avgHealth - a.avgHealth).slice(0, 5),
-      delayedFactories: [...factories].filter(item => item.delayed > 0).sort((a, b) => b.delayed - a.delayed).slice(0, 5),
-      topProducts: [...productMap.values()].sort((a, b) => b.quantity - a.quantity).slice(0, 6),
-    };
-  }, [filteredOrders, receivings, lookups]);
 
   
   // Filters state
@@ -199,7 +135,8 @@ const ReportsPortal = () => {
     return sortedData;
   };
 
-  const applyFilters = async () => {
+  const applyFilters = async (customFilters = null) => {
+    const activeFilters = customFilters || filters;
     let currentData = orders;
     if (!dataLoaded) {
       currentData = await fetchOrders();
@@ -207,20 +144,20 @@ const ReportsPortal = () => {
     
     let result = [...currentData];
 
-    if (filters.fromSerial) {
-      result = result.filter(o => parseInt(o.serial_number) >= parseInt(filters.fromSerial));
+    if (activeFilters.fromSerial) {
+      result = result.filter(o => parseInt(o.serial_number) >= parseInt(activeFilters.fromSerial));
     }
-    if (filters.toSerial) {
-      result = result.filter(o => parseInt(o.serial_number) <= parseInt(filters.toSerial));
+    if (activeFilters.toSerial) {
+      result = result.filter(o => parseInt(o.serial_number) <= parseInt(activeFilters.toSerial));
     }
-    if (filters.fromDate) {
-      result = result.filter(o => new Date(o.order_data.requestDate || o.created_at) >= new Date(filters.fromDate));
+    if (activeFilters.fromDate) {
+      result = result.filter(o => new Date(o.order_data.requestDate || o.created_at) >= new Date(activeFilters.fromDate));
     }
-    if (filters.toDate) {
-      result = result.filter(o => new Date(o.order_data.requestDate || o.created_at) <= new Date(filters.toDate));
+    if (activeFilters.toDate) {
+      result = result.filter(o => new Date(o.order_data.requestDate || o.created_at) <= new Date(activeFilters.toDate));
     }
-    if (filters.factory) {
-      result = result.filter(o => (o.order_data.factoryId || '').includes(filters.factory));
+    if (activeFilters.factory) {
+      result = result.filter(o => (o.order_data.factoryId || '').includes(activeFilters.factory));
     }
 
     // Apply dynamic sorting based on sortConfig
@@ -266,14 +203,21 @@ const ReportsPortal = () => {
     toast.success(t('reports.messages.found_orders', { count: result.length }), { id: 'filter-toast' });
   };
 
+  const removeFilter = (key) => {
+    const newFilters = { ...filters, [key]: '' };
+    setFilters(newFilters);
+    applyFilters(newFilters);
+  };
+
   const clearFilters = () => {
-    setFilters({
+    const cleared = {
       fromSerial: '',
       toSerial: '',
       fromDate: '',
       toDate: '',
       factory: '',
-    });
+    };
+    setFilters(cleared);
     setFilteredOrders(orders);
     setExpandedRows([]);
   };
@@ -407,15 +351,22 @@ const ReportsPortal = () => {
          let sc = 0;
          if (d.colorDistribution) { const ss = new Set(); Object.values(d.colorDistribution).forEach(c => { if (c && typeof c === 'object') Object.keys(c).forEach(s => ss.add(s)); }); sc = ss.size; }
          gQty += qty; gAmt += tp;
-         return { n: idx+1, sn: order.serial_number||'-', bc: bc||'-', pn: englishOnly(d.productName)||'-', clrs, sc, sr, qty, cur: d.currency||'RMB', pr, tp };
+          let pnDisplay = '-';
+          if (d.productName) {
+            const engFull = englishOnly(d.productName) || '';
+            const eng3 = engFull.split(/\s+/).slice(0, 3).join(' ');
+            const chi = chineseOnly(d.productName) || '';
+            pnDisplay = (eng3 + (chi ? ' <span style="font-weight:bold;">' + chi + '</span>' : '')).trim() || '-';
+          }
+          return { n: idx+1, sn: order.serial_number||'-', bc: bc||'-', pn: pnDisplay, clrs, sc, sr, qty, cur: d.currency||'RMB', pr, tp, cn: d.contractNotes||'' };
        });
        const el = document.createElement('div');
-       el.style.cssText = 'position:fixed;left:-9999px;top:0;width:950px;background:#fff;padding:18px 22px;font-family:"Microsoft YaHei",SimHei,SimSun,Inter,sans-serif;color:#000;font-size:13px;line-height:1.4;direction:ltr;text-align:left;-webkit-font-smoothing:antialiased;';
-       const b = 'border:1px solid #000;padding:5px 4px;font-weight:600;';
-       const tc = b+'text-align:center;font-size:12px;';
-       const bl = b+'text-align:left;font-size:12px;';
-       const hr = b+'font-weight:900;text-align:center;font-size:11px;background:#b41e1e;color:#fff;';
-       const hg = b+'font-weight:800;text-align:center;font-size:12px;background:#e6e6e6;color:#000;';
+       el.style.cssText = 'position:fixed;left:-9999px;top:0;width:1050px;background:#fff;padding:22px 26px;font-family:"Microsoft YaHei",SimHei,SimSun,Inter,sans-serif;color:#000;font-size:15px;line-height:1.4;direction:ltr;text-align:left;-webkit-font-smoothing:antialiased;';
+       const b = 'border:1px solid #000;padding:7px 6px;font-weight:600;';
+       const tc = b+'text-align:center;font-size:14px;';
+       const bl = b+'text-align:left;font-size:14px;';
+       const hr = b+'font-weight:900;text-align:center;font-size:13px;background:#b41e1e;color:#fff;';
+       const hg = b+'font-weight:800;text-align:center;font-size:14px;background:#e6e6e6;color:#000;';
        const empCnt = Math.max(0, 20 - rows.length);
        let empH = '';
        const eCell = '<td style="'+tc+'height:20px;"></td>';
@@ -425,49 +376,49 @@ const ReportsPortal = () => {
          dH += '<tr>'+
            '<td style="'+tc+'">'+r.n+'</td>'+
            '<td style="'+tc+'">'+r.sn+'</td>'+
-           '<td style="'+tc+'font-size:10px;">'+r.bc+'</td>'+
+           '<td style="'+tc+'font-size:12px;">'+r.bc+'</td>'+
            '<td style="'+bl+'word-break:break-word;white-space:normal;">'+r.pn+'</td>'+
            '<td style="'+tc+'">'+r.clrs+'</td>'+
            '<td style="'+tc+'">'+(r.sc>0?r.sc:'-')+'</td>'+
-           '<td style="'+tc+'font-size:10px;">'+r.sr+'</td>'+
+           '<td style="'+tc+'font-size:12px;">'+r.sr+'</td>'+
            '<td style="'+tc+'font-weight:800;">'+r.qty+'</td>'+
-           '<td style="'+tc+'font-size:10px;">'+r.cur+'</td>'+
+           '<td style="'+tc+'font-size:12px;">'+r.cur+'</td>'+
            '<td style="'+tc+'">'+(r.pr?r.pr.toFixed(2):'0.00')+'</td>'+
            '<td style="'+tc+'font-weight:800;">'+(r.tp>0?r.tp.toLocaleString(undefined,{minimumFractionDigits:2}):'0.00')+'</td>'+
-           '<td style="'+tc+'"></td>'+
+           '<td style="'+tc+'">'+r.cn+'</td>'+
          '</tr>';
        });
        const tbs = 'border-collapse:collapse;width:100%;border:2px solid #000;';
        el.innerHTML =
-         '<div style="text-align:center;margin-bottom:10px;">'+
-           '<span style="font-size:32px;font-weight:900;color:#b41e1e;letter-spacing:1px;">Order Contract \u8BA2\u5355\u5408\u540C</span>'+
+         '<div style="text-align:center;margin-bottom:12px;">'+
+           '<span style="font-size:36px;font-weight:900;color:#b41e1e;letter-spacing:1px;">Order Contract \u8BA2\u5355\u5408\u540C</span>'+
          '</div>'+
          '<table style="'+tbs+'"><tbody>'+
            '<tr>'+
              '<td style="'+bl+'white-space:nowrap;width:1%;"><b>Fact. Name \u5DE5\u5382\u540D\u5B57\uFF1A</b></td>'+
-             '<td style="'+tc+'font-weight:800;font-size:14px;">'+(fDet.name||'-')+'</td>'+
-             '<td style="'+tc+'background:#b41e1e;color:#fff;font-weight:900;font-size:13px;white-space:nowrap;width:1%;">Cont No.</td>'+
-             '<td style="'+tc+'font-weight:900;font-size:15px;width:15%;">'+contNo+'</td>'+
+             '<td style="'+tc+'font-weight:800;font-size:16px;">'+(fDet.name||'-')+'</td>'+
+             '<td style="'+tc+'background:#b41e1e;color:#fff;font-weight:900;font-size:14px;white-space:nowrap;width:1%;">Cont No.</td>'+
+             '<td style="'+tc+'font-weight:900;font-size:17px;width:15%;">'+contNo+'</td>'+
            '</tr>'+
            '<tr>'+
              '<td style="'+bl+'white-space:nowrap;"><b>Fact. Mobile \u5DE5\u5382\u7535\u8BDD\uFF1A</b></td>'+
-             '<td style="'+tc+'font-weight:800;">'+(fDet.mobile||'-')+'</td>'+
+             '<td style="'+tc+'font-weight:800;font-size:14px;">'+(fDet.mobile||'-')+'</td>'+
              '<td style="'+bl+'white-space:nowrap;"><b>Cust. Code \u5BA2\u6237\u4EE3\u7801:</b></td>'+
-             '<td style="'+tc+'font-weight:800;">'+custCode+'</td>'+
+             '<td style="'+tc+'font-weight:800;font-size:14px;">'+custCode+'</td>'+
            '</tr>'+
            '<tr>'+
              '<td style="'+bl+'white-space:nowrap;"><b>Fact. Address \u5DE5\u5382\u5730\u5740\uFF1A</b></td>'+
-             '<td style="'+tc+'font-weight:800;font-size:10px;">'+(fDet.address||'-')+'</td>'+
+             '<td style="'+tc+'font-weight:800;font-size:12px;">'+(fDet.address||'-')+'</td>'+
              '<td style="'+bl+'white-space:nowrap;"><b>Cust. Mobile \u5BA2\u6237\u624B\u673A\uFF1A</b></td>'+
-             '<td style="'+tc+'font-weight:800;">'+custMobile+'</td>'+
+             '<td style="'+tc+'font-weight:800;font-size:14px;">'+custMobile+'</td>'+
            '</tr>'+
          '</tbody></table>'+
          '<table style="'+tbs+'border-top:none;"><tbody>'+
            '<tr>'+
              '<td style="'+hg+'width:25%;">Request Date \u8BA2\u5355\u65E5\u671F</td>'+
-             '<td style="'+tc+'font-weight:800;font-size:13px;width:25%;">'+fD(reqDate)+'</td>'+
+             '<td style="'+tc+'font-weight:800;font-size:14px;width:25%;">'+fD(reqDate)+'</td>'+
              '<td style="'+hg+'width:25%;">Delivery Date \u4EA4\u8D27\u65E5\u671F</td>'+
-             '<td style="'+tc+'font-weight:800;font-size:13px;width:25%;">'+fD(delDate)+'</td>'+
+             '<td style="'+tc+'font-weight:800;font-size:14px;width:25%;">'+fD(delDate)+'</td>'+
            '</tr>'+
          '</tbody></table>'+
          '<table style="'+tbs+'border-top:none;"><tbody>'+
@@ -483,39 +434,39 @@ const ReportsPortal = () => {
              '<td style="'+hr+'width:5%;">\u8D27\u5E01<br/>Currency</td>'+
              '<td style="'+hr+'width:7%;">\u4EA7\u54C1\u4EF7\u683C<br/>Prod Price</td>'+
              '<td style="'+hr+'width:10%;">\u603B\u91D1\u989D<br/>Tot. Amount</td>'+
-             '<td style="'+hr+'width:9%;">\u8BA2\u5355\u5907\u6CE8<br/>Order Notes</td>'+
+             '<td style="'+hr+'width:9%;">\u8BA2\u5355\u5907\u6CE8<br/>Contract Notes</td>'+ 
            '</tr>'+
-           dH + empH +
+           dH +
            '<tr style="background:#e6e6e6;">'+
              '<td style="'+tc+'font-weight:900;">Total \u5408\u8BA1</td>'+
              '<td style="'+tc+'font-weight:900;">'+rows.length+' Items</td>'+
              '<td style="'+tc+'"></td><td style="'+tc+'"></td><td style="'+tc+'"></td><td style="'+tc+'"></td><td style="'+tc+'"></td>'+
-             '<td style="'+tc+'font-weight:900;">'+gQty.toLocaleString()+' PCS</td>'+
+             '<td style="'+tc+'font-weight:900;font-size:15px;">'+gQty.toLocaleString()+' PCS</td>'+ 
              '<td style="'+tc+'"></td><td style="'+tc+'"></td>'+
-             '<td style="'+tc+'font-weight:900;">'+gAmt.toLocaleString(undefined,{minimumFractionDigits:2})+' '+cur+'</td>'+
+             '<td style="'+tc+'font-weight:900;font-size:15px;">'+gAmt.toLocaleString(undefined,{minimumFractionDigits:2})+' '+cur+'</td>'+
              '<td style="'+tc+'"></td>'+
            '</tr>'+
          '</tbody></table>'+
          '<table style="border-collapse:collapse;width:100%;border:2px solid #000;border-top:none;"><tbody>'+
-           '<tr><td style="'+bl+'background:#e6e6e6;font-weight:800;">Conditions \u72B6\u51B5\uFF1A</td></tr>'+
-           '<tr><td style="'+bl+'height:90px;vertical-align:top;"></td></tr>'+
+           '<tr><td style="'+bl+'background:#e6e6e6;font-weight:800;font-size:14px;">Conditions \u72B6\u51B5\uFF1A</td></tr>'+
+           '<tr><td style="'+bl+'height:'+(90 + empCnt * 20)+'px;vertical-align:top;"></td></tr>'+
          '</tbody></table>'+
          '<table style="border-collapse:collapse;width:100%;border:2px solid #000;border-top:none;"><tbody><tr>'+
-           '<td style="'+bl+'width:25%;padding:12px 8px;">'+
-             '<div style="font-weight:800;font-size:12px;margin-bottom:18px;">Name \u540D\u5B57</div>'+
-             '<div style="font-weight:800;font-size:12px;">Signature \u7B7E\u540D</div>'+
+           '<td style="'+bl+'width:25%;padding:14px 10px;">'+
+             '<div style="font-weight:800;font-size:13px;margin-bottom:20px;">Name \u540D\u5B57</div>'+
+             '<div style="font-weight:800;font-size:13px;">Signature \u7B7E\u540D</div>'+
            '</td>'+
-           '<td style="'+tc+'width:25%;padding:12px 8px;vertical-align:top;">'+
-             '<div style="color:#b41e1e;font-weight:800;font-size:12px;margin-bottom:18px;">Buyer \u4E70\u65B9</div>'+
-             '<div style="border-bottom:2px solid #000;width:80%;margin:0 auto;height:20px;"></div>'+
+           '<td style="'+tc+'width:25%;padding:14px 10px;vertical-align:top;">'+
+             '<div style="color:#b41e1e;font-weight:800;font-size:13px;margin-bottom:20px;">Buyer \u4E70\u65B9</div>'+
+             '<div style="border-bottom:2px solid #000;width:80%;margin:0 auto;height:22px;"></div>'+
            '</td>'+
-           '<td style="'+tc+'width:25%;padding:12px 8px;vertical-align:top;">'+
-             '<div style="color:#b41e1e;font-weight:800;font-size:12px;margin-bottom:18px;">Coordinator \u534F\u8C03\u5458</div>'+
-             '<div style="border-bottom:2px solid #000;width:80%;margin:0 auto;height:20px;"></div>'+
+           '<td style="'+tc+'width:25%;padding:14px 10px;vertical-align:top;">'+
+             '<div style="color:#b41e1e;font-weight:800;font-size:13px;margin-bottom:20px;">Coordinator \u534F\u8C03\u5458</div>'+
+             '<div style="border-bottom:2px solid #000;width:80%;margin:0 auto;height:22px;"></div>'+
            '</td>'+
-           '<td style="'+tc+'width:25%;padding:12px 8px;vertical-align:top;">'+
-             '<div style="color:#b41e1e;font-weight:800;font-size:12px;margin-bottom:18px;">Factory \u5DE5\u5382</div>'+
-             '<div style="border-bottom:2px solid #000;width:80%;margin:0 auto;height:20px;"></div>'+
+           '<td style="'+tc+'width:25%;padding:14px 10px;vertical-align:top;">'+
+             '<div style="color:#b41e1e;font-weight:800;font-size:13px;margin-bottom:20px;">Factory \u5DE5\u5382</div>'+
+             '<div style="border-bottom:2px solid #000;width:80%;margin:0 auto;height:22px;"></div>'+
            '</td>'+
          '</tr></tbody></table>';
        document.body.appendChild(el);
@@ -648,191 +599,7 @@ const ReportsPortal = () => {
         </div>
       </div>
 
-      {dataLoaded && (
-        <div className="card glass-panel" style={{ marginBottom: '2rem', border: '1px solid rgba(212,175,55,0.18)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '1.25rem' }}>
-            <div>
-              <h3 style={{ margin: 0, color: 'var(--text-strong)', display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
-                <TrendingUp size={22} color="var(--accent-color)" /> Dashboard تنفيذية
-              </h3>
-              <p style={{ margin: '0.35rem 0 0', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                مؤشرات مالية وتشغيلية مختصرة حسب النتائج الحالية.
-              </p>
-            </div>
-          </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '0.8rem', marginBottom: '1rem' }}>
-            {[
-              { label: 'إجمالي قيمة البضاعة', value: executiveDashboard.totalValue.toLocaleString(), icon: Coins, color: '#d4af37' },
-              { label: 'طلبات متأخرة', value: executiveDashboard.delayedOrders, icon: Clock, color: '#fb7185' },
-              { label: 'عدد المصانع', value: executiveDashboard.factories.length, icon: Factory, color: '#38bdf8' },
-              { label: 'منتجات نشطة', value: executiveDashboard.topProducts.length, icon: Trophy, color: '#34d399' },
-            ].map(item => {
-              const Icon = item.icon;
-              return (
-                <div key={item.label} style={{ padding: '1rem', borderRadius: 16, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
-                  <div style={{ width: 42, height: 42, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', color: item.color, background: `${item.color}1f` }}>
-                    <Icon size={20} />
-                  </div>
-                  <div>
-                    <div style={{ color: 'var(--text-strong)', fontWeight: 900, fontSize: '1.22rem', fontFamily: 'Outfit, sans-serif' }}>{item.value}</div>
-                    <div style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>{item.label}</div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
-            <div style={{ padding: '1rem', borderRadius: 14, background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.05)' }}>
-              <h4 style={{ margin: '0 0 0.75rem', color: 'var(--text-strong)', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                <Factory size={18} color="#38bdf8" /> أداء المصانع
-              </h4>
-              {executiveDashboard.bestFactories.length === 0 ? (
-                <div style={{ color: 'var(--text-muted)' }}>لا توجد بيانات مصانع ضمن النتائج.</div>
-              ) : executiveDashboard.bestFactories.map(factory => (
-                <div key={factory.name} style={{ marginBottom: '0.75rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-strong)', fontSize: '0.85rem', marginBottom: 5 }}>
-                    <strong>{factory.name}</strong>
-                    <span>{factory.avgHealth}% صحة</span>
-                  </div>
-                  <div style={{ height: 8, borderRadius: 999, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
-                    <div style={{ width: `${factory.avgHealth}%`, height: '100%', background: factory.avgHealth >= 80 ? '#34d399' : factory.avgHealth >= 55 ? '#fbbf24' : '#fb7185' }} />
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)', fontSize: '0.72rem', marginTop: 4 }}>
-                    <span>{factory.orders} طلب</span>
-                    <span>{factory.receiveRate}% استلام</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div style={{ padding: '1rem', borderRadius: 14, background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.05)' }}>
-              <h4 style={{ margin: '0 0 0.75rem', color: 'var(--text-strong)', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                <AlertTriangle size={18} color="#fb7185" /> التأخير حسب المصنع
-              </h4>
-              {executiveDashboard.delayedFactories.length === 0 ? (
-                <div style={{ color: '#34d399', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                  <CheckCircle2 size={17} /> لا توجد تأخيرات في النتائج الحالية.
-                </div>
-              ) : executiveDashboard.delayedFactories.map(factory => (
-                <div key={factory.name} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '0.75rem', alignItems: 'center', padding: '0.55rem 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                  <div>
-                    <strong style={{ color: 'var(--text-strong)' }}>{factory.name}</strong>
-                    <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{factory.orders} طلب، معدل التأخير {factory.delayRate}%</div>
-                  </div>
-                  <span style={{ color: '#fb7185', fontWeight: 900 }}>{factory.delayed}</span>
-                </div>
-              ))}
-            </div>
-
-            <div style={{ padding: '1rem', borderRadius: 14, background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.05)' }}>
-              <h4 style={{ margin: '0 0 0.75rem', color: 'var(--text-strong)', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                <Trophy size={18} color="#d4af37" /> المنتجات الأكثر طلبًا
-              </h4>
-              {executiveDashboard.topProducts.length === 0 ? (
-                <div style={{ color: 'var(--text-muted)' }}>لا توجد بيانات منتجات ضمن النتائج.</div>
-              ) : executiveDashboard.topProducts.map((product, index) => (
-                <div key={product.name} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: '0.65rem', alignItems: 'center', padding: '0.5rem 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                  <span style={{ color: index === 0 ? '#d4af37' : 'var(--text-muted)', fontWeight: 900 }}>#{index + 1}</span>
-                  <div>
-                    <strong style={{ color: 'var(--text-strong)', fontSize: '0.86rem' }}>{product.name}</strong>
-                    <div style={{ color: 'var(--text-muted)', fontSize: '0.74rem' }}>{product.orders} طلب</div>
-                  </div>
-                  <span style={{ color: 'var(--accent-color)', fontWeight: 900 }}>{product.quantity.toLocaleString()}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {dataLoaded && (
-        <div className="card glass-panel" style={{ marginBottom: '2rem', border: '1px solid rgba(56,189,248,0.18)', boxShadow: '0 18px 50px rgba(0,0,0,0.22)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '1.25rem' }}>
-            <div>
-              <h3 style={{ margin: 0, color: 'var(--text-strong)', display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
-                <Brain size={22} color="#38bdf8" /> مركز الذكاء التشغيلي
-              </h3>
-              <p style={{ margin: '0.35rem 0 0', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                تحليل تلقائي لصحة الطلبات، مراحلها، والمشاكل التي قد توقف الطباعة أو التصدير أو الاستلام.
-              </p>
-            </div>
-            <div style={{ minWidth: 92, height: 92, borderRadius: 18, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: intelligence.avgHealth >= 80 ? 'rgba(16,185,129,0.12)' : intelligence.avgHealth >= 55 ? 'rgba(245,158,11,0.12)' : 'rgba(244,63,94,0.12)', border: '1px solid rgba(255,255,255,0.08)' }}>
-              <strong style={{ fontSize: '1.8rem', color: intelligence.avgHealth >= 80 ? '#34d399' : intelligence.avgHealth >= 55 ? '#fbbf24' : '#fb7185', lineHeight: 1 }}>{intelligence.avgHealth}</strong>
-              <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: 4 }}>صحة النظام</span>
-            </div>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(165px, 1fr))', gap: '0.8rem', marginBottom: '1rem' }}>
-            {[
-              { label: 'الطلبات', value: filteredOrders.length, icon: FileText, color: '#38bdf8' },
-              { label: 'إجمالي القطع', value: intelligence.totalQuantity.toLocaleString(), icon: Activity, color: '#d4af37' },
-              { label: 'مخاطر عالية', value: intelligence.riskCounts.high || 0, icon: AlertTriangle, color: '#fb7185' },
-              { label: 'تم الاستلام', value: intelligence.stageCounts.received || 0, icon: CheckCircle2, color: '#34d399' },
-              { label: 'متأخر', value: intelligence.stageCounts.overdue || 0, icon: Clock, color: '#f97316' },
-            ].map(item => {
-              const Icon = item.icon;
-              return (
-                <div key={item.label} style={{ padding: '1rem', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 14, display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <div style={{ width: 40, height: 40, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', background: `${item.color}1f`, color: item.color }}>
-                    <Icon size={19} />
-                  </div>
-                  <div>
-                    <div style={{ color: 'var(--text-strong)', fontWeight: 900, fontSize: '1.2rem', fontFamily: 'Outfit, sans-serif' }}>{item.value}</div>
-                    <div style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>{item.label}</div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 1.1fr) minmax(260px, 0.9fr)', gap: '1rem' }}>
-            <div style={{ padding: '1rem', background: 'rgba(255,255,255,0.025)', borderRadius: 14, border: '1px solid rgba(255,255,255,0.05)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', color: 'var(--text-strong)', fontWeight: 800, marginBottom: '0.75rem' }}>
-                <ShieldCheck size={18} color="#34d399" /> أولويات الإصلاح الذكية
-              </div>
-              {intelligence.topIssues.length === 0 ? (
-                <div style={{ color: '#34d399', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                  <CheckCircle2 size={17} /> لا توجد مشاكل تشغيلية واضحة في النتائج الحالية.
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  {intelligence.topIssues.map(issue => (
-                    <div key={issue.label} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', alignItems: 'center', gap: '0.65rem', padding: '0.65rem 0.75rem', borderRadius: 12, background: issue.severity === 'critical' ? 'rgba(244,63,94,0.08)' : 'rgba(245,158,11,0.08)', border: '1px solid rgba(255,255,255,0.05)' }}>
-                      <AlertTriangle size={16} color={issue.severity === 'critical' ? '#fb7185' : '#fbbf24'} />
-                      <div>
-                        <div style={{ color: 'var(--text-strong)', fontWeight: 700, fontSize: '0.86rem' }}>{issue.label}</div>
-                        <div style={{ color: 'var(--text-muted)', fontSize: '0.76rem', marginTop: 2 }}>{issue.fix}</div>
-                      </div>
-                      <strong style={{ color: 'var(--accent-color)' }}>{issue.count}</strong>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div style={{ padding: '1rem', background: 'rgba(255,255,255,0.025)', borderRadius: 14, border: '1px solid rgba(255,255,255,0.05)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', color: 'var(--text-strong)', fontWeight: 800, marginBottom: '0.75rem' }}>
-                <Clock size={18} color="#fbbf24" /> طلبات تحتاج متابعة الآن
-              </div>
-              {intelligence.urgentOrders.length === 0 ? (
-                <div style={{ color: 'var(--text-muted)' }}>لا توجد طلبات عاجلة ضمن النتائج الحالية.</div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
-                  {intelligence.urgentOrders.map(item => (
-                    <button key={item.serial} onClick={() => toggleRow(item.serial)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', width: '100%', border: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.03)', color: 'var(--text-strong)', borderRadius: 12, padding: '0.55rem 0.7rem', cursor: 'pointer', fontFamily: 'Tajawal, sans-serif' }}>
-                      <span style={{ fontWeight: 800 }}>#{item.serial}</span>
-                      <span style={{ color: item.stageColor, fontSize: '0.8rem' }}>{item.stageLabel}</span>
-                      <span style={{ color: item.healthScore < 55 ? '#fb7185' : '#fbbf24', fontWeight: 900 }}>{item.healthScore}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Filter Card */}
       <div className="card glass-panel" style={{ marginBottom: '2rem' }}>
@@ -920,6 +687,93 @@ const ReportsPortal = () => {
         </div>
       </div>
 
+      {/* Active Filter Pills (Upgraded UX) */}
+      {Object.values(filters).some(val => val !== '') && (
+        <div style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: '0.75rem',
+          alignItems: 'center',
+          marginBottom: '2rem',
+          padding: '1rem 1.5rem',
+          background: 'var(--glass-bg)',
+          border: '1px solid rgba(212, 175, 55, 0.15)',
+          borderRadius: '16px',
+          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
+          backdropFilter: 'blur(12px)',
+          animation: 'fadeIn 0.3s ease'
+        }}>
+          <span style={{ fontSize: '0.9rem', color: 'var(--accent-color)', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+            <span>🔍</span> {t('reports.filters.active_filters')}
+          </span>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.6rem' }}>
+            {filters.fromSerial && (
+              <div 
+                className="filter-badge-premium"
+                onClick={() => removeFilter('fromSerial')}
+              >
+                <span>{t('reports.filters.from_serial')}:</span>
+                <strong style={{ color: 'var(--accent-color)' }}>{filters.fromSerial}</strong>
+                <span style={{ marginInlineStart: '4px', opacity: 0.7 }}>✕</span>
+              </div>
+            )}
+            {filters.toSerial && (
+              <div 
+                className="filter-badge-premium"
+                onClick={() => removeFilter('toSerial')}
+              >
+                <span>{t('reports.filters.to_serial')}:</span>
+                <strong style={{ color: 'var(--accent-color)' }}>{filters.toSerial}</strong>
+                <span style={{ marginInlineStart: '4px', opacity: 0.7 }}>✕</span>
+              </div>
+            )}
+            {filters.fromDate && (
+              <div 
+                className="filter-badge-premium"
+                onClick={() => removeFilter('fromDate')}
+              >
+                <span>{t('reports.filters.from_date')}:</span>
+                <strong style={{ color: 'var(--accent-color)' }}>{filters.fromDate}</strong>
+                <span style={{ marginInlineStart: '4px', opacity: 0.7 }}>✕</span>
+              </div>
+            )}
+            {filters.toDate && (
+              <div 
+                className="filter-badge-premium"
+                onClick={() => removeFilter('toDate')}
+              >
+                <span>{t('reports.filters.to_date')}:</span>
+                <strong style={{ color: 'var(--accent-color)' }}>{filters.toDate}</strong>
+                <span style={{ marginInlineStart: '4px', opacity: 0.7 }}>✕</span>
+              </div>
+            )}
+            {filters.factory && (
+              <div 
+                className="filter-badge-premium"
+                onClick={() => removeFilter('factory')}
+              >
+                <span>{t('reports.filters.select_factory')}:</span>
+                <strong style={{ color: 'var(--accent-color)' }}>{filters.factory}</strong>
+                <span style={{ marginInlineStart: '4px', opacity: 0.7 }}>✕</span>
+              </div>
+            )}
+          </div>
+          <button 
+            className="btn btn-outline" 
+            onClick={clearFilters}
+            style={{ 
+              padding: '0.35rem 0.75rem', 
+              fontSize: '0.8rem', 
+              marginInlineStart: 'auto', 
+              borderColor: 'rgba(239, 68, 68, 0.3)', 
+              color: '#ef4444' 
+            }}
+          >
+            {t('reports.filters.clear_btn')}
+          </button>
+        </div>
+      )}
+
       {/* Results Section */}
       <div className="card" id="report-print-area">
         <div style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -973,7 +827,7 @@ const ReportsPortal = () => {
                   const d = order.order_data || {};
                   const isExpanded = expandedRows.includes(order.serial_number);
                   const computedTotal = calculateTotalPiecesCount(d);
-                  const insight = analyzeOrder(order, receivingMap.get(order.serial_number), lookups);
+                  const insight = analyzeOrder(order, receivingMap ? receivingMap.get(order.serial_number) : null, lookups);
                   const activities = d.activityLog || [];
                   const actSummary = activitySummary(activities);
 
@@ -1030,157 +884,160 @@ const ReportsPortal = () => {
                       {/* Expanded Section for Details */}
                       <tr className="expandable-content" style={{ display: isExpanded ? 'table-row' : 'none', backgroundColor: 'rgba(0,0,0,0.2)' }}>
                           <td colSpan={10} style={{ padding: '1.5rem', borderBottom: '1px solid var(--border-color)' }}>
-                             
-                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
-                               <div style={{ padding: '0.9rem', borderRadius: 12, background: `${insight.stageColor}12`, border: `1px solid ${insight.stageColor}33` }}>
-                                 <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>مرحلة الطلب</span>
-                                 <div style={{ color: insight.stageColor, fontWeight: 900, marginTop: 4 }}>{insight.stageLabel}</div>
-                               </div>
-                               <div style={{ padding: '0.9rem', borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                                 <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>درجة الصحة</span>
-                                 <div style={{ color: insight.healthScore >= 80 ? '#34d399' : insight.healthScore >= 55 ? '#fbbf24' : '#fb7185', fontWeight: 900, marginTop: 4 }}>{insight.healthScore}/100</div>
-                               </div>
-                               <div style={{ padding: '0.9rem', borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                                 <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>مشاكل حرجة / تنبيهات</span>
-                                 <div style={{ color: 'var(--text-strong)', fontWeight: 900, marginTop: 4 }}>{insight.criticalCount} / {insight.warningCount}</div>
-                               </div>
-                             </div>
-
-                             {insight.issues.length > 0 && (
-                               <div style={{ marginBottom: '1rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '0.6rem' }}>
-                                 {insight.issues.map((issue, issueIdx) => (
-                                   <div key={issueIdx} style={{ padding: '0.75rem', borderRadius: 12, background: issue.severity === 'critical' ? 'rgba(244,63,94,0.08)' : issue.severity === 'warning' ? 'rgba(245,158,11,0.08)' : 'rgba(56,189,248,0.08)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                                     <div style={{ color: issue.severity === 'critical' ? '#fb7185' : issue.severity === 'warning' ? '#fbbf24' : '#38bdf8', fontWeight: 800, fontSize: '0.85rem' }}>{issue.label}</div>
-                                     <div style={{ color: 'var(--text-muted)', fontSize: '0.78rem', marginTop: 3 }}>{issue.fix}</div>
+                             {isExpanded && (
+                               <div className="expandable-content-wrapper">
+                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
+                                   <div style={{ padding: '0.9rem', borderRadius: 12, background: `${insight.stageColor}12`, border: `1px solid ${insight.stageColor}33` }}>
+                                     <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>مرحلة الطلب</span>
+                                     <div style={{ color: insight.stageColor, fontWeight: 900, marginTop: 4 }}>{insight.stageLabel}</div>
                                    </div>
-                                 ))}
-                               </div>
-                             )}
+                                   <div style={{ padding: '0.9rem', borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                     <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>درجة الصحة</span>
+                                     <div style={{ color: insight.healthScore >= 80 ? '#34d399' : insight.healthScore >= 55 ? '#fbbf24' : '#fb7185', fontWeight: 900, marginTop: 4 }}>{insight.healthScore}/100</div>
+                                   </div>
+                                   <div style={{ padding: '0.9rem', borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                     <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>مشاكل حرجة / تنبيهات</span>
+                                     <div style={{ color: 'var(--text-strong)', fontWeight: 900, marginTop: 4 }}>{insight.criticalCount} / {insight.warningCount}</div>
+                                   </div>
+                                 </div>
 
-                             <div style={{ marginBottom: '1rem', padding: '1rem', borderRadius: 14, background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', marginBottom: '0.85rem' }}>
-                                 <h4 style={{ margin: 0, color: 'var(--text-strong)', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                                   <Activity size={18} color="var(--accent-color)" /> سجل النشاط الذكي
-                                 </h4>
-                                 <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                                   {[
-                                     ['الأحداث', actSummary.total],
-                                     ['الطباعة', actSummary.prints],
-                                     ['التحديثات', actSummary.updates],
-                                     ['الاستلام', actSummary.receives],
-                                   ].map(([label, value]) => (
-                                     <span key={label} style={{ padding: '0.25rem 0.55rem', borderRadius: 999, background: 'rgba(212,175,55,0.08)', color: 'var(--accent-color)', border: '1px solid rgba(212,175,55,0.12)', fontSize: '0.75rem', fontWeight: 800 }}>
-                                       {label}: {value}
-                                     </span>
-                                   ))}
-                                 </div>
-                               </div>
-                               {activities.length === 0 ? (
-                                 <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                                   لا يوجد سجل نشاط قديم لهذا الطلب. سيتم تسجيل الأحداث الجديدة تلقائيًا من الآن.
-                                 </div>
-                               ) : (
-                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', maxHeight: 340, overflow: 'auto', paddingLeft: 4 }}>
-                                   {activities.slice(0, 12).map(item => (
-                                     <div key={item.id || `${item.action}-${item.at}`} style={{ display: 'grid', gridTemplateColumns: '14px 1fr', gap: '0.7rem' }}>
-                                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                                         <span style={{ width: 12, height: 12, borderRadius: '50%', background: item.color || '#94a3b8', boxShadow: `0 0 0 4px ${(item.color || '#94a3b8')}22`, marginTop: 7 }} />
-                                         <span style={{ width: 1, flex: 1, background: 'rgba(255,255,255,0.08)', marginTop: 6 }} />
+                                 {insight.issues.length > 0 && (
+                                   <div style={{ marginBottom: '1rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '0.6rem' }}>
+                                     {insight.issues.map((issue, issueIdx) => (
+                                       <div key={issueIdx} style={{ padding: '0.75rem', borderRadius: 12, background: issue.severity === 'critical' ? 'rgba(244,63,94,0.08)' : issue.severity === 'warning' ? 'rgba(245,158,11,0.08)' : 'rgba(56,189,248,0.08)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                         <div style={{ color: issue.severity === 'critical' ? '#fb7185' : issue.severity === 'warning' ? '#fbbf24' : '#38bdf8', fontWeight: 800, fontSize: '0.85rem' }}>{issue.label}</div>
+                                         <div style={{ color: 'var(--text-muted)', fontSize: '0.78rem', marginTop: 3 }}>{issue.fix}</div>
                                        </div>
-                                       <div style={{ padding: '0.75rem 0.85rem', borderRadius: 12, background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.7rem', marginBottom: 4 }}>
-                                           <strong style={{ color: item.color || 'var(--text-strong)' }}>{item.actionLabel || item.action}</strong>
-                                           <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{formatActivityTime(item.at)}</span>
-                                         </div>
-                                         <div style={{ color: 'var(--text-strong)', fontSize: '0.86rem' }}>{item.note}</div>
-                                         <div style={{ color: 'var(--text-muted)', fontSize: '0.76rem', marginTop: 4 }}>بواسطة: {item.actor || 'system'}</div>
-                                         {item.changes?.length > 0 && (
-                                           <div style={{ marginTop: '0.6rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.35rem' }}>
-                                             {item.changes.map(change => (
-                                               <div key={`${item.id}-${change.field}`} style={{ padding: '0.45rem', borderRadius: 8, background: 'rgba(0,0,0,0.14)', fontSize: '0.75rem' }}>
-                                                 <strong style={{ color: 'var(--accent-color)' }}>{change.label}</strong>
-                                                 <div style={{ color: 'var(--text-muted)', direction: 'ltr', textAlign: 'left' }}>{change.from} → {change.to}</div>
-                                               </div>
-                                             ))}
+                                     ))}
+                                   </div>
+                                 )}
+
+                                 <div style={{ marginBottom: '1rem', padding: '1rem', borderRadius: 14, background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', marginBottom: '0.85rem' }}>
+                                     <h4 style={{ margin: 0, color: 'var(--text-strong)', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                                       <Activity size={18} color="var(--accent-color)" /> سجل النشاط الذكي
+                                     </h4>
+                                     <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                                       {[
+                                         ['الأحداث', actSummary.total],
+                                         ['الطباعة', actSummary.prints],
+                                         ['التحديثات', actSummary.updates],
+                                         ['الاستلال', actSummary.receives],
+                                       ].map(([label, value]) => (
+                                         <span key={label} style={{ padding: '0.25rem 0.55rem', borderRadius: 999, background: 'rgba(212,175,55,0.08)', color: 'var(--accent-color)', border: '1px solid rgba(212,175,55,0.12)', fontSize: '0.75rem', fontWeight: 800 }}>
+                                           {label}: {value}
+                                         </span>
+                                       ))}
+                                     </div>
+                                   </div>
+                                   {activities.length === 0 ? (
+                                     <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                                       لا يوجد سجل نشاط قديم لهذا الطلب. سيتم تسجيل الأحداث الجديدة تلقائيًا من الآن.
+                                     </div>
+                                   ) : (
+                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', maxHeight: 340, overflow: 'auto', paddingLeft: 4 }}>
+                                       {activities.slice(0, 12).map(item => (
+                                         <div key={item.id || `${item.action}-${item.at}`} style={{ display: 'grid', gridTemplateColumns: '14px 1fr', gap: '0.7rem' }}>
+                                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                             <span style={{ width: 12, height: 12, borderRadius: '50%', background: item.color || '#94a3b8', boxShadow: `0 0 0 4px ${(item.color || '#94a3b8')}22`, marginTop: 7 }} />
+                                             <span style={{ width: 1, flex: 1, background: 'rgba(255,255,255,0.08)', marginTop: 6 }} />
                                            </div>
-                                         )}
+                                           <div style={{ padding: '0.75rem 0.85rem', borderRadius: 12, background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.7rem', marginBottom: 4 }}>
+                                               <strong style={{ color: item.color || 'var(--text-strong)' }}>{item.actionLabel || item.action}</strong>
+                                               <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{formatActivityTime(item.at)}</span>
+                                             </div>
+                                             <div style={{ color: 'var(--text-strong)', fontSize: '0.86rem' }}>{item.note}</div>
+                                             <div style={{ color: 'var(--text-muted)', fontSize: '0.76rem', marginTop: 4 }}>بواسطة: {item.actor || 'system'}</div>
+                                             {item.changes?.length > 0 && (
+                                               <div style={{ marginTop: '0.6rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.35rem' }}>
+                                                 {item.changes.map(change => (
+                                                   <div key={`${item.id}-${change.field}`} style={{ padding: '0.45rem', borderRadius: 8, background: 'rgba(0,0,0,0.14)', fontSize: '0.75rem' }}>
+                                                     <strong style={{ color: 'var(--accent-color)' }}>{change.label}</strong>
+                                                     <div style={{ color: 'var(--text-muted)', direction: 'ltr', textAlign: 'left' }}>{change.from} → {change.to}</div>
+                                                   </div>
+                                                 ))}
+                                               </div>
+                                             )}
+                                           </div>
+                                         </div>
+                                       ))}
+                                     </div>
+                                   )}
+                                 </div>
+
+                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem', padding: '1.5rem', background: 'rgba(255,255,255,0.03)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                                    <div>
+                                       <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem', display: 'block', marginBottom: '0.4rem' }}>{t('reports.details.sizes')}</span>
+                                       <div style={{ fontWeight: 'bold', color: '#fff', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                          <span>{d.sizeFrom || '-'}</span>
+                                          <span style={{ color: 'var(--accent-color)' }}>⟵</span>
+                                          <span>{d.sizeTo || '-'}</span>
                                        </div>
-                                     </div>
-                                   ))}
+                                    </div>
+                                    <div>
+                                       <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem', display: 'block', marginBottom: '0.2rem' }}>{t('reports.details.delivery_date')}</span>
+                                       <div style={{ fontWeight: 'bold', color: '#fff' }}>{d.deliveryDate || '-'}</div>
+                                    </div>
+                                    <div>
+                                       <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem', display: 'block', marginBottom: '0.2rem' }}>{t('reports.details.unit_price')}</span>
+                                       <div style={{ fontWeight: 'bold', color: '#fff' }}>{d.productPrice || '0'} {d.currency || ''}</div>
+                                    </div>
+                                    <div>
+                                       <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem', display: 'block', marginBottom: '0.2rem' }}>{t('reports.details.total_price')}</span>
+                                       <div style={{ fontWeight: '900', color: 'var(--accent-color)', fontSize: '1.1rem' }}>
+                                         {(parseFloat(d.productPrice || 0) * (computedTotal > 0 ? computedTotal : parseInt(d.totalQuantity || 0))).toLocaleString()} {d.currency || ''}
+                                       </div>
+                                    </div>
                                  </div>
-                               )}
-                             </div>
 
-                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem', padding: '1.5rem', background: 'rgba(255,255,255,0.03)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(255,255,255,0.05)' }}>
-                                <div>
-                                   <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem', display: 'block', marginBottom: '0.4rem' }}>{t('reports.details.sizes')}</span>
-                                   <div style={{ fontWeight: 'bold', color: '#fff', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                      <span>{d.sizeFrom || '-'}</span>
-                                      <span style={{ color: 'var(--accent-color)' }}>⟵</span>
-                                      <span>{d.sizeTo || '-'}</span>
+                                 {d.colorDistribution && Object.keys(d.colorDistribution).length > 0 && (
+                                   <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                                     {Object.keys(d.colorDistribution).map((color, cIdx) => {
+                                       if (!d.colorDistribution[color] || typeof d.colorDistribution[color] !== 'object') return null;
+                                       return (
+                                         <div key={cIdx} style={{ backgroundColor: 'var(--surface-color)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', minWidth: '150px' }}>
+                                            <h4 style={{ margin: '0 0 0.8rem 0', color: 'var(--accent-color)', borderBottom: '1px dashed var(--border-color)', paddingBottom: '0.5rem' }}>{color}</h4>
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.9rem' }}>
+                                              {Object.entries(d.colorDistribution[color]).map(([size, qty]) => {
+                                              if(!qty || parseInt(qty) <= 0) return null;
+                                              return (
+                                                <div key={size} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                  <span style={{ color: 'var(--text-muted)' }}>{size}:</span>
+                                                  <span style={{ fontWeight: 'bold' }}>{qty}</span>
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                       </div>
+                                       );
+                                     })}
                                    </div>
-                                </div>
-                                <div>
-                                   <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem', display: 'block', marginBottom: '0.2rem' }}>{t('reports.details.delivery_date')}</span>
-                                   <div style={{ fontWeight: 'bold', color: '#fff' }}>{d.deliveryDate || '-'}</div>
-                                </div>
-                                <div>
-                                   <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem', display: 'block', marginBottom: '0.2rem' }}>{t('reports.details.unit_price')}</span>
-                                   <div style={{ fontWeight: 'bold', color: '#fff' }}>{d.productPrice || '0'} {d.currency || ''}</div>
-                                </div>
-                                <div>
-                                   <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem', display: 'block', marginBottom: '0.2rem' }}>{t('reports.details.total_price')}</span>
-                                   <div style={{ fontWeight: '900', color: 'var(--accent-color)', fontSize: '1.1rem' }}>
-                                     {(parseFloat(d.productPrice || 0) * (computedTotal > 0 ? computedTotal : parseInt(d.totalQuantity || 0))).toLocaleString()} {d.currency || ''}
+                                 )}
+
+                                 {d.remarks && (
+                                   <div style={{ marginTop: '1rem', padding: '1.2rem', backgroundColor: 'var(--surface-highlight)', borderRadius: 'var(--radius-md)', borderRight: '4px solid var(--accent-color)' }}>
+                                     <strong style={{ color: 'var(--accent-color)', display: 'block', marginBottom: '0.5rem' }}>{t('reports.details.remarks')} </strong> 
+                                     <span style={{ lineHeight: '1.6' }}>{d.remarks}</span>
                                    </div>
-                                </div>
-                             </div>
+                                 )}
 
-                             {d.colorDistribution && Object.keys(d.colorDistribution).length > 0 && (
-                               <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-                                 {Object.keys(d.colorDistribution).map((color, cIdx) => {
-                                   if (!d.colorDistribution[color] || typeof d.colorDistribution[color] !== 'object') return null;
-                                   return (
-                                     <div key={cIdx} style={{ backgroundColor: 'var(--surface-color)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', minWidth: '150px' }}>
-                                        <h4 style={{ margin: '0 0 0.8rem 0', color: 'var(--accent-color)', borderBottom: '1px dashed var(--border-color)', paddingBottom: '0.5rem' }}>{color}</h4>
-                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.9rem' }}>
-                                          {Object.entries(d.colorDistribution[color]).map(([size, qty]) => {
-                                          if(!qty || parseInt(qty) <= 0) return null;
-                                          return (
-                                            <div key={size} style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                              <span style={{ color: 'var(--text-muted)' }}>{size}:</span>
-                                              <span style={{ fontWeight: 'bold' }}>{qty}</span>
-                                            </div>
-                                          );
-                                        })}
-                                      </div>
-                                   </div>
-                                   );
-                                 })}
-                               </div>
-                             )}
-
-                             {d.remarks && (
-                               <div style={{ marginTop: '1rem', padding: '1.2rem', backgroundColor: 'var(--surface-highlight)', borderRadius: 'var(--radius-md)', borderRight: '4px solid var(--accent-color)' }}>
-                                 <strong style={{ color: 'var(--accent-color)', display: 'block', marginBottom: '0.5rem' }}>{t('reports.details.remarks')} </strong> 
-                                 <span style={{ lineHeight: '1.6' }}>{d.remarks}</span>
-                               </div>
-                             )}
-
-                             {/* Product Images Details */}
-                             {d.productImages && d.productImages.length > 0 && (
-                               <div style={{ marginTop: '2rem' }}>
-                                 <h4 style={{ color: 'var(--text-strong)', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
-                                   <Camera size={18} color="var(--accent-color)" /> {t('reports.details.images')}
-                                 </h4>
-                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '1rem' }}>
-                                   {d.productImages.map((img, idx) => (
-                                     <div key={idx} style={{ borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border-color)', backgroundColor: 'var(--surface-color)', transition: 'transform 0.2s', cursor: 'pointer' }} onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.02)'} onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}>
-                                       <img src={img.url} alt={img.name} style={{ width: '100%', height: '150px', objectFit: 'cover', display: 'block' }} crossOrigin="anonymous"/>
-                                       <div style={{ padding: '0.4rem', fontSize: '0.75rem', textAlign: 'center', color: 'var(--text-muted)' }}>{img.name}</div>
+                                 {/* Product Images Details */}
+                                 {d.productImages && d.productImages.length > 0 && (
+                                   <div style={{ marginTop: '2rem' }}>
+                                     <h4 style={{ color: 'var(--text-strong)', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
+                                       <Camera size={18} color="var(--accent-color)" /> {t('reports.details.images')}
+                                     </h4>
+                                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '1rem' }}>
+                                       {d.productImages.map((img, idx) => (
+                                         <div key={idx} style={{ borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border-color)', backgroundColor: 'var(--surface-color)', transition: 'transform 0.2s', cursor: 'pointer' }} onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.02)'} onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}>
+                                           <img src={img.url} alt={img.name} style={{ width: '100%', height: '150px', objectFit: 'cover', display: 'block' }} crossOrigin="anonymous"/>
+                                           <div style={{ padding: '0.4rem', fontSize: '0.75rem', textAlign: 'center', color: 'var(--text-muted)' }}>{img.name}</div>
+                                         </div>
+                                       ))}
                                      </div>
-                                   ))}
-                                 </div>
+                                   </div>
+                                 )}
                                </div>
                              )}
                           </td>

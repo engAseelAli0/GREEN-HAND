@@ -117,12 +117,16 @@ export const buildOperationalIntelligence = (orders = [], receivings = [], looku
   analyzed.forEach(item => {
     item.issues.forEach(issue => {
       const key = issue.label;
-      issueCounts.set(key, {
+      const existing = issueCounts.get(key) || {
         label: key,
         severity: issue.severity,
         fix: issue.fix,
-        count: (issueCounts.get(key)?.count || 0) + 1,
-      });
+        count: 0,
+        serials: []
+      };
+      existing.count += 1;
+      if (item.serial) existing.serials.push(item.serial);
+      issueCounts.set(key, existing);
     });
   });
 

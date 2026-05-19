@@ -38,6 +38,7 @@
     "barcodes": "条码生成",
     "analytics": "战略分析",
     "reports": "报告与分析",
+    "order_reports": "订单报告",
     "shipping_invoice": "货运发票",
     "packing_list": "装箱单",
     "warehouse_receipt": "入库单报告"
@@ -85,7 +86,37 @@
     "status_stable": "稳定",
     "status_operating": "运行中",
     "status_on_track": "正常运转",
-    "status_action_required": "需要处理"
+    "status_action_required": "需要处理",
+    "predictive_title": "预测性人工智能运营中心",
+    "predictive_subtitle": "用于预测延迟概率和主动检测数量偏差与损耗的人工智能系统",
+    "tab_delays": "订单延迟预测",
+    "tab_waste": "数量偏差与损耗",
+    "no_delay_predictions": "目前没有活跃订单以预测延迟。所有出货已完成签收。",
+    "col_model_product": "款号与商品",
+    "col_target_factory": "目标工厂",
+    "col_actual_duration": "实际生产时间",
+    "col_remaining_days": "距离交付剩余天数",
+    "col_delay_prob": "预计延迟概率",
+    "col_recommendation": "智能诊断与建议",
+    "in_progress": "天处理中",
+    "overdue_by": "已逾期 {{days}} 天",
+    "remaining_days": "剩余 {{days}} 天",
+    "undefined": "未指定",
+    "unknown": "未知",
+    "recommend_contact": "💡 建议立即与工厂管理层沟通，以避免运输罚款。",
+    "no_waste_alerts": "历史收货数量中未检测到任何偏差或损耗。所有工厂均100%按目标交付。",
+    "by_factory": "来自工厂",
+    "waste_detected": "检测到供应短缺 {{deviation}} 件（订购总数 {{expected}} 件）。",
+    "waste_rate": "损耗率",
+    "financial_loss": "财务损失",
+    "compensation_recommendation": "AI 建议：向工厂索赔短缺数量，或从其往来账户中扣除 {{amount}} {{currency}}。",
+    "copy_success": "索赔文本已成功复制！",
+    "create_claim": "生成索赔申请",
+    "delay_reason_overdue": "已超出批准交付日期 {{days}} 天",
+    "delay_reason_standard_exceeded": "工厂标准生产周期（{{avgLead}} 天）超出剩余交付时间 {{overDays}} 天",
+    "delay_reason_stable": "生产稳定。预计安全边际：{{safeMargin}} 天",
+    "delay_reason_delivery_undefined": "交付日期未指定。根据工厂常规生产周期（{{avgLead}} 天）预测",
+    "load_error": "加载分析数据时出错"
   },
   "activity": {
     "create": "创建订单",
@@ -342,6 +373,11 @@
       "fabric_samples": "样板面料 Fabrics Samples",
       "sale_type": "销售类型 Sale:",
       "order_remarks": "订单备注 Order Remarks:",
+      "total_price": "Total Price 总价",
+      "conditions": "Conditions 状况",
+      "remarks_header": "Order Remarks 细节",
+      "fabric_comp": "Fabric Composition 面料成分",
+      "percentage": "Percentage 百分比",
       "cond1_text": "✓ {{val1}} 件单色混码入中包胶袋 混色 {{val2}} 件装箱",
       "cond2_text": "✓ {{val1}} 件混色混码入中包胶袋 ({{val2}})",
       "name_zh": "名字 Name",
@@ -349,7 +385,10 @@
       "buyer_sign": "买方授权 Buyer",
       "coordinator_sign": "协调员 Coordinator",
       "factory_sign": "工厂签收 Factory",
-      "system_generated": "系统自动生成 • Green Hand 平台 • 导出 ID:"
+      "system_generated": "系统自动生成 • Green Hand 平台 • 导出 ID:",
+      "size_header": "尺寸 Size",
+      "part_size_header": "{{part}} 尺寸",
+      "default_fabric": "雪纺 Chiffon"
     },
     "messages": {
       "enter_serial": "请先输入订单号或款号",
@@ -560,24 +599,15 @@
       "label_width": "标签宽度",
       "label_height": "标签高度",
       "columns": "列数",
-      "fields": {
-        "name": "名称",
-        "track": "跟踪",
-        "factory_code": "工厂代码",
-        "fax": "传真",
-        "mobile": "手机",
-        "code": "代码"
-      },
-      "actions": {
-        "add": "添加",
-        "save": "保存",
-        "cancel": "取消",
-        "edit": "编辑",
-        "delete": "删除",
-        "assign_parts": "分配组件部分"
-      },
-      "select_color_title": "选择显示颜色",
-      "save": "保存设置"
+      "rows": "行数",
+      "across": "横向",
+      "down": "纵向",
+      "col_gap": "列间距",
+      "row_gap": "行间距",
+      "reset": "重置",
+      "cancel": "取消",
+      "save": "保存设置",
+      "barcode_scale": "条形码缩放"
     },
     "messages": {
       "enter_serial": "请输入款号 (Serial Number)",
@@ -586,7 +616,8 @@
       "found": "找到款号！正在生成表格...",
       "conn_error": "连接错误！",
       "save_success": "打印设置保存成功！",
-      "reset_success": "已重置为默认值"
+      "reset_success": "已重置为默认值",
+      "unauthorized": "您无权访问该工厂或公司的数据"
     }
   },
   "reports": {
@@ -607,7 +638,10 @@
       "clear_btn": "清除过滤器",
       "show_all_btn": "显示所有产品",
       "search_btn": "查询并查看",
-      "active_filters": "当前活动过滤器:"
+      "active_filters": "当前活动过滤器:",
+      "company": "买家公司",
+      "all_companies": "-- 所有公司 --",
+      "factory": "目标工厂"
     },
     "results": {
       "title": "查询结果",
@@ -624,8 +658,29 @@
         "factory": "接收工厂",
         "total_qty": "总数量",
         "order_date": "下单日期",
-        "details": "详情"
+        "details": "详情",
+        "stage": "阶段",
+        "health": "健康度",
+        "last_activity": "最新活动",
+        "healthy": "正常",
+        "none": "无",
+        "order_stage": "订单阶段",
+        "health_score": "健康评分",
+        "issues_alerts": "严重问题 / 警报",
+        "total_sum": "总计 (Total 合计)",
+        "items_count": "{{count}} 项目 (Items)"
       }
+    },
+    "detailed_terms": "发票附加包装条款",
+    "no_terms_available": "目前没有附加条款。您可以在设置中添加。",
+    "activity": {
+      "smart_log": "智能活动日志",
+      "events": "事件",
+      "prints": "打印",
+      "updates": "更新",
+      "receives": "收货",
+      "no_log": "此订单没有历史活动记录。从现在起将自动记录新事件。",
+      "by": "操作人: {{actor}}"
     },
     "details": {
       "sizes": "选定尺码：",
@@ -701,7 +756,8 @@
     "actions": {
       "add_row": "添加空行",
       "fetch_all": "获取所有项目数据",
-      "clear_all": "清除所有数据"
+      "clear_all": "清除所有数据",
+      "excel_btn": "下载 Excel"
     },
     "footer": {
       "total": "总计",
@@ -745,13 +801,15 @@
       "check_error": "检查款号时出错",
       "fetching_data": "正在检查款号并获取数据...",
       "fetch_success": "成功获取 {{count}} 个型号的数据！",
-      "fetch_no_data": "未找到新数据或所有项目之前已获取"
+      "fetch_no_data": "未找到新数据或所有项目之前已获取",
+      "no_companies_warning": "未添加任何公司，请从管理面板中添加。"
     }
   },
   "packing": {
     "title": "装箱单 (Packing List)",
     "subtitle": "用于海关的货物装箱单，可以将多个型号合并在一个纸箱中。",
     "print_btn": "导出 PDF / 打印",
+    "excel_btn": "下载 Excel",
     "header": {
       "company": "ARABIAN FRIENDSHIP TRADING CO.,LIMITED",
       "tel": "电话:",
@@ -805,7 +863,8 @@
     },
     "messages": {
       "fetch_success": "成功获取 {{count}} 个型号的数据！ {{mixMsg}}",
-      "mix_detected": "自动检测到 {{count}} 个混合纸箱"
+      "mix_detected": "自动检测到 {{count}} 个混合纸箱",
+      "no_companies_warning": "未添加任何公司，请从管理面板中添加。"
     }
   },
   "warehouse": {
@@ -933,6 +992,8 @@
     "invalid_credentials": "用户名或密码错误",
     "unauthorized": "未授权",
     "unauthorized_desc": "抱歉，您没有权限访问此页面。",
+    "unauthorized_factory": "您没有权限访问该工厂的数据",
+    "unauthorized_company": "您没有权限访问该公司的数据",
     "return_home": "返回首页",
     "user_management": "用户管理",
     "add_user": "添加新用户",
@@ -971,6 +1032,11 @@
     "component_parts_hint": "组成部件 (来自部件部分)",
     "choose_parts": "— 选择组成部件 —",
     "no_parts_added": "尚未添加部件 — 请先在“组成部件”部分添加",
+    "legacy": "旧",
+    "link_parts_optional": "链接组件部分（可选）",
+    "parts_connected": "{{count}} 个关联件",
+    "link_parts_placeholder": "— 关联组件部分 —",
+    "no_parts_available": "尚未添加组件部分",
     "color_abbr": "颜色缩写 (Abbr)",
     "color_abbr_placeholder": "例如: WHT",
     "choose_color": "选择颜色",
@@ -1026,10 +1092,26 @@
       "upload_error": "图片上传失败！",
       "edit_saved": "编辑已保存 ✏️",
       "add_success": "添加成功 ✅",
-      "item_deleted": "项目已删除 🗑️",
       "reorder_success": "项目重新排序成功 ✨",
       "edit_mode_active": "编辑模式已激活..."
-    }
+    },
+    "fields": {
+      "name": "名称",
+      "track": "跟踪",
+      "factory_code": "工厂代码",
+      "fax": "传真",
+      "mobile": "手机",
+      "code": "代码"
+    },
+    "actions": {
+      "add": "添加",
+      "save": "保存",
+      "cancel": "取消",
+      "edit": "编辑",
+      "delete": "删除",
+      "assign_parts": "分配组件部分"
+    },
+    "select_color_title": "选择显示颜色"
   },
   "user_mgmt": {
     "title": "系统权限管理",
@@ -1075,57 +1157,95 @@
       "username_required": "用户名是必填项",
       "password_required": "新用户必须填写密码",
       "save_error": "保存用户时出错"
+    }
+  },
+  "image_editor": {
+    "title": "图片编辑器",
+    "select": "选择",
+    "pencil": "画笔",
+    "square": "方形",
+    "circle": "圆形",
+    "text": "文本",
+    "add_image": "添加图片",
+    "rotate": "旋转",
+    "filters": "滤镜",
+    "undo": "撤销",
+    "redo": "重做",
+    "custom_color": "自定义颜色",
+    "delete_selected": "删除",
+    "clear_all": "清除所有",
+    "confirm_clear": "您确定要清除所有编辑吗？",
+    "brightness": "亮度",
+    "contrast": "对比度",
+    "loading": "正在加载编辑器...",
+    "save": "保存更改",
+    "type_here": "在此输入..."
+  },
+  "activity": {
+    "create": "创建订单",
+    "update": "更新订单",
+    "copy": "复制订单",
+    "delete": "删除订单",
+    "barcode_print": "打印条形码",
+    "barcode_sample": "打印样品条形码",
+    "receive": "工厂入库",
+    "fields": {
+      "productName": "产品名称",
+      "factoryId": "工厂",
+      "totalQuantity": "总数量",
+      "deliveryDate": "交货日期",
+      "productPrice": "单价",
+      "currency": "币种",
+      "cartonPackage": "装箱方式",
+      "cartonQty": "装箱数量",
+      "barcode": "主条形码",
+      "color_count": "颜色数量"
     },
-    "image_editor": {
-      "title": "图片编辑器",
-      "select": "选择",
-      "pencil": "画笔",
-      "square": "方形",
-      "circle": "圆形",
-      "text": "文本",
-      "add_image": "添加图片",
-      "rotate": "旋转",
-      "filters": "滤镜",
-      "undo": "撤销",
-      "redo": "重做",
-      "custom_color": "自定义颜色",
-      "delete_selected": "删除",
-      "clear_all": "清除所有",
-      "confirm_clear": "您确定要清除所有编辑吗？",
-      "brightness": "亮度",
-      "contrast": "对比度",
-      "loading": "正在加载编辑器...",
-      "save": "保存更改",
-      "type_here": "在此输入..."
+    "notes": {
+      "created": "创建订单 #{{serial}}",
+      "updated": "更新订单 #{{serial}}",
+      "serial_changed": "将序列号从 {{old}} 更改为 {{new}}",
+      "deleted": "删除订单 #{{serial}}",
+      "copied": "从 {{from}} 复制订单到 {{to}}",
+      "received": "已收到的订单总数为 {{count}} 件"
+    }
+  },
+  "intelligence": {
+    "stages": {
+      "draft": "草稿",
+      "ready": "工厂待收",
+      "production": "生产中",
+      "overdue": "已逾期",
+      "received": "已收货",
+      "undefined": "未定义"
     },
-    "activity": {
-      "create": "创建订单",
-      "update": "更新订单",
-      "copy": "复制订单",
-      "delete": "删除订单",
-      "barcode_print": "打印条形码",
-      "barcode_sample": "打印样品条形码",
-      "receive": "工厂入库",
-      "fields": {
-        "productName": "产品名称",
-        "factoryId": "工厂",
-        "totalQuantity": "总数量",
-        "deliveryDate": "交货日期",
-        "productPrice": "单价",
-        "currency": "币种",
-        "cartonPackage": "装箱方式",
-        "cartonQty": "装箱数量",
-        "barcode": "主条形码",
-        "color_count": "颜色数量"
-      },
-      "notes": {
-        "created": "创建订单 #{{serial}}",
-        "updated": "更新订单 #{{serial}}",
-        "serial_changed": "将序列号从 {{old}} 更改为 {{new}}",
-        "deleted": "删除订单 #{{serial}}",
-        "copied": "从 {{from}} 复制订单到 {{to}}",
-        "received": "已收到的订单总数为 {{count}} 件"
-      }
+    "issues": {
+      "product_name_missing": "产品名称缺失",
+      "factory_missing": "未指定工厂",
+      "quantity_missing": "数量缺失",
+      "delivery_date_missing": "未指定交货日期",
+      "price_missing": "产品价格缺失",
+      "currency_missing": "未指定货币",
+      "carton_data_missing": "纸箱详情缺失",
+      "images_missing": "无产品图片",
+      "code_prefix_missing": "产品代码未保存",
+      "color_abbr_missing": "{{count}} 个颜色没有条码缩写",
+      "overdue_days": "逾期 {{count}} 天",
+      "delivery_soon": "交货期临近，还有 {{count}} 天"
+    },
+    "fixes": {
+      "product_name_missing": "完善产品详情",
+      "factory_missing": "发送前选择工厂",
+      "quantity_missing": "输入颜色和尺码分布",
+      "delivery_date_missing": "添加交货日期",
+      "price_missing": "计费前添加价格",
+      "currency_missing": "选择货币",
+      "carton_data_missing": "完善包装详情",
+      "images_missing": "为工厂添加参考图片",
+      "code_prefix_missing": "在产品设置中添加 codePrefix",
+      "color_abbr_missing": "添加颜色缩写",
+      "overdue_days": "与工厂沟通或更新交货日期",
+      "delivery_soon": "跟进生产和收货"
     }
   }
 }

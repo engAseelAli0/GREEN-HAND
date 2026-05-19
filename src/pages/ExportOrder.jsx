@@ -10,7 +10,7 @@ import { englishOnly, chineseOnly } from '../utils/textUtils';
 const ExportOrder = () => {
   const { t } = useTranslation();
   const { lookups } = useAppData();
-  const { hasPermission } = useAuth();
+  const { user, hasPermission } = useAuth();
   
   const [searchTerm, setSearchTerm] = useState('');
   const [order, setOrder] = useState(null);
@@ -51,8 +51,27 @@ const ExportOrder = () => {
         toast.error(t('export.messages.not_found'), { id: toastId });
         setOrder(null);
       } else {
+        const orderData = data.order_data;
+        
+        // Data-Level Authorization Check
+        if (user && user.role !== 'admin') {
+          const allowedFactories = user.permissions?.allowed_factories || [];
+          const allowedCompanies = user.permissions?.allowed_companies || [];
+          
+          if (allowedFactories.length > 0 && !allowedFactories.includes(orderData.factoryId)) {
+             toast.error(t('auth.messages.unauthorized', { defaultValue: 'غير مصرح لك بمشاهدة طلبات هذا المصنع' }), { id: toastId });
+             setOrder(null);
+             return;
+          }
+          if (allowedCompanies.length > 0 && !allowedCompanies.includes(orderData.buyerCompany)) {
+             toast.error(t('auth.messages.unauthorized', { defaultValue: 'غير مصرح لك بمشاهدة طلبات هذه الشركة' }), { id: toastId });
+             setOrder(null);
+             return;
+          }
+        }
+        
         toast.success(t('export.messages.fetch_success'), { id: toastId });
-        setOrder({ serialNumber: data.serial_number, ...data.order_data });
+        setOrder({ serialNumber: data.serial_number, ...orderData });
       }
     } catch {
       toast.error(t('export.messages.connection_error'), { id: toastId });
@@ -460,51 +479,51 @@ const ExportOrder = () => {
             <tbody>
               {/* ═══ ROW 1: HEADER ═══ */}
               <tr>
-                <th colSpan={1} className="hdr-blue">Order No. 订单号码</th>
+                <th colSpan={1} className="hdr-blue">{t('export.doc.order_no')}</th>
                 <td colSpan={2} className="val-center val-bold">{order.orderNumber || '-'}</td>
-                <th colSpan={2} className="hdr-blue">Request Date 订单日期</th>
+                <th colSpan={2} className="hdr-blue">{t('export.doc.request_date')}</th>
                 <td colSpan={2} className="val-center val-bold">{formatDate(order.requestDate)}</td>
-                <th colSpan={2} className="hdr-blue">Delivery Date 交货日期</th>
+                <th colSpan={2} className="hdr-blue">{t('export.doc.delivery_date')}</th>
                 <td colSpan={2} className="val-center val-bold">{formatDate(order.deliveryDate)}</td>
               </tr>
 
               {/* ═══ ROW 2-4: BUYER & FACTORY INFO ═══ */}
               <tr>
                 <th colSpan={1} rowSpan={3} className="title-cell">
-                  <div style={{ fontSize: '20px', fontWeight: 900, marginBottom: '6px' }}>Product Order</div>
-                  <div style={{ fontSize: '20px', fontWeight: 900 }}>产品订单</div>
+                  <div style={{ fontSize: '20px', fontWeight: 900, marginBottom: '6px' }}>{t('export.doc.product_order_en')}</div>
+                  <div style={{ fontSize: '20px', fontWeight: 900 }}>{t('export.doc.product_order_zh')}</div>
                 </th>
-                <th colSpan={2} className="hdr-light">Customer Company 客户公司名称</th>
+                <th colSpan={2} className="hdr-light">{t('export.doc.buyer_name')}</th>
                 <td colSpan={3} className="val-center val-bold">{order.buyerCompany || '-'}</td>
-                <th colSpan={2} className="hdr-light">Fact. Name 工厂名字</th>
+                <th colSpan={2} className="hdr-light">{t('export.doc.factory_name')}</th>
                 <td colSpan={3} className="val-center val-bold">{factoryInfo.name || '-'}</td>
               </tr>
               <tr>
-                <th colSpan={2} className="hdr-light">Customer Mobile 客户手机</th>
+                <th colSpan={2} className="hdr-light">{t('export.doc.buyer_mobile')}</th>
                 <td colSpan={3} className="val-center val-bold">{order.buyerNumber || '-'}</td>
-                <th colSpan={2} className="hdr-light">Fact. Mobile 工厂电话</th>
+                <th colSpan={2} className="hdr-light">{t('export.doc.factory_mobile')}</th>
                 <td colSpan={3} className="val-center val-bold">{factoryInfo.mobile || '-'}</td>
               </tr>
               <tr>
-                <th colSpan={2} className="hdr-light">Customer Code 客户代码</th>
+                <th colSpan={2} className="hdr-light">{t('export.doc.customer_id')}</th>
                 <td colSpan={3} className="val-center val-bold">{order.buyerMobile || '-'}</td>
-                <th colSpan={2} className="hdr-light">Fact. Address 工厂地址</th>
+                <th colSpan={2} className="hdr-light">{t('export.doc.factory_address')}</th>
                 <td colSpan={3} className="val-center val-bold">{factoryInfo.address || '-'}</td>
               </tr>
 
               {/* ═══ ROW 5: PRODUCT COLUMNS ═══ */}
               <tr>
-                <th className="hdr-blue">Product Name<br/>产品名称</th>
-                <th className="hdr-blue">Model No.<br/>款号</th>
-                <th className="hdr-blue">Barcode No.<br/>条形码</th>
-                <th className="hdr-blue">Prod Qty<br/>数量</th>
-                 <th className="hdr-blue">Prod Price<br/>产品价格</th>
-                <th className="hdr-blue">Total Price<br/>总价</th>
-                <th className="hdr-blue">Size Qty.<br/>码数</th>
-                <th className="hdr-blue">Prod Sizes<br/>码段</th>
-                <th className="hdr-blue">Carton Size<br/>纸箱尺寸</th>
-                <th className="hdr-blue">Plastic Bag Size<br/>胶袋尺寸</th>
-                <th className="hdr-blue">CTN Qty & Packaging<br/>纸箱数量&包装</th>
+                <th className="hdr-blue">{t('export.doc.product_name')}</th>
+                <th className="hdr-blue">{t('export.doc.model_no')}</th>
+                <th className="hdr-blue">{t('export.doc.barcode')}</th>
+                <th className="hdr-blue">{t('export.doc.qty')}</th>
+                <th className="hdr-blue">{t('export.doc.price')}</th>
+                <th className="hdr-blue">{t('export.doc.total_price')}</th>
+                <th className="hdr-blue">{t('export.doc.size_qty')}</th>
+                <th className="hdr-blue">{t('export.doc.size_range')}</th>
+                <th className="hdr-blue">{t('export.doc.carton_size')}</th>
+                <th className="hdr-blue">{t('export.doc.plastic_bag')}</th>
+                <th className="hdr-blue">{t('export.doc.ctn_packaging')}</th>
               </tr>
 
               {/* ═══ ROW 6: PRODUCT VALUES ═══ */}
@@ -567,7 +586,7 @@ const ExportOrder = () => {
                 if (parts.length === 0) {
                   rows.push(
                     <tr key="empty-m1">
-                      <th className="hdr-grey">Size<br/>尺寸</th>
+                      <th className="hdr-grey">{t('export.doc.size_header')}</th>
                       <td colSpan={8} style={{ border: 'none', background: '#fff' }}></td>
                       <td colSpan={2} rowSpan={2} style={{ textAlign: 'center', verticalAlign: 'middle', padding: '4px', borderLeft: '3px solid #000' }}>
                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'center' }}>
@@ -590,7 +609,7 @@ const ExportOrder = () => {
                   const partSizes = sizesToRender.slice(0, 8);
                   rows.push(
                     <tr key={`part-hdr-${part}`}>
-                      <th className="hdr-grey">{part} 尺寸</th>
+                      <th className="hdr-grey">{t('export.doc.part_size_header', { part })}</th>
                       {partSizes.map(s => <th key={s} className="hdr-grey">{s}</th>)}
                       {partSizes.length < 8 && (
                         <td colSpan={8 - partSizes.length} style={{ border: 'none', background: '#fff' }}></td>
@@ -636,14 +655,14 @@ const ExportOrder = () => {
                 return (
                   <React.Fragment>
                     <tr>
-                      <th colSpan={fabricColSpan} className="hdr-blue">Fabrics Kind & Material 面料种类&材质</th>
-                      <th colSpan={conditionsColSpan} className="hdr-blue">Conditions 状况</th>
-                      <th colSpan={2} className="hdr-blue">Order Remarks 细节</th>
+                      <th colSpan={fabricColSpan} className="hdr-blue">{t('export.doc.fabric_kind')}</th>
+                      <th colSpan={conditionsColSpan} className="hdr-blue">{t('export.doc.conditions')}</th>
+                      <th colSpan={2} className="hdr-blue">{t('export.doc.remarks_header')}</th>
                     </tr>
                     
                     <tr>
                       <td colSpan={fabricColSpan} className="val-center val-bold bg-light-blue" style={{ fontSize: '14px' }}>
-                        {order.productFabric || 'Chiffon 雪纺'}
+                        {order.productFabric || t('export.doc.default_fabric')}
                       </td>
                       <td colSpan={conditionsColSpan} rowSpan={3} style={{ verticalAlign: 'top', padding: '8px', fontSize: '12px', color: '#c0392b', fontWeight: 800 }}>
                         {order.packagingConditions?.cond1 && <div style={{ marginBottom: '4px' }}>* {t('export.doc.cond1_text', { val1: order.packagingConditions.cond1_val1 || '-', val2: order.packagingConditions.cond1_val2 || '-' })}</div>}
@@ -656,7 +675,7 @@ const ExportOrder = () => {
                     </tr>
                     
                     <tr>
-                      <th colSpan={2} className="hdr-light" style={{ backgroundColor: '#d0dbe5' }}>Fabric Composition 面料成分</th>
+                      <th colSpan={2} className="hdr-light" style={{ backgroundColor: '#d0dbe5' }}>{t('export.doc.fabric_comp')}</th>
                       {[0,1,2].slice(0, actualMaterials).map(i => (
                         <td key={i} colSpan={i === 0 ? 2 : 1} className="val-center val-bold">
                            {order.materials?.[i]?.name || ''}
@@ -664,7 +683,7 @@ const ExportOrder = () => {
                       ))}
                     </tr>
                     <tr>
-                      <th colSpan={2} className="hdr-light" style={{ backgroundColor: '#d0dbe5' }}>Percentage 百分比</th>
+                      <th colSpan={2} className="hdr-light" style={{ backgroundColor: '#d0dbe5' }}>{t('export.doc.percentage')}</th>
                       {[0,1,2].slice(0, actualMaterials).map(i => (
                         <td key={i} colSpan={i === 0 ? 2 : 1} className="val-center val-bold" style={{ color: order.materials?.[i] ? '#38761d' : 'inherit' }}>
                            {order.materials?.[i] ? `${order.materials[i].percentage}%` : ''}
@@ -677,7 +696,7 @@ const ExportOrder = () => {
 
               {/* ═══ COLORS QTY & BARCODES ═══ */}
               <tr>
-                <th colSpan={1} className="hdr-blue">Colors Qty 颜色数量</th>
+                <th colSpan={1} className="hdr-blue">{t('export.doc.colors_qty')}</th>
                 <td colSpan={10} className="val-center val-bold bg-light-blue" style={{ fontSize: '16px' }}>
                    {activeColors.length || '0'}
                 </td>
@@ -715,7 +734,7 @@ const ExportOrder = () => {
                   return (
                     <React.Fragment key={`color-chunk-${chunkIndex}`}>
                       <tr>
-                        <th colSpan={1} className="hdr-light" style={{ borderTop: chunkIndex > 0 ? '3px solid #000' : '1px solid #000' }}>Colors 颜色</th>
+                        <th colSpan={1} className="hdr-light" style={{ borderTop: chunkIndex > 0 ? '3px solid #000' : '1px solid #000' }}>{t('export.doc.colors_zh')}</th>
                         {chunk.map((c, i) => {
                            let hex = '';
                            if (c) {
@@ -735,7 +754,7 @@ const ExportOrder = () => {
                         })}
                       </tr>
                       <tr>
-                        <th colSpan={1} className="hdr-light">Qty 数量</th>
+                        <th colSpan={1} className="hdr-light">{t('export.doc.qty_zh')}</th>
                         {chunk.map((c, i) => {
                            if (!c) return <td key={`q-${i}`} colSpan={spans[i]}></td>;
                            const qty = sizesToRender.reduce((sum, s) => sum + (parseInt(order.colorDistribution[c]?.[s]) || 0), 0);
@@ -743,7 +762,7 @@ const ExportOrder = () => {
                         })}
                       </tr>
                       <tr>
-                        <th colSpan={1} className="hdr-light">Color Barcodes<br/>颜色条形码</th>
+                        <th colSpan={1} className="hdr-light">{t('export.doc.color_barcodes')}</th>
                         {chunk.map((c, i) => {
                            if (!c) return <td key={`b-${i}`} colSpan={spans[i]}></td>;
                            const cInfo = lookups.colors?.find(color => typeof color === 'object' ? color.name === c : color === c);
@@ -754,7 +773,7 @@ const ExportOrder = () => {
                         })}
                       </tr>
                       <tr>
-                        <th colSpan={1} className="hdr-light" style={{ height: '70px', verticalAlign: 'middle' }}>Fabrics Samples<br/>样板面料</th>
+                        <th colSpan={1} className="hdr-light" style={{ height: '70px', verticalAlign: 'middle' }}>{t('export.doc.fabric_samples')}</th>
                         {chunk.map((_, i) => (
                            <td key={`s-${i}`} colSpan={spans[i]}></td>
                         ))}
@@ -771,21 +790,21 @@ const ExportOrder = () => {
                     
                     <div>
                       <div style={{ marginBottom: '25px', fontSize: '14px', fontWeight: 800 }}>
-                        Name 名字 <span style={{ color: '#c0392b', marginLeft: '40px' }}>Buyer 买方</span>
+                        {t('export.doc.name_zh')} <span style={{ color: '#c0392b', marginLeft: '40px' }}>{t('export.doc.buyer_sign')}</span>
                       </div>
                       <div style={{ fontSize: '14px', fontWeight: 800, display: 'flex', alignItems: 'flex-end' }}>
-                        Signature 签名 
+                        {t('export.doc.signature_zh')} 
                         <div style={{ display: 'inline-block', width: '180px', borderBottom: '2px solid #000', marginLeft: '15px' }}></div>
                       </div>
                     </div>
                     
                     <div style={{ textAlign: 'center' }}>
-                      <div style={{ color: '#c0392b', fontWeight: 800, fontSize: '14px', marginBottom: '25px' }}>Coordinator 协调员</div>
+                      <div style={{ color: '#c0392b', fontWeight: 800, fontSize: '14px', marginBottom: '25px' }}>{t('export.doc.coordinator_sign')}</div>
                       <div style={{ display: 'inline-block', width: '220px', borderBottom: '2px solid #000' }}></div>
                     </div>
                     
                     <div style={{ textAlign: 'center' }}>
-                      <div style={{ color: '#c0392b', fontWeight: 800, fontSize: '14px', marginBottom: '25px' }}>Factory 工厂</div>
+                      <div style={{ color: '#c0392b', fontWeight: 800, fontSize: '14px', marginBottom: '25px' }}>{t('export.doc.factory_sign')}</div>
                       <div style={{ display: 'inline-block', width: '220px', borderBottom: '2px solid #000' }}></div>
                     </div>
 

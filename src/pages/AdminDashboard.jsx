@@ -871,7 +871,7 @@ const AdminDashboard = () => {
                             }}>
                               <Puzzle size={12} />
                               {pName}
-                              {isOrphan && <span style={{ fontSize: '0.65rem', opacity: 0.7 }}>(قديم)</span>}
+                              {isOrphan && <span style={{ fontSize: '0.65rem', opacity: 0.7 }}>({t('admin.legacy')})</span>}
                               <button type="button" onClick={() => setSelectedPartsArr(selectedPartsArr.filter(p => p !== pName))} style={{
                                 background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0', display: 'flex', alignItems: 'center'
                               }}><X size={12} strokeWidth={3} /></button>
@@ -887,7 +887,7 @@ const AdminDashboard = () => {
               {/* Measurements: parts assignment dropdown */}
               {activeTab === 'measurements' && (
                 <div style={{ ...styles.formField, gridColumn: '1 / -1' }}>
-                  <label style={styles.formLabel}>الربط بالقطع المكونة (اختياري)</label>
+                  <label style={styles.formLabel}>{t('admin.link_parts_optional')}</label>
                   <div style={{ position: 'relative' }}>
                     <button
                       type="button"
@@ -902,7 +902,7 @@ const AdminDashboard = () => {
                         transition: 'border-color 0.2s'
                       }}
                     >
-                      <span>{selectedProductsArr.length > 0 ? `${selectedProductsArr.length} قطعة مرتبطة` : '— اربط بقطع مكونة —'}</span>
+                      <span>{selectedProductsArr.length > 0 ? t('admin.parts_connected', { count: selectedProductsArr.length }) : t('admin.link_parts_placeholder')}</span>
                       <ChevronDown size={15} style={{ transform: showProductsDropdown ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s', opacity: 0.6 }} />
                     </button>
                     {showProductsDropdown && (
@@ -914,7 +914,7 @@ const AdminDashboard = () => {
                         maxHeight: '200px', overflowY: 'auto'
                       }}>
                         {allParts.length === 0 ? (
-                          <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>لا توجد قطع مكونة مضافة بعد</div>
+                          <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>{t('admin.no_parts_available')}</div>
                         ) : allParts.map((partName, idx) => {
                           const isChecked = selectedProductsArr.includes(partName);
                           return (

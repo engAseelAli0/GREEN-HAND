@@ -1,9 +1,11 @@
+import i18n from '../i18n';
+
 const STAGES = {
-  draft: { label: 'مسودة', color: '#94a3b8' },
-  ready: { label: 'جاهز للمصنع', color: '#38bdf8' },
-  production: { label: 'قيد الإنتاج', color: '#f59e0b' },
-  overdue: { label: 'متأخر', color: '#fb7185' },
-  received: { label: 'تم الاستلام', color: '#34d399' },
+  draft: { labelKey: 'intelligence.stages.draft', color: '#94a3b8' },
+  ready: { labelKey: 'intelligence.stages.ready', color: '#38bdf8' },
+  production: { labelKey: 'intelligence.stages.production', color: '#f59e0b' },
+  overdue: { labelKey: 'intelligence.stages.overdue', color: '#fb7185' },
+  received: { labelKey: 'intelligence.stages.received', color: '#34d399' },
 };
 
 const normalize = (value) => String(value || '').trim().toLowerCase();
@@ -50,24 +52,30 @@ export const analyzeOrder = (order, receiving, lookups = {}) => {
   const issues = [];
   const qty = calculateOrderQuantity(data);
   const stage = getOrderStage(order, receiving);
-  const add = (severity, label, fix) => issues.push({ severity, label, fix });
+  const add = (severity, labelKey, fixKey, count) => {
+    issues.push({
+      severity,
+      label: i18n.t(labelKey, { count }),
+      fix: i18n.t(fixKey)
+    });
+  };
 
-  if (!data.productName) add('critical', 'اسم المنتج مفقود', 'أكمل بيانات المنتج');
-  if (!data.factoryId) add('critical', 'المصنع غير محدد', 'حدد المصنع قبل الإرسال');
-  if (!qty) add('critical', 'الكميات غير موجودة', 'أدخل توزيع الألوان والمقاسات');
-  if (!data.deliveryDate) add('warning', 'تاريخ التسليم غير محدد', 'أضف تاريخ التسليم');
-  if (!data.productPrice) add('warning', 'سعر المنتج غير موجود', 'أضف السعر قبل الفواتير');
-  if (!data.currency) add('warning', 'العملة غير محددة', 'حدد العملة');
-  if (!data.cartonPackage && !data.cartonQty) add('warning', 'بيانات الكراتين ناقصة', 'أكمل بيانات التغليف');
-  if (!data.productImages?.length) add('info', 'لا توجد صور للمنتج', 'أضف صورة مرجعية للمصنع');
+  if (!data.productName) add('critical', 'intelligence.issues.product_name_missing', 'intelligence.fixes.product_name_missing');
+  if (!data.factoryId) add('critical', 'intelligence.issues.factory_missing', 'intelligence.fixes.factory_missing');
+  if (!qty) add('critical', 'intelligence.issues.quantity_missing', 'intelligence.fixes.quantity_missing');
+  if (!data.deliveryDate) add('warning', 'intelligence.issues.delivery_date_missing', 'intelligence.fixes.delivery_date_missing');
+  if (!data.productPrice) add('warning', 'intelligence.issues.price_missing', 'intelligence.fixes.price_missing');
+  if (!data.currency) add('warning', 'intelligence.issues.currency_missing', 'intelligence.fixes.currency_missing');
+  if (!data.cartonPackage && !data.cartonQty) add('warning', 'intelligence.issues.carton_data_missing', 'intelligence.fixes.carton_data_missing');
+  if (!data.productImages?.length) add('info', 'intelligence.issues.images_missing', 'intelligence.fixes.images_missing');
   if (data.productName && !hasLookupCode(lookups.products, data.productName, 'codePrefix')) {
-    add('warning', 'كود المنتج غير محفوظ', 'أضف codePrefix في إعدادات المنتجات');
+    add('warning', 'intelligence.issues.code_prefix_missing', 'intelligence.fixes.code_prefix_missing');
   }
 
   const colorNames = Object.keys(data.colorDistribution || {});
   const missingColorCodes = colorNames.filter(color => !hasLookupCode(lookups.colors, color, 'abbr'));
   if (missingColorCodes.length) {
-    add('warning', `${missingColorCodes.length} لون بدون اختصار باركود`, 'أضف اختصارات الألوان');
+    add('warning', 'intelligence.issues.color_abbr_missing', 'intelligence.fixes.color_abbr_missing', missingColorCodes.length);
   }
 
   const today = new Date();
@@ -77,9 +85,9 @@ export const analyzeOrder = (order, receiving, lookups = {}) => {
     ? Math.ceil((deliveryDate - today) / 86400000)
     : null;
   if (stage !== 'received' && daysToDelivery !== null && daysToDelivery < 0) {
-    add('critical', `متأخر ${Math.abs(daysToDelivery)} يوم`, 'راجع المصنع أو حدث تاريخ التسليم');
+    add('critical', 'intelligence.issues.overdue_days', 'intelligence.fixes.overdue_days', Math.abs(daysToDelivery));
   } else if (stage !== 'received' && daysToDelivery !== null && daysToDelivery <= 3) {
-    add('warning', `موعد التسليم قريب خلال ${daysToDelivery} يوم`, 'تابع الإنتاج والاستلام');
+    add('warning', 'intelligence.issues.delivery_soon', 'intelligence.fixes.delivery_soon', daysToDelivery);
   }
 
   const severityWeight = { critical: 28, warning: 12, info: 4 };
@@ -90,7 +98,7 @@ export const analyzeOrder = (order, receiving, lookups = {}) => {
   return {
     serial: order?.serial_number || data.serialNumber || '-',
     stage,
-    stageLabel: STAGES[stage]?.label || 'غير محدد',
+    stageLabel: STAGES[stage]?.labelKey ? i18n.t(STAGES[stage].labelKey) : i18n.t('intelligence.stages.undefined'),
     stageColor: STAGES[stage]?.color || '#94a3b8',
     issues,
     criticalCount: issues.filter(i => i.severity === 'critical').length,
@@ -152,4 +160,11 @@ export const buildOperationalIntelligence = (orders = [], receivings = [], looku
   };
 };
 
-export const getStageMeta = (stage) => STAGES[stage] || { label: 'غير محدد', color: '#94a3b8' };
+export const getStageMeta = (stage) => {
+  const meta = STAGES[stage];
+  if (!meta) return { label: i18n.t('intelligence.stages.undefined'), color: '#94a3b8' };
+  return {
+    label: i18n.t(meta.labelKey),
+    color: meta.color
+  };
+};

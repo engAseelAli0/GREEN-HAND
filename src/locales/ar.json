@@ -38,6 +38,7 @@
     "barcodes": "استخراج الباركود",
     "analytics": "التحليلات الاستراتيجية",
     "reports": "التقارير والإحصائيات",
+    "order_reports": "تقارير الطلبيات",
     "shipping_invoice": "فاتورة الشحن",
     "packing_list": "فاتورة الجمارك (Packing List)",
     "warehouse_receipt": "تقرير استلام البضائع (Warehouse Receipt)"
@@ -85,7 +86,37 @@
     "status_stable": "مستقر",
     "status_operating": "قيد التشغيل",
     "status_on_track": "في المسار الصحيح",
-    "status_action_required": "يتطلب اتخاذ إجراء"
+    "status_action_required": "يتطلب اتخاذ إجراء",
+    "predictive_title": "مركز التنبؤات والتحليلات الاستباقية",
+    "predictive_subtitle": "نظام الذكاء الاصطناعي التشغيلي للتنبؤ باحتمالية تأخر التوريد واكتشاف انحرافات الكميات والهدر استباقياً",
+    "tab_delays": "التنبؤ بتأخير الطلبيات",
+    "tab_waste": "انحراف الكميات والهدر",
+    "no_delay_predictions": "لا توجد طلبيات نشطة حالياً للتنبؤ بتأخرها. كافة التوريدات مستلمة ومنتهية.",
+    "col_model_product": "الموديل والمنتج",
+    "col_target_factory": "المصنع المستهدف",
+    "col_actual_duration": "مدة الإنتاج الفعلي",
+    "col_remaining_days": "الأيام المتبقية للتسليم",
+    "col_delay_prob": "احتمالية التأخير المتوقعة",
+    "col_recommendation": "التشخيص الذكي والتوصية",
+    "in_progress": "يوم قيد التجهيز",
+    "overdue_by": "تجاوزت الموعد بـ {{days}} يوم",
+    "remaining_days": "متبقي {{days}} يوم",
+    "undefined": "غير محدد",
+    "unknown": "غير معروف",
+    "recommend_contact": "💡 يوصى بالتواصل الفوري مع إدارة المصنع لتفادي غرامات الشحن.",
+    "no_waste_alerts": "لا توجد أي انحرافات أو هدر في كميات استلام الموديلات السابقة. كافة المصانع التزمت بالتوريد بنسبة 100%.",
+    "by_factory": "بواسطة مصنع",
+    "waste_detected": "تم رصد عجز توريدي بمقدار {{deviation}} قطعة من أصل {{expected}} قطعة مطلوبة.",
+    "waste_rate": "معدل الهدر",
+    "financial_loss": "العجز المالي",
+    "compensation_recommendation": "توصية الذكاء الاصطناعي: يوصى بمطالبة المصنع بتوريد النقص أو خصم {{amount}} {{currency}} من الحساب الجاري للمصنع.",
+    "copy_success": "تم نسخ نص مطالبة التعويض الجاهزة بنجاح!",
+    "create_claim": "إنشاء مطالبة تعويض",
+    "delay_reason_overdue": "متأخرة بالفعل عن تاريخ التسليم المعتمد بـ {{days}} يوم",
+    "delay_reason_standard_exceeded": "معدل الإنتاج القياسي للمصنع ({{avgLead}} يوم) يتجاوز الوقت المتبقي للتسليم بـ {{overDays}} أيام",
+    "delay_reason_stable": "إنتاج مستقر. هامش الأمان الزمني المتوقع: {{safeMargin}} أيام",
+    "delay_reason_delivery_undefined": "تاريخ التسليم غير محدد. تم التنبؤ بناءً على كفاءة المصنع المعتادة ({{avgLead}} يوم)",
+    "load_error": "خطأ في تحميل بيانات التحليلات"
   },
   "activity": {
     "create": "إنشاء طلب",
@@ -347,6 +378,11 @@
       "fabric_samples": "Fabrics Samples 样板面料",
       "sale_type": "Sale:",
       "order_remarks": "Order Remarks 订单备注:",
+      "total_price": "Total Price 总价",
+      "conditions": "Conditions 状况",
+      "remarks_header": "Order Remarks 细节",
+      "fabric_comp": "Fabric Composition 面料成分",
+      "percentage": "Percentage 百分比",
       "cond1_text": "✓ {{val1}} 件单色混码入中包胶袋 混色 {{val2}} 件装箱",
       "cond2_text": "✓ {{val1}} 件混色混码入中包胶袋 ({{val2}})",
       "name_zh": "Name 名字",
@@ -354,7 +390,10 @@
       "buyer_sign": "Buyer 买方授权",
       "coordinator_sign": "Coordinator 协调员",
       "factory_sign": "Factory 工厂签收",
-      "system_generated": "System Generated • Green Hand Platform • Export ID:"
+      "system_generated": "System Generated • Green Hand Platform • Export ID:",
+      "size_header": "Size 尺寸",
+      "part_size_header": "{{part}} 尺寸",
+      "default_fabric": "Chiffon 雪纺"
     },
     "messages": {
       "enter_serial": "أدخل رقم الطلبية أو الموديل أولاً",
@@ -572,7 +611,8 @@
       "row_gap": "Row Gap — فراغ الصفوف",
       "reset": "إعادة تعيين",
       "cancel": "إلغاء",
-      "save": "حفظ الإعدادات"
+      "save": "حفظ الإعدادات",
+      "barcode_scale": "Barcode Scale — حجم الباركود"
     },
     "messages": {
       "enter_serial": "الرجاء إدخال رقم الموديل (Serial Number)",
@@ -581,7 +621,8 @@
       "found": "تم العثور على الموديل! جاري توليد الجدول...",
       "conn_error": "خطأ في الاتصال!",
       "save_success": "تم حفظ إعدادات الطباعة بنجاح!",
-      "reset_success": "تم إعادة التعيين للقيم الافتراضية"
+      "reset_success": "تم إعادة التعيين للقيم الافتراضية",
+      "unauthorized": "ليس لديك صلاحية للوصول إلى بيانات هذا المصنع أو الشركة"
     }
   },
   "reports": {
@@ -602,7 +643,10 @@
       "clear_btn": "إفراغ الفلاتر",
       "show_all_btn": "إظهار كل المنتجات",
       "search_btn": "بحث وعرض",
-      "active_filters": "الفلاتر النشطة حالياً:"
+      "active_filters": "الفلاتر النشطة حالياً:",
+      "company": "شركة المشتري",
+      "all_companies": "-- جميع الشركات --",
+      "factory": "المصنع المستهدف"
     },
     "results": {
       "title": "نتائج الاستعلام",
@@ -619,8 +663,29 @@
         "factory": "المصنع المستلم",
         "total_qty": "الكمية الإجمالية",
         "order_date": "تاريخ الطلب",
-        "details": "تفاصيل"
+        "details": "تفاصيل",
+        "stage": "المرحلة",
+        "health": "الصحة",
+        "last_activity": "آخر نشاط",
+        "healthy": "سليم",
+        "none": "لا يوجد",
+        "order_stage": "مرحلة الطلب",
+        "health_score": "درجة الصحة",
+        "issues_alerts": "مشاكل حرجة / تنبيهات",
+        "total_sum": "الإجمالي (Total 合计)",
+        "items_count": "{{count}} أصناف (Items)"
       }
+    },
+    "detailed_terms": "شروط التعبئة الإضافية للفاتورة",
+    "no_terms_available": "لا توجد شروط مضافة حالياً. يمكنك إضافتها من الإعدادات.",
+    "activity": {
+      "smart_log": "سجل النشاط الذكي",
+      "events": "الأحداث",
+      "prints": "الطباعة",
+      "updates": "التحديثات",
+      "receives": "الاستلام",
+      "no_log": "لا يوجد سجل نشاط لهذا الطلب. سيتم تسجيل الأحداث الجديدة تلقائيًا من الآن.",
+      "by": "بواسطة: {{actor}}"
     },
     "details": {
       "sizes": "المقاسات المحددة:",
@@ -696,7 +761,8 @@
     "actions": {
       "add_row": "إضافة صف فارغ",
       "fetch_all": "جلب بيانات كل الأصناف المدخلة",
-      "clear_all": "تفريغ كافة البيانات"
+      "clear_all": "تفريغ كافة البيانات",
+      "excel_btn": "تحميل إكسل"
     },
     "footer": {
       "total": "Total",
@@ -740,13 +806,15 @@
       "check_error": "حدث خطأ أثناء التحقق من الموديلات",
       "fetching_data": "جاري التحقق من الموديلات وجلب البيانات...",
       "fetch_success": "تم جلب بيانات {{count}} موديل بنجاح!",
-      "fetch_no_data": "لم يتم العثور على بيانات جديدة أو جميع الأصناف مجلوبة مسبقاً"
+      "fetch_no_data": "لم يتم العثور على بيانات جديدة أو جميع الأصناف مجلوبة مسبقاً",
+      "no_companies_warning": "لا توجد شركات مضافة، يرجى إضافتها من لوحة الإدارة."
     }
   },
   "packing": {
     "title": "بوليصة التعبئة (Packing List)",
     "subtitle": "كشف تعبئة البضائع للجمارك مع إمكانية دمج عدة موديلات في كرتون واحد.",
     "print_btn": "تصدير PDF / طباعة",
+    "excel_btn": "تحميل إكسل",
     "header": {
       "company": "ARABIAN FRIENDSHIP TRADING CO.,LIMITED",
       "tel": "Tel:",
@@ -800,7 +868,8 @@
     },
     "messages": {
       "fetch_success": "تم جلب بيانات {{count}} موديل بنجاح! {{mixMsg}}",
-      "mix_detected": "تم اكتشاف {{count}} كرتون مختلط تلقائياً"
+      "mix_detected": "تم اكتشاف {{count}} كرتون مختلط تلقائياً",
+      "no_companies_warning": "لا توجد شركات مضافة، يرجى إضافتها من لوحة الإدارة."
     }
   },
   "warehouse": {
@@ -927,6 +996,8 @@
     "invalid_credentials": "اسم المستخدم أو كلمة المرور غير صحيحة",
     "unauthorized": "غير مصرح لك بالدخول",
     "unauthorized_desc": "عذراً، أنت لا تملك الصلاحية الكافية لعرض هذه الصفحة.",
+    "unauthorized_factory": "ليس لديك صلاحية للوصول إلى بيانات هذا المصنع",
+    "unauthorized_company": "ليس لديك صلاحية للوصول إلى بيانات هذه الشركة",
     "return_home": "العودة للرئيسية",
     "user_management": "إدارة المستخدمين",
     "add_user": "إضافة مستخدم جديد",
@@ -965,6 +1036,11 @@
     "component_parts_hint": "القطع المكونة (من قسم القطع المكونة)",
     "choose_parts": "— اختر القطع المكونة —",
     "no_parts_added": "لا توجد قطع مضافة بعد — أضف قطعاً في قسم \"القطع المكونة\" أولاً",
+    "legacy": "قديم",
+    "link_parts_optional": "الربط بالقطع المكونة (اختياري)",
+    "parts_connected": "{{count}} قطعة مرتبطة",
+    "link_parts_placeholder": "— اربط بقطع مكونة —",
+    "no_parts_available": "لا توجد قطع مكونة مضافة بعد",
     "color_abbr": "اختصار اللون (Abbr)",
     "color_abbr_placeholder": "مثلاً: WHT",
     "choose_color": "اختر اللون",
@@ -1023,7 +1099,24 @@
       "item_deleted": "تم حذف العنصر 🗑️",
       "reorder_success": "تم إعادة ترتيب العنصر بنجاح ✨",
       "edit_mode_active": "وضع التعديل قيد التفعيل..."
-    }
+    },
+    "fields": {
+      "name": "الاسم",
+      "track": "تتبع",
+      "factory_code": "كود المصنع",
+      "fax": "فاكس",
+      "mobile": "هاتف",
+      "code": "الكود"
+    },
+    "actions": {
+      "add": "إضافة",
+      "save": "حفظ",
+      "cancel": "إلغاء",
+      "edit": "تعديل",
+      "delete": "حذف",
+      "assign_parts": "تحديد القطع المكونة"
+    },
+    "select_color_title": "تحديد اللون المظهري"
   },
   "user_mgmt": {
     "title": "إدارة صلاحيات النظام",
@@ -1069,74 +1162,95 @@
       "username_required": "اسم المستخدم مطلوب",
       "password_required": "كلمة المرور مطلوبة للمستخدمين الجدد",
       "save_error": "حدث خطأ أثناء حفظ المستخدم"
+    }
+  },
+  "image_editor": {
+    "title": "محرر الصور",
+    "select": "تحديد",
+    "pencil": "قلم",
+    "square": "مربع",
+    "circle": "دائرة",
+    "text": "نص",
+    "add_image": "إضافة صورة",
+    "rotate": "تدوير",
+    "filters": "الفلاتر",
+    "undo": "تراجع",
+    "redo": "إعادة",
+    "custom_color": "لون مخصص",
+    "delete_selected": "مسح العنصر",
+    "clear_all": "مسح الكل",
+    "confirm_clear": "هل أنت متأكد من مسح جميع الإضافات والتعديلات؟",
+    "brightness": "السطوع",
+    "contrast": "التباين",
+    "loading": "جاري تحميل المحرر...",
+    "save": "حفظ التعديلات",
+    "type_here": "اكتب هنا..."
+  },
+  "activity": {
+    "create": "إنشاء الطلب",
+    "update": "تحديث الطلب",
+    "copy": "نسخ الطلب",
+    "delete": "حذف الطلب",
+    "barcode_print": "طباعة الباركود",
+    "barcode_sample": "طباعة عينة باركود",
+    "receive": "استلام المصنع",
+    "fields": {
+      "productName": "اسم المنتج",
+      "factoryId": "المصنع",
+      "totalQuantity": "إجمالي الكمية",
+      "deliveryDate": "تاريخ التسليم",
+      "productPrice": "السعر",
+      "currency": "العملة",
+      "cartonPackage": "تعبئة الكرتون",
+      "cartonQty": "عدد الكراتين",
+      "barcode": "الباركود الأساسي",
+      "color_count": "عدد الألوان"
     },
-    "image_editor": {
-      "title": "محرر الصور",
-      "select": "تحديد",
-      "pencil": "قلم",
-      "square": "مربع",
-      "circle": "دائرة",
-      "text": "نص",
-      "add_image": "إضافة صورة",
-      "rotate": "تدوير",
-      "filters": "الفلاتر",
-      "fields": {
-        "name": "الاسم",
-        "track": "تتبع",
-        "factory_code": "كود المصنع",
-        "fax": "فاكس",
-        "mobile": "هاتف",
-        "code": "الكود"
-      },
-      "actions": {
-        "add": "إضافة",
-        "save": "حفظ",
-        "cancel": "إلغاء",
-        "edit": "تعديل",
-        "delete": "حذف",
-        "assign_parts": "تحديد القطع المكونة"
-      },
-      "select_color_title": "تحديد اللون المظهري",
-      "undo": "تراجع",
-      "redo": "إعادة",
-      "custom_color": "لون مخصص",
-      "delete_selected": "مسح العنصر",
-      "clear_all": "مسح الكل",
-      "confirm_clear": "هل أنت متأكد من مسح جميع الإضافات والتعديلات؟",
-      "brightness": "السطوع",
-      "contrast": "التباين",
-      "loading": "جاري تحميل المحرر...",
-      "save": "حفظ التعديلات",
-      "type_here": "اكتب هنا..."
+    "notes": {
+      "created": "إنشاء طلب برقم {{serial}}",
+      "updated": "تحديث طلب برقم {{serial}}",
+      "serial_changed": "تغيير رقم المسلسل من {{old}} إلى {{new}}",
+      "deleted": "حذف طلب برقم {{serial}}",
+      "copied": "تم نسخ الطلب من {{from}} إلى {{to}}",
+      "received": "تم استلام الطلب بإجمالي {{count}} قطعة"
+    }
+  },
+  "intelligence": {
+    "stages": {
+      "draft": "مسودة",
+      "ready": "جاهز للمصنع",
+      "production": "قيد الإنتاج",
+      "overdue": "متأخر",
+      "received": "تم الاستلام",
+      "undefined": "غير محدد"
     },
-    "activity": {
-      "create": "إنشاء الطلب",
-      "update": "تحديث الطلب",
-      "copy": "نسخ الطلب",
-      "delete": "حذف الطلب",
-      "barcode_print": "طباعة الباركود",
-      "barcode_sample": "طباعة عينة باركود",
-      "receive": "استلام المصنع",
-      "fields": {
-        "productName": "اسم المنتج",
-        "factoryId": "المصنع",
-        "totalQuantity": "إجمالي الكمية",
-        "deliveryDate": "تاريخ التسليم",
-        "productPrice": "السعر",
-        "currency": "العملة",
-        "cartonPackage": "تعبئة الكرتون",
-        "cartonQty": "عدد الكراتين",
-        "barcode": "الباركود الأساسي",
-        "color_count": "عدد الألوان"
-      },
-      "notes": {
-        "created": "إنشاء طلب برقم {{serial}}",
-        "updated": "تحديث طلب برقم {{serial}}",
-        "serial_changed": "تغيير رقم المسلسل من {{old}} إلى {{new}}",
-        "deleted": "حذف طلب برقم {{serial}}",
-        "copied": "تم نسخ الطلب من {{from}} إلى {{to}}",
-        "received": "تم استلام الطلب بإجمالي {{count}} قطعة"
-      }
+    "issues": {
+      "product_name_missing": "اسم المنتج مفقود",
+      "factory_missing": "المصنع غير محدد",
+      "quantity_missing": "الكميات غير موجودة",
+      "delivery_date_missing": "تاريخ التسليم غير محدد",
+      "price_missing": "سعر المنتج غير موجود",
+      "currency_missing": "العملة غير محددة",
+      "carton_data_missing": "بيانات الكراتين ناقصة",
+      "images_missing": "لا توجد صور للمنتج",
+      "code_prefix_missing": "كود المنتج غير محفوظ",
+      "color_abbr_missing": "{{count}} لون بدون اختصار باركود",
+      "overdue_days": "متأخر {{count}} يوم",
+      "delivery_soon": "موعد التسليم قريب خلال {{count}} يوم"
+    },
+    "fixes": {
+      "product_name_missing": "أكمل بيانات المنتج",
+      "factory_missing": "حدد المصنع قبل الإرسال",
+      "quantity_missing": "أدخل توزيع الألوان والمقاسات",
+      "delivery_date_missing": "أضف تاريخ التسليم",
+      "price_missing": "أضف السعر قبل الفواتير",
+      "currency_missing": "حدد العملة",
+      "carton_data_missing": "أكمل بيانات التغليف",
+      "images_missing": "أضف صورة مرجعية للمصنع",
+      "code_prefix_missing": "أضف codePrefix في إعدادات المنتجات",
+      "color_abbr_missing": "أضف اختصارات الألوان",
+      "overdue_days": "راجع المصنع أو حدث تاريخ التسليم",
+      "delivery_soon": "تابع الإنتاج والاستلام"
     }
   }
 }

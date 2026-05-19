@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppData, defaultOrderState } from '../context/AppDataContext';
 import { useAuth } from '../context/AuthContext';
+import { useFilteredLookups } from '../hooks/useFilteredLookups';
 import { Save, RefreshCw, Hash, Calendar, Box, Scissors, Palette, LayoutGrid, ChevronRight, ChevronLeft, MessageSquare, CheckSquare, Square, Ruler, Camera, X, ImagePlus, Edit3, Copy, Trash2, Layers, PanelTop, Search } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import toast from 'react-hot-toast';
@@ -44,6 +45,7 @@ const DataEntryWizard = () => {
   const { t } = useTranslation();
   const { lookups, currentOrder, updateOrder, setCurrentOrder } = useAppData();
   const { user, hasPermission } = useAuth();
+  const filteredLookups = useFilteredLookups();
 
   const TABS = [
     { id: 'basic', label: t('entry.tabs.basic_info'), icon: Hash, num: 1 },
@@ -722,6 +724,20 @@ const DataEntryWizard = () => {
       }
 
       const fetchedOrder = data.order_data || data;
+
+      if (user && user.role !== 'admin') {
+         const allowedFactories = user.permissions?.allowed_factories || [];
+         const allowedCompanies = user.permissions?.allowed_companies || [];
+         if (allowedFactories.length > 0 && !allowedFactories.includes(fetchedOrder.factoryId)) {
+            toast.error(t('auth.unauthorized_factory'), { id: toastId });
+            return;
+         }
+         if (allowedCompanies.length > 0 && !allowedCompanies.includes(fetchedOrder.buyerCompany)) {
+            toast.error(t('auth.unauthorized_company'), { id: toastId });
+            return;
+         }
+      }
+
       const finalOrder = { ...defaultOrderState, ...fetchedOrder, serialNumber: data.serial_number || fetchedOrder.serialNumber };
       setCurrentOrder(finalOrder);
       setSelectedColorsArr(Object.keys(finalOrder.colorDistribution || {}));
@@ -932,7 +948,7 @@ const DataEntryWizard = () => {
                    <label className="form-label">{t('entry.buyer.company_name')}</label>
                      <select className="form-control" value={currentOrder.buyerCompany || ''} onChange={(e) => updateOrder('buyerCompany', e.target.value)}>
                         <option value="">{t('entry.actions.select_company_placeholder')}</option>
-                       {lookups.companies?.map((c, i) => <option key={i} value={typeof c === 'object' ? c.name : c}>{typeof c === 'object' ? c.name : c}</option>)}
+                       {filteredLookups.companies?.map((c, i) => <option key={i} value={typeof c === 'object' ? c.name : c}>{typeof c === 'object' ? c.name : c}</option>)}
                      </select>
                 </div>
                 {currentOrder.buyerCompany && (() => {
@@ -1527,7 +1543,7 @@ const DataEntryWizard = () => {
                 <label className="form-label">{t('entry.factory.factory_select')}</label>
                 <ClearableSelect className="form-control" value={currentOrder.factoryId || ''} onChange={(e) => updateOrder('factoryId', e.target.value)} clearTitle={t('entry.actions.clear_btn')}>
                   <option value="">{t('entry.factory.factory_placeholder')}</option>
-                  {lookups.factories?.map((f, i) => <option key={i} value={f.name || f}>{f.name || f}</option>)}
+                  {filteredLookups.factories?.map((f, i) => <option key={i} value={f.name || f}>{f.name || f}</option>)}
                 </ClearableSelect>
               </div>
               {currentOrder.factoryId && (() => {

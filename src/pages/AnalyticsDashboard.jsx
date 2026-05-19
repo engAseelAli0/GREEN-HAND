@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAppData } from '../context/AppDataContext';
+import { useAuth } from '../context/AuthContext';
 import { useTranslation } from 'react-i18next';
 import { Trophy, Coins, Clock, Factory, TrendingUp, AlertTriangle, CheckCircle2, ShieldCheck, Activity, BarChart2, Calendar, FileText, ChevronLeft, ChevronRight, Filter, Brain, Zap, Sparkles } from 'lucide-react';
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
@@ -129,6 +130,7 @@ const COLORS = ['#d4af37', '#38bdf8', '#fb7185', '#34d399', '#a78bfa', '#fbbf24'
 const AnalyticsDashboard = () => {
   const { t } = useTranslation();
   const { lookups } = useAppData();
+  const { user } = useAuth();
   const [orders, setOrders] = useState([]);
   const [receivings, setReceivings] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -146,11 +148,28 @@ const AnalyticsDashboard = () => {
           supabase.from('orders').select('*').order('created_at', { ascending: false }),
           supabase.from('receivings').select('*')
         ]);
-        setOrders(oData || []);
-        setReceivings(rData || []);
+        let validOrders = oData || [];
+        
+        if (user && user.role !== 'admin') {
+          const allowedFactories = user.permissions?.allowed_factories || [];
+          const allowedCompanies = user.permissions?.allowed_companies || [];
+          
+          if (allowedFactories.length > 0) {
+            validOrders = validOrders.filter(o => allowedFactories.includes(o.order_data?.factoryId));
+          }
+          if (allowedCompanies.length > 0) {
+            validOrders = validOrders.filter(o => allowedCompanies.includes(o.order_data?.buyerCompany));
+          }
+        }
+        
+        const validOrderSerials = new Set(validOrders.map(o => o.serial_number));
+        const validReceivings = (rData || []).filter(r => validOrderSerials.has(r.serial_number));
+
+        setOrders(validOrders);
+        setReceivings(validReceivings);
       } catch (err) {
         console.error(err);
-        toast.error('Error loading analytics data');
+        toast.error(t('analytics.load_error'));
       } finally {
         setIsLoading(false);
       }
@@ -310,7 +329,7 @@ const AnalyticsDashboard = () => {
 
     orders.forEach(order => {
       const oData = order.order_data || {};
-      const factory = oData.factoryId || 'غير محدد';
+      const factory = oData.factoryId || 'undefined';
       const rec = recMap.get(order.serial_number);
       const isReceived = rec?.receive_data?.status === 'مستلمة' || rec?.receive_data?.status === 'Received' || rec?.receive_data?.status === 'تم الاستلام';
 
@@ -336,24 +355,24 @@ const AnalyticsDashboard = () => {
         if (remainingDays !== null) {
           if (remainingDays < 0) {
             delayProbability = 99;
-            reason = `متأخرة بالفعل عن تاريخ التسليم المعتمد بـ ${Math.abs(remainingDays)} يوم`;
+            reason = t('analytics.delay_reason_overdue', { days: Math.abs(remainingDays) });
           } else if (elapsedDays + avgLead > totalAllowedDays) {
             const overDays = (elapsedDays + avgLead) - totalAllowedDays;
             delayProbability = Math.min(95, Math.round(50 + (overDays * 12)));
-            reason = `معدل الإنتاج القياسي للمصنع (${avgLead} يوم) يتجاوز الوقت المتبقي للتسليم بـ ${overDays} أيام`;
+            reason = t('analytics.delay_reason_standard_exceeded', { avgLead, overDays });
           } else {
             const safeMargin = totalAllowedDays - (elapsedDays + avgLead);
             delayProbability = Math.max(5, Math.round(30 - (safeMargin * 8)));
-            reason = `إنتاج مستقر. هامش الأمان الزمني المتوقع: ${safeMargin} أيام`;
+            reason = t('analytics.delay_reason_stable', { safeMargin });
           }
         } else {
           delayProbability = 25;
-          reason = `تاريخ التسليم غير محدد. تم التنبؤ بناءً على كفاءة المصنع المعتادة (${avgLead} يوم)`;
+          reason = t('analytics.delay_reason_delivery_undefined', { avgLead });
         }
 
         delayPredictions.push({
           serial: order.serial_number,
-          productName: oData.productName || 'غير معروف',
+          productName: oData.productName || 'unknown',
           factory,
           avgLead,
           elapsedDays,
@@ -391,7 +410,7 @@ const AnalyticsDashboard = () => {
             const wastePercent = Math.abs(deviationRate);
             wasteAlerts.push({
               serial: order.serial_number,
-              productName: oData.productName || 'غير معروف',
+              productName: oData.productName || 'unknown',
               factory,
               expectedQty,
               receivedQty,
@@ -660,13 +679,13 @@ const AnalyticsDashboard = () => {
             </div>
             <div>
               <h3 style={{ margin: 0, color: 'var(--text-strong)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                مركز التنبؤات والتحليلات الاستباقية 
+                {t('analytics.predictive_title')} 
                 <span style={{ fontSize: '0.75rem', color: '#d4af37', background: 'rgba(212,175,55,0.1)', padding: '2px 8px', borderRadius: '50px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                   <Sparkles size={12} /> AI Predictive Engine
                 </span>
               </h3>
               <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: '4px 0 0' }}>
-                نظام الذكاء الاصطناعي التشغيلي للتنبؤ باحتمالية تأخر التوريد واكتشاف انحرافات الكميات والهدر استباقياً
+                {t('analytics.predictive_subtitle')}
               </p>
             </div>
           </div>
@@ -688,7 +707,7 @@ const AnalyticsDashboard = () => {
                 boxShadow: activePredictiveTab === 'delays' ? '0 4px 12px rgba(212,175,55,0.2)' : 'none'
               }}
             >
-              التنبؤ بتأخير الطلبيات ({predictiveAnalysis.delayPredictions.length})
+              {t('analytics.tab_delays')} ({predictiveAnalysis.delayPredictions.length})
             </button>
             <button 
               onClick={() => setActivePredictiveTab('waste')}
@@ -705,7 +724,7 @@ const AnalyticsDashboard = () => {
                 boxShadow: activePredictiveTab === 'waste' ? '0 4px 12px rgba(212,175,55,0.2)' : 'none'
               }}
             >
-              انحراف الكميات والهدر ({predictiveAnalysis.wasteAlerts.length})
+              {t('analytics.tab_waste')} ({predictiveAnalysis.wasteAlerts.length})
             </button>
           </div>
         </div>
@@ -715,19 +734,19 @@ const AnalyticsDashboard = () => {
           <div className="fade-in">
             {predictiveAnalysis.delayPredictions.length === 0 ? (
               <div style={{ color: '#34d399', display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '1.5rem', background: 'rgba(52,211,153,0.06)', borderRadius: '12px', border: '1px solid rgba(52,211,153,0.1)' }}>
-                <CheckCircle2 size={20} /> لا توجد طلبيات نشطة حالياً للتنبؤ بتأخرها. كافة التوريدات مستلمة ومنتهية.
+                <CheckCircle2 size={20} /> {t('analytics.no_delay_predictions')}
               </div>
             ) : (
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', minWidth: '900px', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', color: 'var(--text-muted)', textAlign: 'start' }}>
-                      <th style={{ padding: '0.85rem 1rem', fontWeight: 600 }}>الموديل والمنتج</th>
-                      <th style={{ padding: '0.85rem 1rem', fontWeight: 600 }}>المصنع المستهدف</th>
-                      <th style={{ padding: '0.85rem 1rem', fontWeight: 600 }}>مدة الإنتاج الفعلي</th>
-                      <th style={{ padding: '0.85rem 1rem', fontWeight: 600 }}>الأيام المتبقية للتسليم</th>
-                      <th style={{ padding: '0.85rem 1rem', fontWeight: 600, width: '220px' }}>احتمالية التأخير المتوقعة</th>
-                      <th style={{ padding: '0.85rem 1rem', fontWeight: 600 }}>التشخيص الذكي والتوصية</th>
+                      <th style={{ padding: '0.85rem 1rem', fontWeight: 600 }}>{t('analytics.col_model_product')}</th>
+                      <th style={{ padding: '0.85rem 1rem', fontWeight: 600 }}>{t('analytics.col_target_factory')}</th>
+                      <th style={{ padding: '0.85rem 1rem', fontWeight: 600 }}>{t('analytics.col_actual_duration')}</th>
+                      <th style={{ padding: '0.85rem 1rem', fontWeight: 600 }}>{t('analytics.col_remaining_days')}</th>
+                      <th style={{ padding: '0.85rem 1rem', fontWeight: 600, width: '220px' }}>{t('analytics.col_delay_prob')}</th>
+                      <th style={{ padding: '0.85rem 1rem', fontWeight: 600 }}>{t('analytics.col_recommendation')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -743,27 +762,29 @@ const AnalyticsDashboard = () => {
                               <span style={{ padding: '2px 8px', background: 'rgba(212,175,55,0.1)', color: 'var(--accent-color)', borderRadius: '6px', fontWeight: 'bold', width: 'fit-content', fontSize: '0.8rem' }}>
                                 #{pred.serial}
                               </span>
-                              <strong style={{ color: 'var(--text-strong)', marginTop: '4px', fontSize: '0.85rem' }}>{pred.productName}</strong>
+                              <strong style={{ color: 'var(--text-strong)', marginTop: '4px', fontSize: '0.85rem' }}>
+                                {pred.productName === 'unknown' ? t('analytics.unknown') : pred.productName}
+                              </strong>
                             </div>
                           </td>
                           <td style={{ padding: '1rem', color: 'var(--text-main)', fontWeight: 600 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                               <Factory size={14} color="var(--text-muted)" />
-                              {pred.factory}
+                              {pred.factory === 'undefined' ? t('analytics.undefined') : pred.factory}
                             </div>
                           </td>
                           <td style={{ padding: '1rem', color: 'var(--text-main)' }}>
-                            <strong style={{ color: '#38bdf8' }}>{pred.elapsedDays}</strong> يوم قيد التجهيز
+                            <strong style={{ color: '#38bdf8' }}>{pred.elapsedDays}</strong> {t('analytics.in_progress')}
                           </td>
                           <td style={{ padding: '1rem' }}>
                             {pred.remainingDays !== null ? (
                               pred.remainingDays < 0 ? (
-                                <span style={{ color: '#fb7185', fontWeight: 'bold' }}>تجاوزت الموعد بـ {Math.abs(pred.remainingDays)} يوم</span>
+                                <span style={{ color: '#fb7185', fontWeight: 'bold' }}>{t('analytics.overdue_by', { days: Math.abs(pred.remainingDays) })}</span>
                               ) : (
-                                <span style={{ color: 'var(--text-strong)' }}>متبقي <strong style={{ color: '#34d399' }}>{pred.remainingDays}</strong> يوم</span>
+                                <span style={{ color: 'var(--text-strong)' }}>{t('analytics.remaining_days', { days: pred.remainingDays })}</span>
                               )
                             ) : (
-                              <span style={{ color: 'var(--text-muted)' }}>غير محدد</span>
+                              <span style={{ color: 'var(--text-muted)' }}>{t('analytics.undefined')}</span>
                             )}
                           </td>
                           <td style={{ padding: '1rem' }}>
@@ -784,7 +805,7 @@ const AnalyticsDashboard = () => {
                             </span>
                             {isHigh && (
                               <span style={{ display: 'block', marginTop: '4px', color: 'rgba(255,255,255,0.5)', fontSize: '0.75rem' }}>
-                                💡 يوصى بالتواصل الفوري مع إدارة المصنع لتفادي غرامات الشحن.
+                                {t('analytics.recommend_contact')}
                               </span>
                             )}
                           </td>
@@ -803,7 +824,7 @@ const AnalyticsDashboard = () => {
           <div className="fade-in">
             {predictiveAnalysis.wasteAlerts.length === 0 ? (
               <div style={{ color: '#34d399', display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '1.5rem', background: 'rgba(52,211,153,0.06)', borderRadius: '12px', border: '1px solid rgba(52,211,153,0.1)' }}>
-                <CheckCircle2 size={20} /> لا توجد أي انحرافات أو هدر في كميات استلام الموديلات السابقة. كافة المصانع التزمت بالتوريد بنسبة 100%.
+                <CheckCircle2 size={20} /> {t('analytics.no_waste_alerts')}
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -828,12 +849,16 @@ const AnalyticsDashboard = () => {
                             <span style={{ padding: '2px 8px', background: 'rgba(212,175,55,0.1)', color: 'var(--accent-color)', borderRadius: '6px', fontWeight: 'bold', fontSize: '0.8rem' }}>
                               #{alert.serial}
                             </span>
-                            <strong style={{ color: 'var(--text-strong)', fontSize: '0.95rem' }}>{alert.productName}</strong>
-                            <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>بواسطة مصنع</span>
-                            <strong style={{ color: 'var(--text-strong)', fontSize: '0.9rem' }}>{alert.factory}</strong>
+                            <strong style={{ color: 'var(--text-strong)', fontSize: '0.95rem' }}>
+                              {alert.productName === 'unknown' ? t('analytics.unknown') : alert.productName}
+                            </strong>
+                            <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{t('analytics.by_factory')}</span>
+                            <strong style={{ color: 'var(--text-strong)', fontSize: '0.9rem' }}>
+                              {alert.factory === 'undefined' ? t('analytics.undefined') : alert.factory}
+                            </strong>
                           </div>
                           <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: '4px 0 0' }}>
-                            تم رصد عجز توريدي بمقدار <strong style={{ color: '#fb7185' }}>{Math.abs(alert.deviation)} قطعة</strong> من أصل {alert.expectedQty} قطعة مطلوبة.
+                            {t('analytics.waste_detected', { deviation: Math.abs(alert.deviation), expected: alert.expectedQty })}
                           </p>
                         </div>
                       </div>
@@ -841,12 +866,12 @@ const AnalyticsDashboard = () => {
                       {/* Waste Details Badge */}
                       <div style={{ display: 'flex', gap: '1rem', background: 'rgba(0,0,0,0.2)', padding: '0.75rem 1.25rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)', alignSelf: 'flex-start' }}>
                         <div style={{ textAlign: 'center' }}>
-                          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>معدل الهدر</span>
+                          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>{t('analytics.waste_rate')}</span>
                           <strong style={{ fontSize: '1rem', color: '#fb7185' }}>{alert.wastePercent}%</strong>
                         </div>
                         <div style={{ width: '1px', background: 'rgba(255,255,255,0.1)' }}></div>
                         <div style={{ textAlign: 'center' }}>
-                          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>العجز المالي</span>
+                          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>{t('analytics.financial_loss')}</span>
                           <strong style={{ fontSize: '1rem', color: '#d4af37' }}>{alert.financialLoss.toLocaleString()} {alert.currency}</strong>
                         </div>
                       </div>
@@ -856,13 +881,14 @@ const AnalyticsDashboard = () => {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)', padding: '0.6rem 1rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.04)', flexWrap: 'wrap', gap: '0.75rem' }}>
                       <span style={{ fontSize: '0.8rem', color: '#fb7185', display: 'flex', alignItems: 'center', gap: '4px' }}>
                         <Zap size={14} />
-                        توصية الذكاء الاصطناعي: يوصى بمطالبة المصنع بتوريد النقص أو خصم {alert.financialLoss.toLocaleString()} {alert.currency} من الحساب الجاري للمصنع.
+                        {t('analytics.compensation_recommendation', { amount: alert.financialLoss.toLocaleString(), currency: alert.currency })}
                       </span>
                       <button 
                         className="btn btn-outline" 
                         onClick={() => {
-                          navigator.clipboard.writeText(`مطالبة تعويض مالي للموديل #${alert.serial}: يرجى تعويض عجز قدره ${Math.abs(alert.deviation)} قطعة بقيمة إجمالية قدرها ${alert.financialLoss} ${alert.currency}`);
-                          toast.success('تم نسخ نص مطالبة التعويض الجاهزة بنجاح!');
+                          const productName = alert.productName === 'unknown' ? t('analytics.unknown') : alert.productName;
+                          navigator.clipboard.writeText(`${t('analytics.create_claim')} #${alert.serial} (${productName}): ${t('analytics.waste_detected', { deviation: Math.abs(alert.deviation), expected: alert.expectedQty })} - ${t('analytics.financial_loss')}: ${alert.financialLoss} ${alert.currency}`);
+                          toast.success(t('analytics.copy_success'));
                         }}
                         style={{ 
                           padding: '0.4rem 1rem', 
@@ -876,7 +902,7 @@ const AnalyticsDashboard = () => {
                           gap: '4px'
                         }}
                       >
-                        <Sparkles size={12} /> إنشاء مطالبة تعويض
+                        <Sparkles size={12} /> {t('analytics.create_claim')}
                       </button>
                     </div>
                   </div>

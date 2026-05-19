@@ -7,7 +7,7 @@ import { Printer, Plus, Trash2, Search, FileText, Settings, LayoutGrid, AlertCir
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
 import { CustomDateInput } from '../components/CustomDateInput';
-
+import { useFilteredLookups } from '../hooks/useFilteredLookups';
 const toEnglishNumbers = (str) => {
   if (str === null || str === undefined) return '';
   return str.toString().replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d));
@@ -15,7 +15,7 @@ const toEnglishNumbers = (str) => {
 
 const ShippingInvoice = () => {
   const { t } = useTranslation();
-  const { hasPermission } = useAuth();
+  const { user, hasPermission } = useAuth();
   const today = new Date();
   const localDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
@@ -30,9 +30,27 @@ const ShippingInvoice = () => {
   });
 
   const { lookups } = useAppData();
-  const companies = lookups?.companies || [];
-  const factories = lookups?.factories || [];
+  const filteredLookups = useFilteredLookups();
+  const companies = filteredLookups?.companies || [];
+  const factories = filteredLookups?.factories || [];
   const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
+
+  useEffect(() => {
+    if (user && user.role !== 'admin' && companies.length > 0) {
+      const currentAllowed = companies.some(c => (c.name || c) === headerInfo.companyName);
+      if (!currentAllowed) {
+        const comp = companies[0];
+        setHeaderInfo(prev => ({
+          ...prev,
+          companyName: comp.name || '',
+          fax: comp.fax ? `FAX:${comp.fax} ` : '',
+          tel: comp.mobile ? `Tel:${comp.mobile} ` : '',
+          address: comp.address || '',
+          branch: comp.address || ''
+        }));
+      }
+    }
+  }, [companies, user]);
 
   const [rows, setRows] = useState([
     { id: Date.now(), serial: '', desc: '', arabicName: '', qty: '', currency: '¥ RMB', unitPrice: '', totalAmount: 0, details: '', image: '', factoryCode: '' }
@@ -253,6 +271,19 @@ const ShippingInvoice = () => {
 
                 if (!error && data) {
                     const d = data.order_data;
+                    
+                    // Data-level authorization check
+                    if (user && user.role !== 'admin') {
+                       const allowedFactories = user.permissions?.allowed_factories || [];
+                       const allowedCompanies = user.permissions?.allowed_companies || [];
+                       if (allowedFactories.length > 0 && !allowedFactories.includes(d.factoryId)) {
+                          throw new Error("Unauthorized factory");
+                       }
+                       if (allowedCompanies.length > 0 && !allowedCompanies.includes(d.buyerCompany)) {
+                          throw new Error("Unauthorized company");
+                       }
+                    }
+
                     const totalPieces = calculateTotalPiecesCount(d) || parseInt(d.totalQuantity) || 0;
                     
                     let imageUrl = '';
@@ -336,7 +367,7 @@ const ShippingInvoice = () => {
         t('shipping.table.cols.currency'),
         t('shipping.table.cols.unit_price'),
         t('shipping.table.cols.total_amount'),
-        'تفاصيل أخرى'
+        t('shipping.table.cols.other_details_ar')
       ]);
       
       // Table Rows
@@ -412,7 +443,7 @@ const ShippingInvoice = () => {
           {hasPermission('shipping-invoice', 'export') && (
             <>
               <button className="btn btn-outline no-print" onClick={exportToExcel} disabled={isExporting} style={{ padding: '12px 24px', fontSize: '1.1rem', color: '#107c41', borderColor: '#107c41', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <FileSpreadsheet size={20} /> تحميل إكسل
+                <FileSpreadsheet size={20} /> {t('shipping.actions.excel_btn')}
               </button>
               <button className="btn btn-primary no-print" onClick={exportToPDF} disabled={isExporting} style={{ padding: '12px 24px', fontSize: '1.1rem' }}>
                 {isExporting ? <div className="spinner" style={{ width: '20px', height: '20px' }}/> : <><Printer size={20} /> {t('shipping.print_btn')}</>}
@@ -566,7 +597,7 @@ const ShippingInvoice = () => {
                zIndex: 100, maxHeight: '300px', overflowY: 'auto', marginTop: '0.5rem'
              }}>
                {companies.length === 0 ? (
-                 <div style={{ padding: '1rem', color: 'var(--text-muted)' }}>لا توجد شركات مضافة، يرجى إضافتها من لوحة الإدارة.</div>
+                 <div style={{ padding: '1rem', color: 'var(--text-muted)' }}>{t('shipping.messages.no_companies_warning')}</div>
                ) : (
                  companies.map((comp, idx) => (
                    <div 
@@ -640,7 +671,7 @@ const ShippingInvoice = () => {
                    {showImageColumn && (
                        <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '90px' }}>{t('shipping.table.cols.item_image')}<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>{t('shipping.table.cols.item_image_ar')}</span></th>
                    )}
-                   <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '90px' }}>تفاصيل أخرى<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>Other Details</span></th>
+                   <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '90px' }}>{t('shipping.table.cols.other_details_ar')}<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>{t('shipping.table.cols.other_details')}</span></th>
                    <th className="no-print" style={{ padding: '10px 5px', width: '40px', border: '1px solid var(--border-color)' }}></th>
                  </tr>
                </thead>

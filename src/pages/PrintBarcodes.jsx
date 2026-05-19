@@ -117,7 +117,7 @@ const ThermalBarcode = React.memo(({ value, barScale = 1.0 }) => {
 });
 
 const PrintBarcodes = () => {
-  const { hasPermission } = useAuth();
+  const { user, hasPermission } = useAuth();
   const { t } = useTranslation();
   const { lookups } = useAppData();
   const [serialInput, setSerialInput] = useState('');
@@ -159,11 +159,27 @@ const PrintBarcodes = () => {
         setOrder(null);
         setRows([]);
       } else {
+        const d = data.order_data;
+        if (user && user.role !== 'admin') {
+           const allowedFactories = user.permissions?.allowed_factories || [];
+           const allowedCompanies = user.permissions?.allowed_companies || [];
+           if (allowedFactories.length > 0 && !allowedFactories.includes(d.factoryId)) {
+              throw new Error("Unauthorized factory");
+           }
+           if (allowedCompanies.length > 0 && !allowedCompanies.includes(d.buyerCompany)) {
+              throw new Error("Unauthorized company");
+           }
+        }
+
         toast.success(t('print.messages.found'), { id: toastId });
         generateRows(data.order_data, termToSearch.trim());
       }
     } catch (err) {
-      toast.error(t('print.messages.conn_error'), { id: toastId });
+      if (err.message === "Unauthorized factory" || err.message === "Unauthorized company") {
+        toast.error(t('print.messages.unauthorized'), { id: toastId });
+      } else {
+        toast.error(t('print.messages.conn_error'), { id: toastId });
+      }
     }
     setLoading(false);
   };
@@ -1521,7 +1537,7 @@ const PrintBarcodes = () => {
                   <FieldRow label={t('print.setup.label_width')} fieldKey="labelWidth" settings={tempSettings} onUpdate={updateTemp} />
                   <FieldRow label={t('print.setup.label_height')} fieldKey="labelHeight" settings={tempSettings} onUpdate={updateTemp} />
                   <div style={rowStyle}>
-                    <label style={{ fontSize: '0.9rem', fontWeight: 500, color: 'var(--text-main)' }}>Barcode Scale — حجم الباركود</label>
+                    <label style={{ fontSize: '0.9rem', fontWeight: 500, color: 'var(--text-main)' }}>{t('print.setup.barcode_scale')}</label>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                       <input type="number" step="0.1" min="0.5" max="3" value={tempSettings.barcodeWidth ?? 1.0} onChange={e => updateTemp('barcodeWidth', e.target.value)} style={inputStyle} />
                       <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600 }}>×</span>

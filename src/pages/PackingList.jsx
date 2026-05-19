@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAppData } from '../context/AppDataContext';
 import { useAuth } from '../context/AuthContext';
@@ -7,7 +7,7 @@ import { Printer, Plus, Trash2, Search, Package, Layers, AlertCircle, X, FileSpr
 import { englishOnly } from '../utils/textUtils';
 import toast from 'react-hot-toast';
 import { CustomDateInput } from '../components/CustomDateInput';
-
+import { useFilteredLookups } from '../hooks/useFilteredLookups';
 const toEnglishNumbers = (str) => {
   if (str === null || str === undefined) return '';
   return str.toString().replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d));
@@ -15,7 +15,7 @@ const toEnglishNumbers = (str) => {
 
 const PackingList = () => {
   const { t } = useTranslation();
-  const { hasPermission } = useAuth();
+  const { user, hasPermission } = useAuth();
   const today = new Date();
   const localDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
@@ -29,9 +29,26 @@ const PackingList = () => {
   });
 
   const { lookups } = useAppData();
-  const companies = lookups?.companies || [];
-  const factories = lookups?.factories || [];
+  const filteredLookups = useFilteredLookups();
+  const companies = filteredLookups?.companies || [];
+  const factories = filteredLookups?.factories || [];
   const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
+
+  useEffect(() => {
+    if (user && user.role !== 'admin' && companies.length > 0) {
+      const currentAllowed = companies.some(c => (c.name || c) === headerInfo.companyName);
+      if (!currentAllowed) {
+        const comp = companies[0];
+        setHeaderInfo(prev => ({
+          ...prev,
+          companyName: comp.name || '',
+          fax: comp.fax ? `FAX:${comp.fax} ` : '',
+          tel: comp.mobile ? `Tel:${comp.mobile} ` : '',
+          branch: comp.address || ''
+        }));
+      }
+    }
+  }, [companies, user]);
 
   const [rows, setRows] = useState([
     { id: Date.now(), serial: '', desc: '', details: '', image: '', packages: [{ id: Date.now() + 1, cartonNo: '', cartonQty: '', packingKind: 'Pcs', qtyPerCarton: '' }], factoryCode: '' }
@@ -243,6 +260,19 @@ const PackingList = () => {
             
             if (orderData) {
                 const d = orderData.order_data;
+                
+                // Data-level authorization check
+                if (user && user.role !== 'admin') {
+                   const allowedFactories = user.permissions?.allowed_factories || [];
+                   const allowedCompanies = user.permissions?.allowed_companies || [];
+                   if (allowedFactories.length > 0 && !allowedFactories.includes(d.factoryId)) {
+                      throw new Error("Unauthorized factory");
+                   }
+                   if (allowedCompanies.length > 0 && !allowedCompanies.includes(d.buyerCompany)) {
+                      throw new Error("Unauthorized company");
+                   }
+                }
+
                 factoryId = d.factoryId || '';
                 
                 const factName = d.factoryId || '';
@@ -498,7 +528,7 @@ const PackingList = () => {
         t('packing.table.cols.qty_per_ctn'),
         t('packing.table.cols.item_qty'),
         t('packing.table.cols.total_item_qty'),
-        'تفاصيل أخرى'
+        t('packing.table.cols.details_ar')
       ]);
       
       // Table Rows
@@ -529,7 +559,7 @@ const PackingList = () => {
 
       // Mixed Groups
       mixedGroups.forEach((group, index) => {
-        excelData.push(['', '', '', `--- كرتون مختلط (${group.cartonNo}) ---`, '', '', '', '', '', '']);
+        excelData.push(['', '', '', `--- ${t('packing.table.mixed_header')} (${group.cartonNo}) ---`, '', '', '', '', '', '']);
         const groupCtn = parseFloat(group.cartonQty) || 0;
         group.items.forEach((item, itemIdx) => {
             const q = parseFloat(item.qtyPerCarton) || 0;
@@ -606,7 +636,7 @@ const PackingList = () => {
           {hasPermission('packing', 'export') && (
             <>
               <button onClick={exportToExcel} className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#107c41', borderColor: '#107c41', padding: '10px 20px', fontSize: '1.1rem' }}>
-                <FileSpreadsheet size={20} /> تحميل إكسل
+                <FileSpreadsheet size={20} /> {t('packing.excel_btn')}
               </button>
               <button onClick={exportToPDF} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--accent-color)', color: '#000', padding: '10px 20px', fontSize: '1.1rem', border: 'none' }}>
                 <Printer size={20} /> {t('packing.print_btn')}
@@ -737,7 +767,7 @@ const PackingList = () => {
                   zIndex: 100, maxHeight: '300px', overflowY: 'auto', marginTop: '0.5rem'
                 }}>
                   {companies.length === 0 ? (
-                    <div style={{ padding: '1rem', color: 'var(--text-muted)' }}>لا توجد شركات مضافة، يرجى إضافتها من لوحة الإدارة.</div>
+                    <div style={{ padding: '1rem', color: 'var(--text-muted)' }}>{t('packing.messages.no_companies_warning')}</div>
                   ) : (
                     companies.map((comp, idx) => (
                       <div 
@@ -809,7 +839,7 @@ const PackingList = () => {
                    {showImageColumn && (
                        <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '80px' }}>{t('packing.table.cols.image')}<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>{t('packing.table.cols.image_ar')}</span></th>
                    )}
-                   <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)' }}>تفاصيل أخرى<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>Other Details</span></th>
+                   <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)' }}>{t('packing.table.cols.details_ar')}<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>{t('packing.table.cols.details')}</span></th>
                    <th className="no-print" style={{ padding: '10px 5px', width: '40px', border: '1px solid var(--border-color)' }}></th>
                  </tr>
                </thead>

@@ -14,6 +14,7 @@ const NAV_GROUPS = [
     labelKey: 'groups.orders.title',
     pages: [
       { path: '/entry', labelKey: 'nav.entry', icon: Edit3, color: 'var(--accent-color)' },
+      { path: '/order-reports', labelKey: 'nav.order_reports', icon: ClipboardList, color: '#f59e0b' },
       { path: '/export', labelKey: 'nav.export', icon: Printer, color: '#60a5fa' },
     ]
   },

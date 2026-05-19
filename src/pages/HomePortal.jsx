@@ -16,6 +16,7 @@ const PAGE_GROUPS = [
     descKey: 'groups.orders.desc',
     pages: [
       { path: '/entry', icon: Edit3, color: '#d4af37', titleKey: 'nav.entry' },
+      { path: '/order-reports', icon: ClipboardList, color: '#f59e0b', titleKey: 'nav.order_reports' },
       { path: '/export', icon: Printer, color: '#60a5fa', titleKey: 'nav.export' },
     ]
   },

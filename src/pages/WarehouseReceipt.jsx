@@ -9,23 +9,24 @@ import { englishOnly } from '../utils/textUtils';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useAuth } from '../context/AuthContext';
+import { useFilteredLookups } from '../hooks/useFilteredLookups';
 
 const WarehouseReceipt = () => {
   const { t } = useTranslation();
   const { lookups } = useAppData();
-  const { hasPermission } = useAuth();
+  const { user, hasPermission } = useAuth();
+  const filteredLookups = useFilteredLookups();
   const [orders, setOrders] = useState([]);
   const [receivings, setReceivings] = useState([]);
   const [filteredData, setFilteredData] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
 
-  // Filters state
   const [filters, setFilters] = useState({
     fromDate: '',
     toDate: '',
     factory: '',
-    status: 'مستلمة', // Default to received
+    status: 'received', // Default to received
   });
 
   // Header Inputs State
@@ -68,11 +69,24 @@ const WarehouseReceipt = () => {
 
       if (rError) throw rError;
 
-      setOrders(oData || []);
+      let validOrders = oData || [];
+      if (user && user.role !== 'admin') {
+        const allowedFactories = user.permissions?.allowed_factories || [];
+        const allowedCompanies = user.permissions?.allowed_companies || [];
+        
+        if (allowedFactories.length > 0) {
+          validOrders = validOrders.filter(o => allowedFactories.includes(o.order_data?.factoryId));
+        }
+        if (allowedCompanies.length > 0) {
+          validOrders = validOrders.filter(o => allowedCompanies.includes(o.order_data?.buyerCompany));
+        }
+      }
+
+      setOrders(validOrders);
       setReceivings(rData || []);
       setDataLoaded(true);
       
-      applyFilters(oData || [], rData || []);
+      applyFilters(validOrders, rData || []);
     } catch (err) {
       console.error(err);
       toast.error(t('warehouse.messages.fetch_error'));
@@ -95,7 +109,12 @@ const WarehouseReceipt = () => {
     currentOrders.forEach(o => {
       const oData = o.order_data || {};
       const rData = recMap[o.serial_number];
-      const rStatus = rData?.receive_data?.status || 'غير مستلمة';
+      const isReceived = rData?.receive_data?.status && (
+        rData.receive_data.status.includes('Received') ||
+        rData.receive_data.status === 'مستلمة' ||
+        rData.receive_data.status === '已收货' ||
+        rData.receive_data.status === t('receiving.info.received')
+      );
       const rDate = rData?.receive_data?.receivedAt?.split('T')[0] || o.created_at.split('T')[0];
       
       // Determine base date for filtering
@@ -109,7 +128,10 @@ const WarehouseReceipt = () => {
       if (filters.factory && (oData.factoryId || '') !== filters.factory) matchFactory = false;
 
       let matchStatus = true;
-      if (filters.status !== 'الكل' && rStatus !== filters.status) matchStatus = false;
+      if (filters.status !== 'all') {
+        if (filters.status === 'received' && !isReceived) matchStatus = false;
+        if (filters.status === 'unreceived' && isReceived) matchStatus = false;
+      }
 
       if (matchDate && matchFactory && matchStatus) {
         
@@ -339,7 +361,7 @@ const WarehouseReceipt = () => {
             <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><Factory size={14}/> {t('warehouse.filters.factory')}</label>
             <select className="form-control" value={filters.factory} onChange={(e) => updateFilter('factory', e.target.value)}>
               <option value="">{t('warehouse.filters.all_factories')}</option>
-              {lookups.factories?.map((f, i) => {
+              {filteredLookups.factories?.map((f, i) => {
                 const factoryName = typeof f === 'object' ? f.name : f;
                 return <option key={i} value={factoryName}>{factoryName}</option>;
               })}
@@ -349,9 +371,9 @@ const WarehouseReceipt = () => {
           <div className="form-group">
             <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><Box size={14}/> {t('warehouse.filters.status')}</label>
             <select className="form-control" value={filters.status} onChange={(e) => updateFilter('status', e.target.value)}>
-              <option value="الكل">{t('warehouse.filters.all')}</option>
-              <option value="مستلمة">{t('warehouse.filters.received')}</option>
-              <option value="غير مستلمة">{t('warehouse.filters.unreceived')}</option>
+              <option value="all">{t('warehouse.filters.all')}</option>
+              <option value="received">{t('warehouse.filters.received')}</option>
+              <option value="unreceived">{t('warehouse.filters.unreceived')}</option>
             </select>
           </div>
         </div>

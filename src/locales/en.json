@@ -38,6 +38,7 @@
     "barcodes": "Barcode Generation",
     "analytics": "Strategic Analytics",
     "reports": "Reports & Analytics",
+    "order_reports": "Order Reports",
     "shipping_invoice": "Shipping Invoice",
     "packing_list": "Packing List",
     "warehouse_receipt": "Warehouse Receipt Report"
@@ -85,7 +86,37 @@
     "status_stable": "Stable",
     "status_operating": "Operating",
     "status_on_track": "On Track",
-    "status_action_required": "Action Required"
+    "status_action_required": "Action Required",
+    "predictive_title": "Predictive AI Operations Studio",
+    "predictive_subtitle": "Operational AI system for predicting delay probabilities and proactively detecting quantity deviations & waste",
+    "tab_delays": "Order Delay Forecasting",
+    "tab_waste": "Quantity Deviation & Waste",
+    "no_delay_predictions": "No active orders to forecast delays. All shipments have been received.",
+    "col_model_product": "Model & Product",
+    "col_target_factory": "Target Factory",
+    "col_actual_duration": "Actual Production Duration",
+    "col_remaining_days": "Remaining Days to Delivery",
+    "col_delay_prob": "Expected Delay Probability",
+    "col_recommendation": "Smart Diagnosis & Recommendation",
+    "in_progress": "days in progress",
+    "overdue_by": "Overdue by {{days}} days",
+    "remaining_days": "Remaining {{days}} days",
+    "undefined": "Undefined",
+    "unknown": "Unknown",
+    "recommend_contact": "💡 Direct communication with factory management is recommended to avoid shipping penalties.",
+    "no_waste_alerts": "No deviations or waste detected in previous model receipt quantities. All factories delivered 100% on target.",
+    "by_factory": "By factory",
+    "waste_detected": "Supply shortage of {{deviation}} pieces detected out of {{expected}} ordered pieces.",
+    "waste_rate": "Waste Rate",
+    "financial_loss": "Financial Shortage",
+    "compensation_recommendation": "AI Recommendation: Claim supply shortage from factory or deduct {{amount}} {{currency}} from current account.",
+    "copy_success": "Compensation claim text copied successfully!",
+    "create_claim": "Create Compensation Claim",
+    "delay_reason_overdue": "Already overdue by {{days}} days beyond approved delivery date",
+    "delay_reason_standard_exceeded": "Standard production rate ({{avgLead}} days) exceeds remaining delivery time by {{overDays}} days",
+    "delay_reason_stable": "Stable production. Expected safety margin: {{safeMargin}} days",
+    "delay_reason_delivery_undefined": "Delivery date undefined. Forecasted based on usual factory lead time ({{avgLead}} days)",
+    "load_error": "Error loading analytics data"
   },
   "activity": {
     "create": "Order Created",
@@ -356,6 +387,11 @@
       "fabric_samples": "Fabrics Samples 样板面料",
       "sale_type": "Sale:",
       "order_remarks": "Order Remarks 订单备注:",
+      "total_price": "Total Price 总价",
+      "conditions": "Conditions 状况",
+      "remarks_header": "Order Remarks 细节",
+      "fabric_comp": "Fabric Composition 面料成分",
+      "percentage": "Percentage 百分比",
       "cond1_text": "✓ {{val1}} pcs Solid Color Mixed Sizes bag, Mixed Color {{val2}} pcs/CTN",
       "cond2_text": "✓ {{val1}} pcs Mixed Color Mixed Sizes bag ({{val2}})",
       "name_zh": "Name 名字",
@@ -363,7 +399,10 @@
       "buyer_sign": "Buyer 买方授权",
       "coordinator_sign": "Coordinator 协调员",
       "factory_sign": "Factory 工厂签收",
-      "system_generated": "System Generated • Green Hand Platform • Export ID:"
+      "system_generated": "System Generated • Green Hand Platform • Export ID:",
+      "size_header": "Size 尺寸",
+      "part_size_header": "{{part}} 尺寸",
+      "default_fabric": "Chiffon 雪纺"
     },
     "messages": {
       "enter_serial": "Please enter order or model number first",
@@ -581,29 +620,18 @@
       "row_gap": "Row Gap",
       "reset": "Reset",
       "cancel": "Cancel",
-      "fields": {
-        "name": "Name",
-        "track": "Track",
-        "factory_code": "Factory Code",
-        "fax": "Fax",
-        "mobile": "Mobile",
-        "code": "Code"
-      },
-      "actions": {
-        "add": "Add",
-        "save": "Save",
-        "cancel": "Cancel",
-        "edit": "Edit",
-        "delete": "Delete",
-        "assign_parts": "Assign Component Parts"
-      },
-      "select_color_title": "Select Display Color",
       "save": "Save Settings",
+      "barcode_scale": "Barcode Scale"
+    },
+    "messages": {
+      "enter_serial": "Please enter model number (Serial Number)",
+      "fetching": "Fetching model...",
       "not_found": "Order not found!",
       "found": "Model found! Generating table...",
       "conn_error": "Connection error!",
       "save_success": "Print settings saved successfully!",
-      "reset_success": "Reset to default values"
+      "reset_success": "Reset to default values",
+      "unauthorized": "You do not have permission to access data for this factory or company"
     }
   },
   "reports": {
@@ -624,7 +652,10 @@
       "clear_btn": "Clear Filters",
       "show_all_btn": "Show All Products",
       "search_btn": "Search & View",
-      "active_filters": "Active Filters:"
+      "active_filters": "Active Filters:",
+      "company": "Buyer Company",
+      "all_companies": "-- All Companies --",
+      "factory": "Target Factory"
     },
     "results": {
       "title": "Query Results",
@@ -641,8 +672,29 @@
         "factory": "Received Factory",
         "total_qty": "Total Quantity",
         "order_date": "Order Date",
-        "details": "Details"
+        "details": "Details",
+        "stage": "Stage",
+        "health": "Health",
+        "last_activity": "Last Activity",
+        "healthy": "Healthy",
+        "none": "None",
+        "order_stage": "Order Stage",
+        "health_score": "Health Score",
+        "issues_alerts": "Critical Issues / Alerts",
+        "total_sum": "Total (合计)",
+        "items_count": "{{count}} Items"
       }
+    },
+    "detailed_terms": "Additional Packing Terms for Invoice",
+    "no_terms_available": "No additional terms available at the moment. You can add them in Settings.",
+    "activity": {
+      "smart_log": "Smart Activity Log",
+      "events": "Events",
+      "prints": "Prints",
+      "updates": "Updates",
+      "receives": "Receiving",
+      "no_log": "No history activity log for this order. New events will be recorded automatically.",
+      "by": "By: {{actor}}"
     },
     "details": {
       "sizes": "Selected Sizes:",
@@ -718,7 +770,8 @@
     "actions": {
       "add_row": "Add Empty Row",
       "fetch_all": "Fetch Data for All Items",
-      "clear_all": "Clear All Data"
+      "clear_all": "Clear All Data",
+      "excel_btn": "Download Excel"
     },
     "footer": {
       "total": "Total",
@@ -762,13 +815,15 @@
       "check_error": "Error checking models",
       "fetching_data": "Checking models and fetching data...",
       "fetch_success": "Fetched data for {{count}} models successfully!",
-      "fetch_no_data": "No new data found or all items previously fetched"
+      "fetch_no_data": "No new data found or all items previously fetched",
+      "no_companies_warning": "No companies added, please add them from the admin panel."
     }
   },
   "packing": {
     "title": "Packing List",
     "subtitle": "Goods packing list for customs with the possibility of merging several models in one carton.",
     "print_btn": "Export PDF / Print",
+    "excel_btn": "Download Excel",
     "header": {
       "company": "ARABIAN FRIENDSHIP TRADING CO.,LIMITED",
       "tel": "Tel:",
@@ -822,7 +877,8 @@
     },
     "messages": {
       "fetch_success": "Fetched data for {{count}} models successfully! {{mixMsg}}",
-      "mix_detected": "{{count}} mixed cartons detected automatically"
+      "mix_detected": "{{count}} mixed cartons detected automatically",
+      "no_companies_warning": "No companies added, please add them from the admin panel."
     }
   },
   "warehouse": {
@@ -950,6 +1006,8 @@
     "invalid_credentials": "Invalid username or password",
     "unauthorized": "Access Denied",
     "unauthorized_desc": "You do not have permission to view this page.",
+    "unauthorized_factory": "You do not have permission to access this factory's data",
+    "unauthorized_company": "You do not have permission to access this company's data",
     "return_home": "Return to Home",
     "user_management": "User Management",
     "add_user": "Add New User",
@@ -988,6 +1046,11 @@
     "component_parts_hint": "Component Parts (from parts section)",
     "choose_parts": "— Choose Component Parts —",
     "no_parts_added": "No parts added yet — add parts in 'Component Parts' section first",
+    "legacy": "legacy",
+    "link_parts_optional": "Link component parts (optional)",
+    "parts_connected": "{{count}} connected parts",
+    "link_parts_placeholder": "— Link component parts —",
+    "no_parts_available": "No component parts added yet",
     "color_abbr": "Color Abbreviation (Abbr)",
     "color_abbr_placeholder": "e.g. WHT",
     "choose_color": "Choose Color",
@@ -1046,7 +1109,24 @@
       "item_deleted": "Item deleted 🗑️",
       "reorder_success": "Item reordered successfully ✨",
       "edit_mode_active": "Edit mode is active..."
-    }
+    },
+    "fields": {
+      "name": "Name",
+      "track": "Track",
+      "factory_code": "Factory Code",
+      "fax": "Fax",
+      "mobile": "Mobile",
+      "code": "Code"
+    },
+    "actions": {
+      "add": "Add",
+      "save": "Save",
+      "cancel": "Cancel",
+      "edit": "Edit",
+      "delete": "Delete",
+      "assign_parts": "Assign Component Parts"
+    },
+    "select_color_title": "Select Display Color"
   },
   "user_mgmt": {
     "title": "System Permissions Management",
@@ -1092,57 +1172,95 @@
       "username_required": "Username is required",
       "password_required": "Password is required for new users",
       "save_error": "Error saving user"
+    }
+  },
+  "image_editor": {
+    "title": "Image Editor",
+    "select": "Select",
+    "pencil": "Pencil",
+    "square": "Square",
+    "circle": "Circle",
+    "text": "Text",
+    "add_image": "Add Image",
+    "rotate": "Rotate",
+    "filters": "Filters",
+    "undo": "Undo",
+    "redo": "Redo",
+    "custom_color": "Custom Color",
+    "delete_selected": "Delete",
+    "clear_all": "Clear All",
+    "confirm_clear": "Are you sure you want to clear all edits?",
+    "brightness": "Brightness",
+    "contrast": "Contrast",
+    "loading": "Loading editor...",
+    "save": "Save Changes",
+    "type_here": "Type here..."
+  },
+  "activity": {
+    "create": "Create Order",
+    "update": "Update Order",
+    "copy": "Copy Order",
+    "delete": "Delete Order",
+    "barcode_print": "Print Barcode",
+    "barcode_sample": "Print Sample Barcode",
+    "receive": "Factory Receiving",
+    "fields": {
+      "productName": "Product Name",
+      "factoryId": "Factory",
+      "totalQuantity": "Total Qty",
+      "deliveryDate": "Delivery Date",
+      "productPrice": "Price",
+      "currency": "Currency",
+      "cartonPackage": "Carton Pkg",
+      "cartonQty": "Ctn Qty",
+      "barcode": "Main Barcode",
+      "color_count": "Color Count"
     },
-    "image_editor": {
-      "title": "Image Editor",
-      "select": "Select",
-      "pencil": "Pencil",
-      "square": "Square",
-      "circle": "Circle",
-      "text": "Text",
-      "add_image": "Add Image",
-      "rotate": "Rotate",
-      "filters": "Filters",
-      "undo": "Undo",
-      "redo": "Redo",
-      "custom_color": "Custom Color",
-      "delete_selected": "Delete",
-      "clear_all": "Clear All",
-      "confirm_clear": "Are you sure you want to clear all edits?",
-      "brightness": "Brightness",
-      "contrast": "Contrast",
-      "loading": "Loading editor...",
-      "save": "Save Changes",
-      "type_here": "Type here..."
+    "notes": {
+      "created": "Created order #{{serial}}",
+      "updated": "Updated order #{{serial}}",
+      "serial_changed": "Changed serial from {{old}} to {{new}}",
+      "deleted": "Deleted order #{{serial}}",
+      "copied": "Copied order from {{from}} to {{to}}",
+      "received": "Received order with total {{count}} pieces"
+    }
+  },
+  "intelligence": {
+    "stages": {
+      "draft": "Draft",
+      "ready": "Ready for Factory",
+      "production": "In Production",
+      "overdue": "Overdue",
+      "received": "Received",
+      "undefined": "Undefined"
     },
-    "activity": {
-      "create": "Create Order",
-      "update": "Update Order",
-      "copy": "Copy Order",
-      "delete": "Delete Order",
-      "barcode_print": "Print Barcode",
-      "barcode_sample": "Print Sample Barcode",
-      "receive": "Factory Receiving",
-      "fields": {
-        "productName": "Product Name",
-        "factoryId": "Factory",
-        "totalQuantity": "Total Qty",
-        "deliveryDate": "Delivery Date",
-        "productPrice": "Price",
-        "currency": "Currency",
-        "cartonPackage": "Carton Pkg",
-        "cartonQty": "Ctn Qty",
-        "barcode": "Main Barcode",
-        "color_count": "Color Count"
-      },
-      "notes": {
-        "created": "Created order #{{serial}}",
-        "updated": "Updated order #{{serial}}",
-        "serial_changed": "Changed serial from {{old}} to {{new}}",
-        "deleted": "Deleted order #{{serial}}",
-        "copied": "Copied order from {{from}} to {{to}}",
-        "received": "Received order with total {{count}} pieces"
-      }
+    "issues": {
+      "product_name_missing": "Product name missing",
+      "factory_missing": "Factory not specified",
+      "quantity_missing": "Quantities missing",
+      "delivery_date_missing": "Delivery date not specified",
+      "price_missing": "Product price missing",
+      "currency_missing": "Currency not specified",
+      "carton_data_missing": "Carton details missing",
+      "images_missing": "No product images",
+      "code_prefix_missing": "Product code not saved",
+      "color_abbr_missing": "{{count}} color(s) without barcode abbreviation",
+      "overdue_days": "Overdue by {{count}} day(s)",
+      "delivery_soon": "Delivery due soon in {{count}} day(s)"
+    },
+    "fixes": {
+      "product_name_missing": "Complete product details",
+      "factory_missing": "Select factory before sending",
+      "quantity_missing": "Enter color and size distribution",
+      "delivery_date_missing": "Add delivery date",
+      "price_missing": "Add price before billing",
+      "currency_missing": "Select currency",
+      "carton_data_missing": "Complete packaging details",
+      "images_missing": "Add reference image for factory",
+      "code_prefix_missing": "Add codePrefix in product settings",
+      "color_abbr_missing": "Add color abbreviations",
+      "overdue_days": "Review with factory or update delivery date",
+      "delivery_soon": "Follow up on production and receiving"
     }
   }
 }

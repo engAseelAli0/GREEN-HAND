@@ -3,6 +3,7 @@ import { supabase, supabaseUrl, supabaseKey } from '../supabaseClient';
 import { createClient } from '@supabase/supabase-js';
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
+import { useAppData } from '../context/AppDataContext';
 import { 
   User, Shield, Lock, Trash2, Edit2, Plus, Save, X, AlertTriangle, 
   Key, CheckCircle, Eye, Edit, Trash, Download, Settings, PauseCircle, 
@@ -19,6 +20,7 @@ const adminAuthClient = createClient(supabaseUrl, supabaseKey, {
 
 const ALL_PAGES = [
   { id: 'entry', nameKey: 'nav.entry', icon: '📝' },
+  { id: 'order-reports', nameKey: 'nav.order_reports', icon: '📋' },
   { id: 'export', nameKey: 'nav.export', icon: '📤' },
   { id: 'receiving', nameKey: 'nav.receiving', icon: '📥' },
   { id: 'factory-portal', nameKey: 'nav.factory_portal', icon: '🏭' },
@@ -35,6 +37,7 @@ const ROLES = ['admin', 'data_entry', 'warehouse', 'factory', 'guest'];
 
 const UserManagement = () => {
   const { t } = useTranslation();
+  const { lookups } = useAppData();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   
@@ -236,6 +239,19 @@ const UserManagement = () => {
       return {
         ...prev,
         permissions: { ...prev.permissions, [pageId]: newPerms }
+      };
+    });
+  };
+
+  const toggleArrayPermission = (key, itemValue) => {
+    setFormData(prev => {
+      const currentArray = prev.permissions[key] || [];
+      const newArray = currentArray.includes(itemValue) 
+        ? currentArray.filter(v => v !== itemValue)
+        : [...currentArray, itemValue];
+      return {
+        ...prev,
+        permissions: { ...prev.permissions, [key]: newArray }
       };
     });
   };
@@ -674,6 +690,61 @@ const UserManagement = () => {
                           </div>
                         );
                       })}
+                    </div>
+                  )}
+
+                  {/* SCOPED PERMISSIONS */}
+                  {formData.role !== 'admin' && (
+                    <div style={{ padding: '2rem', borderTop: '1px solid rgba(255,255,255,0.05)', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                      {/* Factories */}
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
+                          <span style={{ fontSize: '1.2rem' }}>🏭</span>
+                          <h4 style={{ margin: 0, color: 'var(--text-strong)', fontSize: '1.1rem' }}>{t('user_mgmt.allowed_factories', { defaultValue: 'المصانع المسموح بها' })}</h4>
+                        </div>
+                        <p style={{ margin: '0 0 1rem 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                          {t('user_mgmt.allowed_factories_desc', { defaultValue: 'إذا لم يتم تحديد أي مصنع، فسيتمكن المستخدم من رؤية جميع المصانع. أما إذا تم تحديد مصانع معينة، فلن تظهر له إلا هذه المصانع.' })}
+                        </p>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
+                          {lookups.factories?.map((f, i) => {
+                            const val = typeof f === 'object' ? f.name : f;
+                            const isSelected = (formData.permissions.allowed_factories || []).includes(val);
+                            return (
+                              <div key={i} onClick={() => toggleArrayPermission('allowed_factories', val)} style={{ padding: '0.5rem 1rem', borderRadius: '8px', border: isSelected ? '1px solid var(--accent-color)' : '1px solid rgba(255,255,255,0.1)', background: isSelected ? 'rgba(212,175,55,0.1)' : 'rgba(255,255,255,0.02)', cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <div style={{ width: '16px', height: '16px', borderRadius: '4px', border: '1px solid ' + (isSelected ? 'var(--accent-color)' : 'rgba(255,255,255,0.2)'), display: 'flex', alignItems: 'center', justifyContent: 'center', background: isSelected ? 'var(--accent-color)' : 'transparent' }}>
+                                  {isSelected && <CheckCircle size={12} color="#000" />}
+                                </div>
+                                <span style={{ fontSize: '0.9rem', color: isSelected ? 'var(--accent-color)' : 'var(--text-main)', fontWeight: isSelected ? 'bold' : 'normal' }}>{val}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Companies */}
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
+                          <span style={{ fontSize: '1.2rem' }}>🏢</span>
+                          <h4 style={{ margin: 0, color: 'var(--text-strong)', fontSize: '1.1rem' }}>{t('user_mgmt.allowed_companies', { defaultValue: 'الشركات المسموح بها' })}</h4>
+                        </div>
+                        <p style={{ margin: '0 0 1rem 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                          {t('user_mgmt.allowed_companies_desc', { defaultValue: 'إذا لم يتم تحديد أي شركة، فسيتمكن المستخدم من رؤية جميع الشركات.' })}
+                        </p>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
+                          {lookups.companies?.map((c, i) => {
+                            const val = typeof c === 'object' ? c.name : c;
+                            const isSelected = (formData.permissions.allowed_companies || []).includes(val);
+                            return (
+                              <div key={i} onClick={() => toggleArrayPermission('allowed_companies', val)} style={{ padding: '0.5rem 1rem', borderRadius: '8px', border: isSelected ? '1px solid var(--accent-color)' : '1px solid rgba(255,255,255,0.1)', background: isSelected ? 'rgba(212,175,55,0.1)' : 'rgba(255,255,255,0.02)', cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <div style={{ width: '16px', height: '16px', borderRadius: '4px', border: '1px solid ' + (isSelected ? 'var(--accent-color)' : 'rgba(255,255,255,0.2)'), display: 'flex', alignItems: 'center', justifyContent: 'center', background: isSelected ? 'var(--accent-color)' : 'transparent' }}>
+                                  {isSelected && <CheckCircle size={12} color="#000" />}
+                                </div>
+                                <span style={{ fontSize: '0.9rem', color: isSelected ? 'var(--accent-color)' : 'var(--text-main)', fontWeight: isSelected ? 'bold' : 'normal' }}>{val}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>

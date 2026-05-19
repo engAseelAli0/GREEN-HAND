@@ -121,6 +121,23 @@ const FactoryReceiving = () => {
       
       const oData = oDataResp.order_data;
 
+      if (user && user.role !== 'admin') {
+         const allowedFactories = user.permissions?.allowed_factories || [];
+         const allowedCompanies = user.permissions?.allowed_companies || [];
+         if (allowedFactories.length > 0 && !allowedFactories.includes(oData.factoryId)) {
+            toast.error(t('auth.unauthorized_factory'));
+            setIsSearching(false);
+            setIsFetched(false);
+            return;
+         }
+         if (allowedCompanies.length > 0 && !allowedCompanies.includes(oData.buyerCompany)) {
+            toast.error(t('auth.unauthorized_company'));
+            setIsSearching(false);
+            setIsFetched(false);
+            return;
+         }
+      }
+
       setProductInfo({
         mainBarcode: oData.barcode || `1000${oData.serialNumber}`,
         prodFullName: oData.productName || t('receiving.messages.unregistered'),

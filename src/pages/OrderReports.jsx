@@ -28,7 +28,7 @@ const calculateTotalPiecesCount = (orderData) => {
   return total;
 };
 
-const ReportsPortal = () => {
+const OrderReports = () => {
   const { t } = useTranslation();
   const { lookups } = useAppData();
   const { user, hasPermission } = useAuth();
@@ -44,7 +44,7 @@ const ReportsPortal = () => {
     [receivings]
   );
 
-
+  const [selectedTerms, setSelectedTerms] = useState([]);
 
   
   // Filters state
@@ -54,8 +54,6 @@ const ReportsPortal = () => {
     fromDate: '',
     toDate: '',
     factory: '',
-    companyName: '',
-    productName: '',
   });
 
   // F9 Lookup States
@@ -182,9 +180,6 @@ const ReportsPortal = () => {
         return orderDateStr ? orderDateStr <= activeFilters.toDate : false;
       });
     }
-    if (activeFilters.companyName) {
-      result = result.filter(o => o.order_data?.buyerCompany === activeFilters.companyName);
-    }
     if (activeFilters.factory) {
       result = result.filter(o => o.order_data?.factoryId === activeFilters.factory);
     }
@@ -252,7 +247,6 @@ const ReportsPortal = () => {
       fromDate: '',
       toDate: '',
       factory: '',
-      productName: '',
     };
     setFilters(cleared);
     setFilteredOrders(orders);
@@ -328,8 +322,9 @@ const ReportsPortal = () => {
       const computedTotal = calculateTotalPiecesCount(d);
       return {
         [t('reports.excel_headers.serial')]: o.serial_number || '-',
-        [t('reports.excel_headers.buyer')]: d.buyerCompany || '-',
         [t('reports.excel_headers.product')]: englishOnly(d.productName) || '-',
+        [t('reports.excel_headers.buyer')]: d.buyerCompany || '-',
+        
         [t('reports.excel_headers.factory')]: d.factoryId || '-',
         [t('reports.excel_headers.factory_code')]: getFactoryCode(d.factoryId) || '-',
         [t('reports.excel_headers.brand')]: d.tradeMark || '-',
@@ -351,7 +346,7 @@ const ReportsPortal = () => {
     XLSX.writeFile(workbook, `Report_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
-    const getFactoryDetails = (factoryId) => {
+  const getFactoryDetails = (factoryId) => {
     const factory = Array.isArray(lookups.factories) ? lookups.factories.find(f => (f.name === factoryId || f === factoryId)) : null;
     if (factory && typeof factory === 'object') {
       return { name: factory.name || '', mobile: factory.mobile || '', address: factory.address || '', code: factory.code || '' };
@@ -363,124 +358,169 @@ const ReportsPortal = () => {
     if (filteredOrders.length === 0) return toast.error(t('reports.messages.no_data_export'));
     const toastId = toast.loading(t('reports.messages.preparing_pdf'));
     try {
-        const today = new Date().toISOString().split('T')[0];
-        const totalCount = filteredOrders.length;
-        
-        let gQty = 0, gAmt = 0;
-        let tableRowsHtml = '';
-        
-        filteredOrders.forEach((order, idx) => {
-          const d = order.order_data || {};
-          const computedTotal = calculateTotalPiecesCount(d);
-          const qty = computedTotal > 0 ? computedTotal : (parseInt(d.totalQuantity) || 0);
-          const pr = parseFloat(d.productPrice || 0);
-          const tp = pr * qty;
-          gQty += qty;
-          gAmt += tp;
-          
-          const modelNo = order.serial_number || '-';
-          const productName = d.productName || '-';
-          const companyName = d.buyerCompany || '-';
-          const factoryId = d.factoryId || '-';
-          const factoryCode = getFactoryCode(d.factoryId) || '-';
-          const sizes = `${d.sizeFrom || '-'} - ${d.sizeTo || '-'}`;
-          const orderDate = d.requestDate || order.created_at?.split('T')[0] || '-';
-          const deliveryDate = d.deliveryDate || '-';
-          const currency = d.currency || 'RMB';
-          
-          tableRowsHtml += `
-            <tr style="background-color: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
-              <td style="border: 1px solid #cbd5e1; padding: 10px 8px; text-align: center; font-size: 11px; font-family: sans-serif;">${idx + 1}</td>
-              <td style="border: 1px solid #cbd5e1; padding: 10px 8px; text-align: center; font-size: 11px; font-weight: bold; font-family: sans-serif;">${modelNo}</td>
-              <td style="border: 1px solid #cbd5e1; padding: 10px 8px; text-align: left; font-size: 11px; word-break: break-word; white-space: normal; max-width: 140px; font-family: sans-serif;">${productName}</td>
-              <td style="border: 1px solid #cbd5e1; padding: 10px 8px; text-align: left; font-size: 11px; word-break: break-word; white-space: normal; max-width: 140px; font-family: sans-serif;">${companyName}</td>
-              <td style="border: 1px solid #cbd5e1; padding: 10px 8px; text-align: center; font-size: 11px; font-family: sans-serif;">${factoryId}</td>
-              <td style="border: 1px solid #cbd5e1; padding: 10px 8px; text-align: center; font-size: 11px; font-family: sans-serif;">${factoryCode}</td>
-              <td style="border: 1px solid #cbd5e1; padding: 10px 8px; text-align: center; font-size: 11px; white-space: nowrap; font-family: sans-serif;">${sizes}</td>
-              <td style="border: 1px solid #cbd5e1; padding: 10px 8px; text-align: center; font-size: 11px; font-weight: bold; font-family: sans-serif;">${qty.toLocaleString()}</td>
-              <td style="border: 1px solid #cbd5e1; padding: 10px 8px; text-align: center; font-size: 11px; font-family: sans-serif;">${pr > 0 ? pr.toFixed(2) : '0.00'}</td>
-              <td style="border: 1px solid #cbd5e1; padding: 10px 8px; text-align: center; font-size: 11px; font-family: sans-serif;">${currency}</td>
-              <td style="border: 1px solid #cbd5e1; padding: 10px 8px; text-align: center; font-size: 11px; font-weight: bold; font-family: sans-serif;">${tp > 0 ? tp.toLocaleString(undefined, {minimumFractionDigits: 2}) : '0.00'}</td>
-              <td style="border: 1px solid #cbd5e1; padding: 10px 8px; text-align: center; font-size: 11px; white-space: nowrap; font-family: sans-serif;">${orderDate}</td>
-              <td style="border: 1px solid #cbd5e1; padding: 10px 8px; text-align: center; font-size: 11px; white-space: nowrap; font-family: sans-serif;">${deliveryDate}</td>
-            </tr>
-          `;
-        });
-        
-        const el = document.createElement('div');
-        el.style.cssText = 'position:fixed;left:-9999px;top:0;width:1200px;background:#fff;padding:30px 40px;font-family:sans-serif;color:#000;box-sizing:border-box;direction:ltr;';
-        el.innerHTML = `
-          <div style="text-align: center; margin-bottom: 20px;">
-            <h1 style="font-size: 34px; font-weight: 800; margin: 0; color: #000; letter-spacing: 0.5px; font-family: sans-serif;">Orders Report</h1>
-            <p style="font-size: 15px; color: #475569; margin: 8px 0 0 0; font-weight: 500; font-family: sans-serif;">
-              Generated: ${today} &nbsp;|&nbsp; Total: ${totalCount} orders
-            </p>
-          </div>
-          <div style="border-bottom: 2px solid #0f172a; margin-bottom: 25px; width: 100%;"></div>
-          
-          <table style="width: 100%; border-collapse: collapse; border: 1px solid #cbd5e1;">
-            <thead>
-              <tr style="background-color: #f1f5f9; color: #0f172a;">
-                <th style="border: 1px solid #cbd5e1; padding: 12px 8px; font-weight: 700; font-size: 12px; text-align: center; width: 3%; font-family: sans-serif;">#</th>
-                <th style="border: 1px solid #cbd5e1; padding: 12px 8px; font-weight: 700; font-size: 12px; text-align: center; width: 7%; font-family: sans-serif;">Model NO.</th>
-                <th style="border: 1px solid #cbd5e1; padding: 12px 8px; font-weight: 700; font-size: 12px; text-align: left; width: 14%; font-family: sans-serif;">Product</th>
-                <th style="border: 1px solid #cbd5e1; padding: 12px 8px; font-weight: 700; font-size: 12px; text-align: left; width: 14%; font-family: sans-serif;">Company (Buyer)</th>
-                <th style="border: 1px solid #cbd5e1; padding: 12px 8px; font-weight: 700; font-size: 12px; text-align: center; width: 10%; font-family: sans-serif;">Received Factory</th>
-                <th style="border: 1px solid #cbd5e1; padding: 12px 8px; font-weight: 700; font-size: 12px; text-align: center; width: 7%; font-family: sans-serif;">Factory Code</th>
-                <th style="border: 1px solid #cbd5e1; padding: 12px 8px; font-weight: 700; font-size: 12px; text-align: center; width: 8%; font-family: sans-serif;">Sizes</th>
-                <th style="border: 1px solid #cbd5e1; padding: 12px 8px; font-weight: 700; font-size: 12px; text-align: center; width: 7%; font-family: sans-serif;">Total Quantity</th>
-                <th style="border: 1px solid #cbd5e1; padding: 12px 8px; font-weight: 700; font-size: 12px; text-align: center; width: 7%; font-family: sans-serif;">Unit Price</th>
-                <th style="border: 1px solid #cbd5e1; padding: 12px 8px; font-weight: 700; font-size: 12px; text-align: center; width: 5%; font-family: sans-serif;">Currency</th>
-                <th style="border: 1px solid #cbd5e1; padding: 12px 8px; font-weight: 700; font-size: 12px; text-align: center; width: 9%; font-family: sans-serif;">Total Price</th>
-                <th style="border: 1px solid #cbd5e1; padding: 12px 8px; font-weight: 700; font-size: 12px; text-align: center; width: 8%; font-family: sans-serif;">Order Date</th>
-                <th style="border: 1px solid #cbd5e1; padding: 12px 8px; font-weight: 700; font-size: 12px; text-align: center; width: 8%; font-family: sans-serif;">Delivery Date</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${tableRowsHtml}
-              <tr style="background-color: #e2e8f0; font-weight: bold; color: #0f172a;">
-                <td style="border: 1px solid #cbd5e1; padding: 12px 8px; text-align: center; font-size: 12px; font-family: sans-serif;" colspan="2">${t('reports.table.total_sum')}</td>
-                <td style="border: 1px solid #cbd5e1; padding: 12px 8px; text-align: left; font-size: 12px; font-family: sans-serif;" colspan="5">${t('reports.table.items_count', { count: totalCount })}</td>
-                <td style="border: 1px solid #cbd5e1; padding: 12px 8px; text-align: center; font-size: 12px; font-weight: 800; font-family: sans-serif;">${gQty.toLocaleString()} PCS</td>
-                <td style="border: 1px solid #cbd5e1; padding: 12px 8px; font-family: sans-serif;" colspan="2"></td>
-                <td style="border: 1px solid #cbd5e1; padding: 12px 8px; text-align: center; font-size: 12px; font-weight: 800; font-family: sans-serif;">${gAmt.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
-                <td style="border: 1px solid #cbd5e1; padding: 12px 8px; font-family: sans-serif;" colspan="2"></td>
-              </tr>
-            </tbody>
-          </table>
-        `;
-        
-        document.body.appendChild(el);
-        const { default: html2canvas } = await import('html2canvas');
-        const canvas = await html2canvas(el, { scale: 2, useCORS: true, logging: false, backgroundColor: '#ffffff' });
-        document.body.removeChild(el);
-        const imgData = canvas.toDataURL('image/jpeg', 0.95);
-        const pW = 297;
-        const pH = 210;
-        const pM = 8;
-        const cW = pW - pM * 2;
-        const cH = (canvas.height * cW) / canvas.width;
-        
-        const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-        
-        let position = pM;
-        let leftHeight = cH;
-        const pageHeight = pH - pM * 2;
-        
-        pdf.addImage(imgData, 'JPEG', pM, position, cW, cH);
-        
-        while (leftHeight > pageHeight) {
-          pdf.addPage();
-          position -= pageHeight;
-          pdf.addImage(imgData, 'JPEG', pM, position, cW, cH);
-          leftHeight -= pageHeight;
-        }
-        
-        pdf.save('Orders_Report_' + new Date().toISOString().split('T')[0] + '.pdf');
-        toast.success(t('reports.messages.pdf_success'), { id: toastId });
+       const firstData = filteredOrders[0]?.order_data || {};
+       const fDet = getFactoryDetails(firstData.factoryId);
+       const custCode = firstData.buyerMobile || firstData.buyerId || '-';
+       const custMobile = firstData.buyerNumber || firstData.buyerMobile || '-';
+       const reqDate = firstData.requestDate || new Date().toISOString().split('T')[0];
+       const delDate = firstData.deliveryDate || '-';
+       let lastCN = parseInt(localStorage.getItem('gh_pdf_contract_counter') || '0', 10);
+       lastCN += 1;
+       localStorage.setItem('gh_pdf_contract_counter', String(lastCN));
+       const contNo = String(lastCN).padStart(5, '0');
+       const fD = (d) => { if (!d || d === '-') return '-'; const p = d.split('-'); return p.length === 3 ? p[2]+'/'+p[1]+'/'+p[0] : d; };
+       let gQty = 0, gAmt = 0;
+       const cur = firstData.currency || 'RMB';
+       const rows = filteredOrders.map((order, idx) => {
+         const d = order.order_data || {};
+         const ct = calculateTotalPiecesCount(d);
+         const qty = ct > 0 ? ct : (parseInt(d.totalQuantity) || 0);
+         const pr = parseFloat(d.productPrice || 0);
+         const tp = pr * qty;
+         const clrs = d.colorDistribution ? Object.keys(d.colorDistribution).length : 0;
+         const sr = (d.sizeFrom || '-') + ' - ' + (d.sizeTo || '-');
+         const bc = d.barcode || '';
+         let sc = 0;
+         if (d.colorDistribution) { const ss = new Set(); Object.values(d.colorDistribution).forEach(c => { if (c && typeof c === 'object') Object.keys(c).forEach(s => ss.add(s)); }); sc = ss.size; }
+         gQty += qty; gAmt += tp;
+          let pnDisplay = '-';
+          if (d.productName) {
+            const engFull = englishOnly(d.productName) || '';
+            const eng3 = engFull.split(/\s+/).slice(0, 3).join(' ');
+            const chi = chineseOnly(d.productName) || '';
+            pnDisplay = (eng3 + (chi ? ' <span style="font-weight:bold;">' + chi + '</span>' : '')).trim() || '-';
+          }
+          return { n: idx+1, sn: order.serial_number||'-', bc: bc||'-', pn: pnDisplay, clrs, sc, sr, qty, cur: d.currency||'RMB', pr, tp, cn: d.contractNotes||'' };
+       });
+       const el = document.createElement('div');
+       el.style.cssText = 'position:fixed;left:-9999px;top:0;width:1050px;background:#fff;padding:22px 26px;font-family:"Microsoft YaHei",SimHei,SimSun,Inter,sans-serif;color:#000;font-size:15px;line-height:1.4;direction:ltr;text-align:left;-webkit-font-smoothing:antialiased;';
+       const b = 'border:1px solid #000;padding:7px 6px;font-weight:600;';
+       const tc = b+'text-align:center;font-size:14px;';
+       const bl = b+'text-align:left;font-size:14px;';
+       const hr = b+'font-weight:900;text-align:center;font-size:13px;background:#b41e1e;color:#fff;';
+       const hg = b+'font-weight:800;text-align:center;font-size:14px;background:#e6e6e6;color:#000;';
+       const empCnt = Math.max(0, 20 - rows.length);
+       let empH = '';
+       const eCell = '<td style="'+tc+'height:20px;"></td>';
+       for (let i = 0; i < empCnt; i++) empH += '<tr>'+eCell.repeat(12)+'</tr>';
+       let dH = '';
+       rows.forEach(r => {
+         dH += '<tr>'+
+           '<td style="'+tc+'">'+r.n+'</td>'+
+           '<td style="'+tc+'">'+r.sn+'</td>'+
+           '<td style="'+tc+'font-size:12px;">'+r.bc+'</td>'+
+           '<td style="'+bl+'word-break:break-word;white-space:normal;">'+r.pn+'</td>'+
+           '<td style="'+tc+'">'+r.clrs+'</td>'+
+           '<td style="'+tc+'">'+(r.sc>0?r.sc:'-')+'</td>'+
+           '<td style="'+tc+'font-size:12px;">'+r.sr+'</td>'+
+           '<td style="'+tc+'font-weight:800;">'+r.qty+'</td>'+
+           '<td style="'+tc+'font-size:12px;">'+r.cur+'</td>'+
+           '<td style="'+tc+'">'+(r.pr?r.pr.toFixed(2):'0.00')+'</td>'+
+           '<td style="'+tc+'font-weight:800;">'+(r.tp>0?r.tp.toLocaleString(undefined,{minimumFractionDigits:2}):'0.00')+'</td>'+
+           '<td style="'+tc+'">'+r.cn+'</td>'+
+         '</tr>';
+       });
+       const tbs = 'border-collapse:collapse;width:100%;border:2px solid #000;';
+       el.innerHTML =
+         '<div style="text-align:center;margin-bottom:12px;">'+
+           '<span style="font-size:36px;font-weight:900;color:#b41e1e;letter-spacing:1px;">Order Contract \u8BA2\u5355\u5408\u540C</span>'+
+         '</div>'+
+         '<table style="'+tbs+'"><tbody>'+
+           '<tr>'+
+             '<td style="'+bl+'white-space:nowrap;width:1%;"><b>Fact. Name \u5DE5\u5382\u540D\u5B57\uFF1A</b></td>'+
+             '<td style="'+tc+'font-weight:800;font-size:16px;">'+(fDet.name||'-')+'</td>'+
+             '<td style="'+tc+'background:#b41e1e;color:#fff;font-weight:900;font-size:14px;white-space:nowrap;width:1%;">Cont No.</td>'+
+             '<td style="'+tc+'font-weight:900;font-size:17px;width:15%;">'+contNo+'</td>'+
+           '</tr>'+
+           '<tr>'+
+             '<td style="'+bl+'white-space:nowrap;"><b>Fact. Mobile \u5DE5\u5382\u7535\u8BDD\uFF1A</b></td>'+
+             '<td style="'+tc+'font-weight:800;font-size:14px;">'+(fDet.mobile||'-')+'</td>'+
+             '<td style="'+bl+'white-space:nowrap;"><b>Cust. Code \u5BA2\u6237\u4EE3\u7801:</b></td>'+
+             '<td style="'+tc+'font-weight:800;font-size:14px;">'+custCode+'</td>'+
+           '</tr>'+
+           '<tr>'+
+             '<td style="'+bl+'white-space:nowrap;"><b>Fact. Address \u5DE5\u5382\u5730\u5740\uFF1A</b></td>'+
+             '<td style="'+tc+'font-weight:800;font-size:12px;">'+(fDet.address||'-')+'</td>'+
+             '<td style="'+bl+'white-space:nowrap;"><b>Cust. Mobile \u5BA2\u6237\u624B\u673A\uFF1A</b></td>'+
+             '<td style="'+tc+'font-weight:800;font-size:14px;">'+custMobile+'</td>'+
+           '</tr>'+
+         '</tbody></table>'+
+         '<table style="'+tbs+'border-top:none;"><tbody>'+
+           '<tr>'+
+             '<td style="'+hg+'width:25%;">Request Date \u8BA2\u5355\u65E5\u671F</td>'+
+             '<td style="'+tc+'font-weight:800;font-size:14px;width:25%;">'+fD(reqDate)+'</td>'+
+             '<td style="'+hg+'width:25%;">Delivery Date \u4EA4\u8D27\u65E5\u671F</td>'+
+             '<td style="'+tc+'font-weight:800;font-size:14px;width:25%;">'+fD(delDate)+'</td>'+
+           '</tr>'+
+         '</tbody></table>'+
+         '<table style="'+tbs+'border-top:none;"><tbody>'+
+           '<tr>'+
+             '<td style="'+hr+'width:4%;">\u6570\u5B57<br/>No</td>'+
+             '<td style="'+hr+'width:7%;">\u6B3E\u53F7<br/>Model No.</td>'+
+             '<td style="'+hr+'width:10%;">\u6761\u5F62\u7801<br/>Barcode No.</td>'+
+             '<td style="'+hr+'">\u4EA7\u54C1\u540D\u79F0<br/>Product Name</td>'+
+             '<td style="'+hr+'width:5%;">\u989C\u8272<br/>Colors</td>'+
+             '<td style="'+hr+'width:4%;">\u5C3A\u5BF8<br/>Size</td>'+
+             '<td style="'+hr+'width:8%;">\u7801\u6BB5<br/>Prod Sizes</td>'+
+             '<td style="'+hr+'width:6%;">\u6570\u91CF<br/>Prod Qty</td>'+
+             '<td style="'+hr+'width:5%;">\u8D27\u5E01<br/>Currency</td>'+
+             '<td style="'+hr+'width:7%;">\u4EA7\u54C1\u4EF7\u683C<br/>Prod Price</td>'+
+             '<td style="'+hr+'width:10%;">\u603B\u91D1\u989D<br/>Tot. Amount</td>'+
+             '<td style="'+hr+'width:9%;">\u8BA2\u5355\u5907\u6CE8<br/>Contract Notes</td>'+ 
+           '</tr>'+
+           dH + empH +
+           '<tr style="background:#e6e6e6;">'+
+             '<td style="'+tc+'font-weight:900;">Total \u5408\u8BA1</td>'+
+             '<td style="'+tc+'font-weight:900;">'+rows.length+' Items</td>'+
+             '<td style="'+tc+'"></td><td style="'+tc+'"></td><td style="'+tc+'"></td><td style="'+tc+'"></td><td style="'+tc+'"></td>'+
+             '<td style="'+tc+'font-weight:900;font-size:15px;">'+gQty.toLocaleString()+' PCS</td>'+ 
+             '<td style="'+tc+'"></td><td style="'+tc+'"></td>'+
+             '<td style="'+tc+'font-weight:900;font-size:15px;">'+gAmt.toLocaleString(undefined,{minimumFractionDigits:2})+' '+cur+'</td>'+
+             '<td style="'+tc+'"></td>'+
+           '</tr>'+
+         '</tbody></table>'+
+         '<table style="border-collapse:collapse;width:100%;border:2px solid #000;border-top:none;"><tbody>'+
+           '<tr><td style="'+bl+'background:#e6e6e6;font-weight:800;font-size:14px;">Conditions \u72B6\u51B5\uFF1A</td></tr>'+
+           '<tr><td style="'+bl+'height:'+(90 + empCnt * 20)+'px;vertical-align:top;">' +
+             (selectedTerms.length > 0 
+               ? '<ul style="margin:0;padding-left:20px;font-size:13px;font-weight:bold;">' + selectedTerms.map(t => '<li style="margin-bottom:6px;">' + t + '</li>').join('') + '</ul>' 
+               : '') + 
+           '</td></tr>'+
+         '</tbody></table>'+
+         '<table style="border-collapse:collapse;width:100%;border:2px solid #000;border-top:none;"><tbody><tr>'+
+           '<td style="'+bl+'width:25%;padding:14px 10px;">'+
+             '<div style="font-weight:800;font-size:13px;margin-bottom:20px;">Name \u540D\u5B57</div>'+
+             '<div style="font-weight:800;font-size:13px;">Signature \u7B7E\u540D</div>'+
+           '</td>'+
+           '<td style="'+tc+'width:25%;padding:14px 10px;vertical-align:top;">'+
+             '<div style="color:#b41e1e;font-weight:800;font-size:13px;margin-bottom:20px;">Buyer \u4E70\u65B9</div>'+
+             '<div style="border-bottom:2px solid #000;width:80%;margin:0 auto;height:22px;"></div>'+
+           '</td>'+
+           '<td style="'+tc+'width:25%;padding:14px 10px;vertical-align:top;">'+
+             '<div style="color:#b41e1e;font-weight:800;font-size:13px;margin-bottom:20px;">Coordinator \u534F\u8C03\u5458</div>'+
+             '<div style="border-bottom:2px solid #000;width:80%;margin:0 auto;height:22px;"></div>'+
+           '</td>'+
+           '<td style="'+tc+'width:25%;padding:14px 10px;vertical-align:top;">'+
+             '<div style="color:#b41e1e;font-weight:800;font-size:13px;margin-bottom:20px;">Factory \u5DE5\u5382</div>'+
+             '<div style="border-bottom:2px solid #000;width:80%;margin:0 auto;height:22px;"></div>'+
+           '</td>'+
+         '</tr></tbody></table>';
+       document.body.appendChild(el);
+       const { default: html2canvas } = await import('html2canvas');
+       const canvas = await html2canvas(el, { scale: 3, useCORS: true, logging: false, backgroundColor: '#ffffff' });
+       document.body.removeChild(el);
+       const imgData = canvas.toDataURL('image/jpeg', 1.0);
+       const pW = 210;
+       const pM = 5;
+       const cW = pW - pM * 2;
+       const cH = (canvas.height * cW) / canvas.width;
+       const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [pW, Math.max(cH + pM * 2, 297)] });
+       pdf.addImage(imgData, 'JPEG', pM, pM, cW, cH);
+       pdf.save('Order_Contract_' + contNo + '_' + new Date().toISOString().split('T')[0] + '.pdf');
+       toast.success(t('reports.messages.pdf_success'), { id: toastId });
     } catch (err) {
-        toast.error(t('reports.messages.pdf_error'), { id: toastId });
-        console.error(err);
+       toast.error(t('reports.messages.pdf_error'), { id: toastId });
+       console.error(err);
     }
   };
 
@@ -663,16 +703,6 @@ const ReportsPortal = () => {
             onChange={(val) => updateFilter('toDate', val)}
           />
 
-           <div className="form-group" style={{ marginBottom: '1rem' }}>
-              <label className="form-label">{t('reports.filters.company')}</label>
-              <select className="form-control" value={filters.companyName} onChange={(e) => setFilters(prev => ({...prev, companyName: e.target.value}))}>
-                <option value="">{t('reports.filters.all_companies')}</option>
-                {filteredLookups.companies?.map((c, idx) => (
-                  <option key={idx} value={typeof c === 'object' ? c.name : c}>{typeof c === 'object' ? c.name : c}</option>
-                ))}
-              </select>
-            </div>
-
             <div className="form-group" style={{ marginBottom: '1rem' }}>
               <label className="form-label">{t('reports.filters.factory')}</label>
               <select className="form-control" value={filters.factory} onChange={(e) => updateFilter('factory', e.target.value)}>
@@ -683,20 +713,7 @@ const ReportsPortal = () => {
               </select>
             </div>
 
-          <div className="form-group">
-            <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><FileText size={14}/> {t('reports.filters.product_name')}</label>
-            <select 
-              className="form-control" 
-              value={filters.productName} 
-              onChange={(e) => updateFilter('productName', e.target.value)} 
-            >
-              <option value="">{t('reports.filters.all_products')}</option>
-              {lookups.products?.map((p, i) => {
-                const val = typeof p === 'object' ? p.name : p;
-                return <option key={i} value={val}>{val}</option>;
-              })}
-            </select>
-          </div>
+          
           
         </div>
         
@@ -707,7 +724,44 @@ const ReportsPortal = () => {
         </div>
       </div>
 
-
+      {/* Detailed Terms Selection */}
+      <div className="card glass-panel" style={{ marginBottom: '2rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
+          <ListChecks color="var(--accent-color)" />
+          <h3 style={{ margin: 0 }}>{t('reports.detailed_terms', { defaultValue: 'شروط التعبئة الإضافية للفاتورة' })}</h3>
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
+          {lookups.packagingConditionsList && lookups.packagingConditionsList.length > 0 ? lookups.packagingConditionsList.map((term, idx) => {
+            const termName = typeof term === 'object' ? term.name : term;
+            const isSelected = selectedTerms.includes(termName);
+            return (
+              <div 
+                key={idx} 
+                onClick={() => {
+                  setSelectedTerms(prev => isSelected ? prev.filter(t => t !== termName) : [...prev, termName]);
+                }}
+                style={{
+                  padding: '0.6rem 1rem',
+                  border: isSelected ? '2px solid var(--accent-color)' : '1px solid var(--border-color)',
+                  borderRadius: '8px',
+                  backgroundColor: isSelected ? 'rgba(212, 175, 55, 0.1)' : 'var(--surface-color)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  transition: 'all 0.2s',
+                  fontWeight: isSelected ? 'bold' : 'normal'
+                }}
+              >
+                <div style={{ width: '18px', height: '18px', borderRadius: '4px', border: '1px solid ' + (isSelected ? 'var(--accent-color)' : 'var(--text-muted)'), display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: isSelected ? 'var(--accent-color)' : 'transparent' }}>
+                  {isSelected && <CheckCircle2 size={14} color="#000" />}
+                </div>
+                <span>{termName}</span>
+              </div>
+            );
+          }) : <span style={{ color: 'var(--text-muted)' }}>{t('reports.no_terms_available', { defaultValue: 'لا توجد شروط مضافة حالياً. يمكنك إضافتها من الإعدادات.' })}</span>}
+        </div>
+      </div>
 
       {/* Active Filter Pills (Upgraded UX) */}
       {Object.values(filters).some(val => val !== '') && (
@@ -779,16 +833,7 @@ const ReportsPortal = () => {
                 <span style={{ marginInlineStart: '4px', opacity: 0.7 }}>✕</span>
               </div>
             )}
-            {filters.productName && (
-              <div 
-                className="filter-badge-premium"
-                onClick={() => removeFilter('productName')}
-              >
-                <span>{t('reports.filters.product_name')}:</span>
-                <strong style={{ color: 'var(--accent-color)' }}>{filters.productName}</strong>
-                <span style={{ marginInlineStart: '4px', opacity: 0.7 }}>✕</span>
-              </div>
-            )}
+            
           </div>
           <button 
             className="btn btn-outline" 
@@ -1086,4 +1131,4 @@ const ReportsPortal = () => {
   );
 };
 
-export default ReportsPortal;
+export default OrderReports;

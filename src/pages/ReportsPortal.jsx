@@ -50,6 +50,7 @@ const ReportsPortal = () => {
     fromDate: '',
     toDate: '',
     factory: '',
+    productName: '',
   });
 
   // F9 Lookup States
@@ -136,7 +137,8 @@ const ReportsPortal = () => {
   };
 
   const applyFilters = async (customFilters = null) => {
-    const activeFilters = customFilters || filters;
+    // Prevent standard event arguments from being treated as filter values
+    const activeFilters = (customFilters && typeof customFilters === 'object' && !customFilters.nativeEvent) ? customFilters : filters;
     let currentData = orders;
     if (!dataLoaded) {
       currentData = await fetchOrders();
@@ -145,19 +147,32 @@ const ReportsPortal = () => {
     let result = [...currentData];
 
     if (activeFilters.fromSerial) {
-      result = result.filter(o => parseInt(o.serial_number) >= parseInt(activeFilters.fromSerial));
+      result = result.filter(o => o.serial_number && parseInt(o.serial_number) >= parseInt(activeFilters.fromSerial));
     }
     if (activeFilters.toSerial) {
-      result = result.filter(o => parseInt(o.serial_number) <= parseInt(activeFilters.toSerial));
+      result = result.filter(o => o.serial_number && parseInt(o.serial_number) <= parseInt(activeFilters.toSerial));
     }
     if (activeFilters.fromDate) {
-      result = result.filter(o => new Date(o.order_data.requestDate || o.created_at) >= new Date(activeFilters.fromDate));
+      result = result.filter(o => {
+        const orderDateStr = o.order_data?.requestDate || o.created_at?.split('T')[0];
+        return orderDateStr ? orderDateStr >= activeFilters.fromDate : false;
+      });
     }
     if (activeFilters.toDate) {
-      result = result.filter(o => new Date(o.order_data.requestDate || o.created_at) <= new Date(activeFilters.toDate));
+      result = result.filter(o => {
+        const orderDateStr = o.order_data?.requestDate || o.created_at?.split('T')[0];
+        return orderDateStr ? orderDateStr <= activeFilters.toDate : false;
+      });
     }
     if (activeFilters.factory) {
-      result = result.filter(o => (o.order_data.factoryId || '').includes(activeFilters.factory));
+      result = result.filter(o => (o.order_data?.factoryId || '').includes(activeFilters.factory));
+    }
+    if (activeFilters.productName) {
+      const query = activeFilters.productName.toLowerCase().trim();
+      result = result.filter(o => {
+        const prodName = (o.order_data?.productName || '').toLowerCase();
+        return prodName.includes(query);
+      });
     }
 
     // Apply dynamic sorting based on sortConfig
@@ -216,6 +231,7 @@ const ReportsPortal = () => {
       fromDate: '',
       toDate: '',
       factory: '',
+      productName: '',
     };
     setFilters(cleared);
     setFilteredOrders(orders);
@@ -667,7 +683,7 @@ const ReportsPortal = () => {
             onChange={(val) => updateFilter('toDate', val)}
           />
 
-          <div className="form-group">
+           <div className="form-group">
             <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><Factory size={14}/> {t('reports.filters.select_factory')}</label>
             <select className="form-control" value={filters.factory} onChange={(e) => updateFilter('factory', e.target.value)}>
               <option value="">{t('reports.filters.all_factories')}</option>
@@ -677,13 +693,28 @@ const ReportsPortal = () => {
               })}
             </select>
           </div>
+
+          <div className="form-group">
+            <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><FileText size={14}/> {t('reports.filters.product_name')}</label>
+            <select 
+              className="form-control" 
+              value={filters.productName} 
+              onChange={(e) => updateFilter('productName', e.target.value)} 
+            >
+              <option value="">{t('reports.filters.all_products')}</option>
+              {lookups.products?.map((p, i) => {
+                const val = typeof p === 'object' ? p.name : p;
+                return <option key={i} value={val}>{val}</option>;
+              })}
+            </select>
+          </div>
           
         </div>
         
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '2rem' }}>
           <button className="btn btn-outline" onClick={clearFilters}>{t('reports.filters.clear_btn')}</button>
           <button className="btn btn-accent" onClick={async () => { await fetchOrders(); toast.success(t('reports.messages.all_shown'), { id: 'filter-toast' }); }} style={{ backgroundColor: 'var(--accent-color)', color: '#000', fontWeight: 'bold', padding: '0.5rem 1.5rem' }}>{t('reports.filters.show_all_btn')}</button>
-          <button className="btn btn-primary" onClick={applyFilters} style={{ padding: '0.5rem 3rem' }}>{t('reports.filters.search_btn')}</button>
+          <button className="btn btn-primary" onClick={() => applyFilters()} style={{ padding: '0.5rem 3rem' }}>{t('reports.filters.search_btn')}</button>
         </div>
       </div>
 
@@ -754,6 +785,16 @@ const ReportsPortal = () => {
               >
                 <span>{t('reports.filters.select_factory')}:</span>
                 <strong style={{ color: 'var(--accent-color)' }}>{filters.factory}</strong>
+                <span style={{ marginInlineStart: '4px', opacity: 0.7 }}>✕</span>
+              </div>
+            )}
+            {filters.productName && (
+              <div 
+                className="filter-badge-premium"
+                onClick={() => removeFilter('productName')}
+              >
+                <span>{t('reports.filters.product_name')}:</span>
+                <strong style={{ color: 'var(--accent-color)' }}>{filters.productName}</strong>
                 <span style={{ marginInlineStart: '4px', opacity: 0.7 }}>✕</span>
               </div>
             )}

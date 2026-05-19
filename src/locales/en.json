@@ -619,6 +619,8 @@
       "to_date": "To Date",
       "select_factory": "Select Factory",
       "all_factories": "-- All Factories --",
+      "product_name": "Product Name",
+      "all_products": "-- All Products --",
       "clear_btn": "Clear Filters",
       "show_all_btn": "Show All Products",
       "search_btn": "Search & View",

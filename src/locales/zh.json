@@ -602,6 +602,8 @@
       "to_date": "结束日期",
       "select_factory": "选择工厂",
       "all_factories": "-- 所有工厂 --",
+      "product_name": "产品名称",
+      "all_products": "-- 所有产品 --",
       "clear_btn": "清除过滤器",
       "show_all_btn": "显示所有产品",
       "search_btn": "查询并查看",

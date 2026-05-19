@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import { Search, Printer, FileText, CheckCircle2, DownloadCloud, X } from 'lucide-react';
 import { useAppData } from '../context/AppDataContext';
 import { useAuth } from '../context/AuthContext';
-import { englishOnly } from '../utils/textUtils';
+import { englishOnly, chineseOnly } from '../utils/textUtils';
 
 const ExportOrder = () => {
   const { t } = useTranslation();
@@ -509,7 +509,15 @@ const ExportOrder = () => {
 
               {/* ═══ ROW 6: PRODUCT VALUES ═══ */}
               <tr>
-                <td className="val-center val-bold hdr-grey">{englishOnly(order.productName) || '-'}</td>
+                <td className="val-center val-bold hdr-grey">
+                  {englishOnly(order.productName)}
+                  {chineseOnly(order.productName) && (
+                    <span style={{ fontWeight: '800', marginLeft: '8px', color: '#333' }}>
+                      - {chineseOnly(order.productName)}
+                    </span>
+                  )}
+                  {(!englishOnly(order.productName) && !chineseOnly(order.productName)) && '-'}
+                </td>
                 <td className="val-center val-bold bg-cyan">{order.serialNumber || '-'}</td>
                 <td className="val-center val-bold">{order.barcode ? `${order.barcode}` : '-'}</td>
                 <td className="val-center val-bold">{order.totalQuantity || '-'}</td>

@@ -597,6 +597,8 @@
       "to_date": "إلى تاريخ",
       "select_factory": "تحديد المصنع",
       "all_factories": "-- جميع المصانع --",
+      "product_name": "اسم المنتج",
+      "all_products": "-- جميع المنتجات --",
       "clear_btn": "إفراغ الفلاتر",
       "show_all_btn": "إظهار كل المنتجات",
       "search_btn": "بحث وعرض",

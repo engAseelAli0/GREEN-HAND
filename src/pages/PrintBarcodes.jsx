@@ -150,8 +150,8 @@ const PrintBarcodes = () => {
     try {
       const { data, error } = await supabase
         .from('orders')
-        .select('order_data')
-        .eq('serial_number', termToSearch.trim())
+        .select('serial_number, order_data')
+        .ilike('serial_number', termToSearch.trim())
         .single();
         
       if (error || !data) {
@@ -172,7 +172,8 @@ const PrintBarcodes = () => {
         }
 
         toast.success(t('print.messages.found'), { id: toastId });
-        generateRows(data.order_data, termToSearch.trim());
+        setSerialInput(data.serial_number);
+        generateRows(data.order_data, data.serial_number);
       }
     } catch (err) {
       if (err.message === "Unauthorized factory" || err.message === "Unauthorized company") {

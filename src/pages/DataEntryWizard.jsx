@@ -707,13 +707,13 @@ const DataEntryWizard = () => {
 
     const toastId = toast.loading(t('entry.messages.searching'));
     try {
-      const { data, error } = await supabase.from('orders').select('*').eq('serial_number', searchVal).single();
+      const { data, error } = await supabase.from('orders').select('*').ilike('serial_number', searchVal).single();
       if (error || !data) {
         toast.error(t('entry.messages.not_found'), { id: toastId });
         return;
       }
       
-      const { data: recData } = await supabase.from('receivings').select('receive_data').eq('serial_number', searchVal).single();
+      const { data: recData } = await supabase.from('receivings').select('receive_data').ilike('serial_number', searchVal).single();
       const isReceived = recData && recData.receive_data && recData.receive_data.status && typeof recData.receive_data.status === 'string' && (
         recData.receive_data.status.includes('Received') ||
         recData.receive_data.status === 'مستلمة' ||

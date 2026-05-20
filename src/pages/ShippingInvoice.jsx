@@ -65,7 +65,7 @@ const ShippingInvoice = () => {
     sealNo: ''
   });
 
-  const [isExporting] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [showFetchDialog, setShowFetchDialog] = useState(false);
   const [showImageColumn, setShowImageColumn] = useState(false);
 
@@ -205,10 +205,18 @@ const ShippingInvoice = () => {
       let invalidItems = [];
 
       try {
-          const { data: ordersData } = await supabase.from('orders').select('serial_number').in('serial_number', serialsToCheck);
-          const existingOrders = new Set(ordersData?.map(o => o.serial_number) || []);
+          const querySerials = [];
+          serialsToCheck.forEach(s => {
+              querySerials.push(s);
+              querySerials.push(s.toLowerCase());
+              querySerials.push(s.toUpperCase());
+          });
+          const uniqueQuerySerials = [...new Set(querySerials)];
+
+          const { data: ordersData } = await supabase.from('orders').select('serial_number').in('serial_number', uniqueQuerySerials);
+          const existingOrders = new Set(ordersData?.map(o => o.serial_number.toLowerCase()) || []);
           
-          const { data: recData } = await supabase.from('receivings').select('serial_number, receive_data').in('serial_number', serialsToCheck);
+          const { data: recData } = await supabase.from('receivings').select('serial_number, receive_data').in('serial_number', uniqueQuerySerials);
           const receivedMap = new Map();
           recData?.forEach(r => {
               const isReceivedStatus = r.receive_data && r.receive_data.status && typeof r.receive_data.status === 'string' && (
@@ -218,7 +226,7 @@ const ShippingInvoice = () => {
                   r.receive_data.status === t('receiving.info.received')
               );
               if (isReceivedStatus) {
-                  receivedMap.set(r.serial_number, true);
+                  receivedMap.set(r.serial_number.toLowerCase(), true);
               }
           });
 
@@ -226,13 +234,14 @@ const ShippingInvoice = () => {
           rows.forEach(r => {
               const s = r.serial.trim();
               if (s) {
-                  if (seenSerials.has(s)) {
+                  const sLower = s.toLowerCase();
+                  if (seenSerials.has(sLower)) {
                       invalidItems.push({ id: r.id, serial: s, reason: t('shipping.validation.reasons.duplicate') });
                   } else {
-                      seenSerials.add(s);
-                      if (!existingOrders.has(s)) {
+                      seenSerials.add(sLower);
+                      if (!existingOrders.has(sLower)) {
                           invalidItems.push({ id: r.id, serial: s, reason: t('shipping.validation.reasons.not_found') });
-                      } else if (!receivedMap.has(s)) {
+                      } else if (!receivedMap.has(sLower)) {
                           invalidItems.push({ id: r.id, serial: s, reason: t('shipping.validation.reasons.not_received') });
                       }
                   }
@@ -279,12 +288,13 @@ const ShippingInvoice = () => {
             try {
                 const { data, error } = await supabase
                     .from('orders')
-                    .select('order_data')
-                    .eq('serial_number', r.serial.trim())
+                    .select('serial_number, order_data')
+                    .ilike('serial_number', r.serial.trim())
                     .single();
 
                 if (!error && data) {
                     const d = data.order_data;
+                    const matchedSerial = data.serial_number || r.serial.trim();
                     
                     // Data-level authorization check
                     if (user && user.role !== 'admin') {
@@ -312,6 +322,7 @@ const ShippingInvoice = () => {
 
                     updatedRows[i] = {
                         ...r,
+                        serial: matchedSerial, // Keep the clean database casing
                         desc: englishOnly(d.productName) || '',
                         arabicName: englishOnly(d.productName) || '',
                         qty: totalPieces.toString(),
@@ -355,7 +366,13 @@ const ShippingInvoice = () => {
   const primaryCurrency = rows[0]?.currency || 'RMB ¥';
 
   const exportToPDF = () => {
+    const today = new Date();
+    const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const invoiceNo = headerInfo.invoiceNo ? `_${headerInfo.invoiceNo}` : '';
+    const originalTitle = document.title;
+    document.title = `Shipping_Invoice${invoiceNo}_${dateStr}`;
     window.print();
+    setTimeout(() => { document.title = originalTitle; }, 1000);
   };
 
   const exportToExcel = async () => {
@@ -430,6 +447,7 @@ const ShippingInvoice = () => {
     font-family: 'Arial', 'Microsoft YaHei', sans-serif;
     direction: ltr;
     margin: 20px;
+    font-size: 14px;
   }
   .inv-header {
     border-bottom: 3px solid #1a5276;
@@ -437,13 +455,13 @@ const ShippingInvoice = () => {
     text-align: center;
   }
   .company-name {
-    font-size: 22px;
+    font-size: 26px;
     font-weight: 900;
     color: #1a5276;
     text-transform: uppercase;
   }
   .company-tel {
-    font-size: 11px;
+    font-size: 13px;
     color: #555;
     margin-top: 5px;
   }
@@ -456,7 +474,7 @@ const ShippingInvoice = () => {
   }
   .inv-meta-table td {
     padding: 8px;
-    font-size: 11px;
+    font-size: 13px;
     border: 1px solid #cbd5e1;
   }
   .inv-meta-label {
@@ -464,7 +482,7 @@ const ShippingInvoice = () => {
     color: #1a5276;
   }
   .inv-title {
-    font-size: 18px;
+    font-size: 22px;
     color: #1a5276;
     text-align: center;
     margin: 20px 0;
@@ -475,7 +493,7 @@ const ShippingInvoice = () => {
   .inv-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 11px;
+    font-size: 13px;
     border: 2px solid #1a5276;
   }
   .inv-table th {
@@ -484,7 +502,7 @@ const ShippingInvoice = () => {
     font-weight: bold;
     padding: 10px 5px;
     border: 1px solid #1a5276;
-    font-size: 10px;
+    font-size: 12px;
     text-transform: uppercase;
   }
   .inv-table td {
@@ -505,15 +523,15 @@ const ShippingInvoice = () => {
     mso-number-format: "\\@";
   }
   .inv-footer-table {
-    width: 60%;
+    width: 450px;
     margin-top: 20px;
     float: right;
     border-collapse: collapse;
-    font-size: 11px;
+    font-size: 13px;
   }
   .inv-footer-table td {
     border: 1px solid #cbd5e1;
-    padding: 6px;
+    padding: 8px;
     text-align: center;
     color: #0f172a;
   }
@@ -526,7 +544,7 @@ const ShippingInvoice = () => {
     width: 100%;
     margin-top: 20px;
     border-collapse: collapse;
-    font-size: 11px;
+    font-size: 13px;
   }
   .inv-bottom-table td {
     border: 1px solid #000;
@@ -615,35 +633,28 @@ const ShippingInvoice = () => {
   <div style="width: 100%; display: inline-block;">
     <table class="inv-footer-table">
       <tr>
-        <td class="highlight-cell" width="25%">${t('shipping.footer.total')}</td>
-        <td width="25%">${totalItemsCount} ${t('shipping.footer.items')}</td>
-        <td width="25%">${totalPcs} ${t('shipping.footer.pcs')}</td>
-        <td class="highlight-cell" width="25%">${subTotalAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })} ${primaryCurrency}</td>
+        <td style="text-align: left; padding: 8px; border: 1px solid #cbd5e1;">${t('shipping.footer.total')} (${totalItemsCount} ${t('shipping.footer.items')} / ${totalPcs} ${t('shipping.footer.pcs')})</td>
+        <td class="highlight-cell" style="text-align: right; padding: 8px; border: 1px solid #cbd5e1;">${subTotalAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })} ${primaryCurrency}</td>
       </tr>
       <tr>
-        <td colspan="2" style="border:none;"></td>
-        <td style="background-color:rgba(212, 175, 55, 0.05);">${t('shipping.footer.commission')} (${footerInfo.commissionPercent || 0}%)</td>
-        <td>${commissionAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })} ${primaryCurrency}</td>
+        <td style="background-color:rgba(212, 175, 55, 0.05); text-align: left; padding: 8px; border: 1px solid #cbd5e1;">${t('shipping.footer.commission')} (${footerInfo.commissionPercent || 0}%)</td>
+        <td style="text-align: right; padding: 8px; border: 1px solid #cbd5e1;">${commissionAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })} ${primaryCurrency}</td>
       </tr>
       <tr>
-        <td colspan="2" style="border:none;"></td>
-        <td style="background-color:rgba(212, 175, 55, 0.05);">${t('shipping.footer.container_fee')}</td>
-        <td>${contFee.toLocaleString('en-US', { minimumFractionDigits: 2 })} ${primaryCurrency}</td>
+        <td style="background-color:rgba(212, 175, 55, 0.05); text-align: left; padding: 8px; border: 1px solid #cbd5e1;">${t('shipping.footer.container_fee')}</td>
+        <td style="text-align: right; padding: 8px; border: 1px solid #cbd5e1;">${contFee.toLocaleString('en-US', { minimumFractionDigits: 2 })} ${primaryCurrency}</td>
       </tr>
       <tr>
-        <td colspan="2" style="border:none;"></td>
-        <td style="background-color:rgba(212, 175, 55, 0.05);">${t('shipping.footer.insurance')}</td>
-        <td>${ins.toLocaleString('en-US', { minimumFractionDigits: 2 })} ${primaryCurrency}</td>
+        <td style="background-color:rgba(212, 175, 55, 0.05); text-align: left; padding: 8px; border: 1px solid #cbd5e1;">${t('shipping.footer.insurance')}</td>
+        <td style="text-align: right; padding: 8px; border: 1px solid #cbd5e1;">${ins.toLocaleString('en-US', { minimumFractionDigits: 2 })} ${primaryCurrency}</td>
       </tr>
       <tr>
-        <td colspan="2" style="border:none;"></td>
-        <td style="background-color:rgba(212, 175, 55, 0.05);">${t('shipping.footer.internal_shipping')}</td>
-        <td>${intShip.toLocaleString('en-US', { minimumFractionDigits: 2 })} ${primaryCurrency}</td>
+        <td style="background-color:rgba(212, 175, 55, 0.05); text-align: left; padding: 8px; border: 1px solid #cbd5e1;">${t('shipping.footer.internal_shipping')}</td>
+        <td style="text-align: right; padding: 8px; border: 1px solid #cbd5e1;">${intShip.toLocaleString('en-US', { minimumFractionDigits: 2 })} ${primaryCurrency}</td>
       </tr>
-      <tr style="font-size:12px; font-weight:bold; background-color:rgba(212, 175, 55, 0.15);">
-        <td colspan="2" style="border:none;"></td>
-        <td style="color:#1a5276;">${t('shipping.footer.invoice_total')}</td>
-        <td style="color:#1a5276;">${invoiceTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })} ${primaryCurrency}</td>
+      <tr style="font-size:14px; font-weight:bold; background-color:rgba(212, 175, 55, 0.15);">
+        <td style="color:#1a5276; text-align: left; padding: 8px; border: 1px solid #cbd5e1;">${t('shipping.footer.invoice_total')}</td>
+        <td style="color:#1a5276; text-align: right; padding: 8px; border: 1px solid #cbd5e1;">${invoiceTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })} ${primaryCurrency}</td>
       </tr>
     </table>
   </div>
@@ -735,15 +746,15 @@ ${imgInfo.base64Data}
               <button className="btn btn-outline no-print" onClick={exportToExcel} disabled={isExporting} style={{ padding: '12px 24px', fontSize: '1.1rem', color: '#107c41', borderColor: '#107c41', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <FileSpreadsheet size={20} /> {t('shipping.actions.excel_btn')}
               </button>
-              <button className="btn btn-primary no-print" onClick={exportToPDF} disabled={isExporting} style={{ padding: '12px 24px', fontSize: '1.1rem' }}>
-                {isExporting ? <div className="spinner" style={{ width: '20px', height: '20px' }}/> : <><Printer size={20} /> {t('shipping.print_btn')}</>}
+              <button className="btn btn-primary no-print" onClick={exportToPDF} style={{ padding: '12px 24px', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Printer size={20} /> {t('shipping.print_btn')}
               </button>
             </>
           )}
         </div>
       </div>
 
-      <div id="invoice-print-area" style={{ 
+      <div id="invoice-print-area" className="" style={{ 
           background: 'var(--surface-color)', 
           border: '2px solid var(--accent-color)', 
           borderRadius: '16px', 
@@ -763,7 +774,7 @@ ${imgInfo.base64Data}
                 background: #fff !important;
                 color: #000 !important;
                 margin: 0 !important; padding: 0 !important;
-                font-size: 10px !important;
+                font-size: 12px !important;
               }
               body * { visibility: hidden; }
               #invoice-print-area, #invoice-print-area * { visibility: visible; }
@@ -781,57 +792,57 @@ ${imgInfo.base64Data}
                 background: #fff !important;
               }
               .inv-header-section input {
-                font-size: 15px !important; color: #1a5276 !important; font-family: 'Arial', sans-serif !important; font-weight: bold !important;
+                font-size: 17px !important; color: #1a5276 !important; font-family: 'Arial', sans-serif !important; font-weight: bold !important;
               }
               .inv-header-section .company-tel input {
-                font-size: 11px !important; color: #555 !important; font-family: sans-serif !important;
+                font-size: 13px !important; color: #555 !important; font-family: sans-serif !important;
               }
               .inv-meta-grid {
                 padding: 8px 12px !important; gap: 8px !important;
                 background: #f8fafc !important; border: 1px solid #cbd5e1 !important;
                 border-radius: 4px !important; margin-top: 8px !important;
               }
-              .inv-meta-grid label { font-size: 9px !important; color: #64748b !important; margin-bottom: 2px !important; text-transform: uppercase !important; letter-spacing: 0.5px !important; }
+              .inv-meta-grid label { font-size: 11px !important; color: #64748b !important; margin-bottom: 2px !important; text-transform: uppercase !important; letter-spacing: 0.5px !important; }
               .inv-meta-grid input, .inv-meta-grid .form-control {
-                font-size: 11px !important; padding: 4px 6px !important;
+                font-size: 13px !important; padding: 4px 6px !important;
                 border: 1px solid #94a3b8 !important; color: #0f172a !important; font-weight: bold !important;
                 background: #fff !important; min-height: unset !important;
                 height: auto !important;
               }
-              .inv-title-h2 { font-size: 16px !important; margin: 12px 0 8px !important; text-transform: uppercase !important; letter-spacing: 1.5px !important; color: #1a5276 !important; font-weight: 900 !important; }
+              .inv-title-h2 { font-size: 18px !important; margin: 12px 0 8px !important; text-transform: uppercase !important; letter-spacing: 1.5px !important; color: #1a5276 !important; font-weight: 900 !important; }
               /* Table compact */
-              .inv-main-table { font-size: 10px !important; table-layout: auto !important; border-collapse: collapse !important; border: 2px solid #1a5276 !important; }
+              .inv-main-table { font-size: 12px !important; table-layout: auto !important; border-collapse: collapse !important; border: 2px solid #1a5276 !important; }
               .inv-main-table th {
-                padding: 6px 4px !important; font-size: 9px !important;
+                padding: 8px 6px !important; font-size: 11px !important;
                 background: #1a5276 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
                 border: 1px solid #1a5276 !important; color: #fff !important;
                 white-space: normal !important; text-transform: uppercase !important; letter-spacing: 0.5px !important;
               }
               .inv-main-table td {
-                padding: 4px !important; border: 1px solid #94a3b8 !important;
+                padding: 6px !important; border: 1px solid #94a3b8 !important;
                 color: #0f172a !important; white-space: normal !important;
                 word-wrap: break-word !important; overflow-wrap: break-word !important;
               }
               .inv-main-table td span { color: #0f172a !important; }
               .inv-main-table input {
-                font-size: 10px !important; color: #0f172a !important; font-weight: bold !important;
+                font-size: 12px !important; color: #0f172a !important; font-weight: bold !important;
                 padding: 0 !important; height: auto !important;
                 min-height: unset !important;
                 display: none !important;
               }
               .inv-main-table .print-val {
-                display: inline !important; font-size: 10px !important;
+                display: inline !important; font-size: 12px !important;
                 color: #0f172a !important; font-weight: bold !important;
               }
-              .inv-main-table img { width: 35px !important; height: 45px !important; border-radius: 2px !important; border: 1px solid #ccc !important; }
+              .inv-main-table img { width: 40px !important; height: 52px !important; border-radius: 2px !important; border: 1px solid #ccc !important; }
               /* Footer table */
-              .inv-footer-table { font-size: 11px !important; border-collapse: collapse !important; border: 2px solid #1a5276 !important; }
+              .inv-footer-table { font-size: 12px !important; border-collapse: collapse !important; border: 2px solid #1a5276 !important; margin-left: 0 !important; margin-right: auto !important; }
               .inv-footer-table td {
-                padding: 6px 8px !important; border: 1px solid #94a3b8 !important;
+                padding: 8px 10px !important; border: 1px solid #94a3b8 !important;
                 color: #0f172a !important; font-weight: bold !important;
               }
               .inv-footer-table input {
-                font-size: 11px !important; color: #0f172a !important; font-weight: bold !important;
+                font-size: 12px !important; color: #0f172a !important; font-weight: bold !important;
                 padding: 0 !important;
               }
               .inv-footer-table .highlight-cell {
@@ -842,13 +853,13 @@ ${imgInfo.base64Data}
                 font-weight: 900 !important; border-top: 2px solid #1a5276 !important; border-bottom: 2px solid #1a5276 !important; color: #1a5276 !important;
               }
               /* Bottom details */
-              .inv-bottom-details { font-size: 10px !important; gap: 2px !important; margin-top: 6px !important; }
+              .inv-bottom-details { font-size: 12px !important; gap: 2px !important; margin-top: 6px !important; }
               .inv-bottom-details > div {
-                padding: 3px 8px !important; border-radius: 0 !important;
+                padding: 4px 10px !important; border-radius: 0 !important;
                 background: #fff !important; border: 1px solid #000 !important;
               }
               .inv-bottom-details input {
-                font-size: 10px !important; color: #000 !important;
+                font-size: 12px !important; color: #000 !important;
               }
             }
           `}
@@ -947,7 +958,7 @@ ${imgInfo.base64Data}
 
            {/* ─── INVOICE TABLE ─── */}
            <div style={{ overflowX: 'auto' }}>
-             <table className="inv-main-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center', fontSize: '0.9rem' }}>
+             <table className="inv-main-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center', fontSize: '1.15rem' }}>
                <thead>
                  <tr style={{ background: 'var(--surface-highlight)', borderBottom: '2px solid var(--accent-color)' }}>
                    <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '40px' }}>{t('shipping.table.cols.no')}</th>
@@ -1134,7 +1145,7 @@ ${imgInfo.base64Data}
                      {showImageColumn && (
                         <td style={{ border: '1px solid var(--border-color)', padding: '5px', textAlign: 'center' }}>
                             {row.image ? (
-                                <img src={row.image} alt="Product" style={{ width: '60px', height: '80px', objectFit: 'contain', borderRadius: '4px' }} />
+                                <img src={row.image} alt="Product" crossOrigin="anonymous" style={{ width: '60px', height: '80px', objectFit: 'contain', borderRadius: '4px' }} />
                             ) : (
                                 <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('shipping.table.no_image')}</span>
                             )}
@@ -1183,65 +1194,66 @@ ${imgInfo.base64Data}
              </div>
            )}
 
-           {/* ─── FOOTER CALCULATIONS (LTR LAYOUT) ─── */}
-           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '2rem' }}>
-              <table className="inv-footer-table" style={{ width: '60%', minWidth: '600px', borderCollapse: 'collapse', textAlign: 'center', fontWeight: 'bold' }} dir="ltr">
+           {/* ─── FOOTER CALCULATIONS (ALWAYS LEFT-ALIGNED) ─── */}
+           <div style={{ display: 'flex', justifyContent: 'left', marginTop: '2rem', width: '100%' }}>
+              <table className="inv-footer-table" style={{ width: '800px', borderCollapse: 'collapse', textAlign: 'center', fontWeight: 'bold', fontSize: '1.15rem', marginLeft: '0', marginRight: 'auto' }} dir="ltr">
                  <tbody>
-                    {/* Row 1: {t('shipping.footer.total')}s */}
+                    {/* Row 1: Subtotal */}
                     <tr>
-                       <td style={{ padding: '12px', background: 'rgba(212, 175, 55, 0.1)', border: '1px solid var(--border-color)', color: 'var(--text-strong)', fontSize: '1.2rem' }} className="highlight-cell">{t('shipping.footer.total')}</td>
-                       <td style={{ padding: '12px', border: '1px solid var(--border-color)' }}>{totalItemsCount} {t('shipping.footer.items')}</td>
-                       <td style={{ padding: '12px', border: '1px solid var(--border-color)' }}>{totalPcs} {t('shipping.footer.pcs')}</td>
-                       <td style={{ padding: '12px', background: 'rgba(212, 175, 55, 0.1)', border: '1px solid var(--border-color)', fontSize: '1.2rem', color: 'var(--accent-color)' }} className="highlight-cell">
+                       <td style={{ padding: '12px', border: '1px solid var(--border-color)', color: 'var(--text-muted)', textAlign: 'left' }}>
+                          {t('shipping.footer.total')} ({totalItemsCount} {t('shipping.footer.items')} / {totalPcs} {t('shipping.footer.pcs')})
+                       </td>
+                       <td style={{ padding: '12px', background: 'rgba(212, 175, 55, 0.1)', border: '1px solid var(--border-color)', color: 'var(--accent-color)', textAlign: 'right' }} className="highlight-cell">
                           {subTotalAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })} {primaryCurrency}
                        </td>
                     </tr>
                     
-                    {/* Row 2: {t('shipping.footer.commission')} */}
+                    {/* Row 2: Commission */}
                     <tr>
-                       <td colSpan={2} style={{ border: 'none' }}></td>
-                       <td style={{ padding: '12px', background: 'rgba(212, 175, 55, 0.05)', border: '1px solid var(--border-color)' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                             {t('shipping.footer.commission')} <input type="number" value={footerInfo.commissionPercent} onChange={e => setFooterInfo({...footerInfo, commissionPercent: e.target.value})} style={{ width: '40px', background: 'var(--bg-color)', border: '1px solid var(--border-color)', color: 'var(--text-main)', textAlign: 'center', borderRadius: '4px' }} /> %
+                       <td style={{ padding: '12px', background: 'rgba(212, 175, 55, 0.05)', border: '1px solid var(--border-color)', textAlign: 'left' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                             {t('shipping.footer.commission')} 
+                             <input 
+                               type="number" 
+                               value={footerInfo.commissionPercent} 
+                               onChange={e => setFooterInfo({...footerInfo, commissionPercent: e.target.value})} 
+                               style={{ width: '60px', background: 'var(--bg-color)', border: '1px solid var(--border-color)', color: 'var(--text-main)', textAlign: 'center', borderRadius: '4px', padding: '2px', fontWeight: 'bold', fontSize: '1.1rem' }} 
+                             /> %
                           </div>
                        </td>
-                       <td style={{ padding: '12px', border: '1px solid var(--border-color)' }}>
-                          {commissionAmount > 0 ? commissionAmount.toLocaleString('en-US', { minimumFractionDigits: 2 }) + ' ' + primaryCurrency : '0.00'}
+                       <td style={{ padding: '12px', border: '1px solid var(--border-color)', textAlign: 'right' }}>
+                          {commissionAmount > 0 ? commissionAmount.toLocaleString('en-US', { minimumFractionDigits: 2 }) + ' ' + primaryCurrency : '0.00 ' + primaryCurrency}
                        </td>
                     </tr>
 
-                    {/* Row 3: {t('shipping.footer.container_fee')} */}
+                    {/* Row 3: Container Fee */}
                     <tr>
-                       <td colSpan={2} style={{ border: 'none' }}></td>
-                       <td style={{ padding: '12px', background: 'rgba(212, 175, 55, 0.05)', border: '1px solid var(--border-color)' }}>{t('shipping.footer.container_fee')}</td>
+                       <td style={{ padding: '12px', background: 'rgba(212, 175, 55, 0.05)', border: '1px solid var(--border-color)', textAlign: 'left' }}>{t('shipping.footer.container_fee')}</td>
                        <td style={{ padding: '8px', border: '1px solid var(--border-color)' }}>
-                          <input type="number" value={footerInfo.containerFee} onChange={e => setFooterInfo({...footerInfo, containerFee: e.target.value})} placeholder="0.00" style={{ width: '100%', background: 'transparent', border: 'none', color: 'var(--text-main)', textAlign: 'center', fontWeight: 'bold', fontSize: '1rem' }} />
+                          <input type="number" value={footerInfo.containerFee} onChange={e => setFooterInfo({...footerInfo, containerFee: e.target.value})} placeholder="0.00" style={{ width: '100%', background: 'transparent', border: 'none', color: 'var(--text-main)', textAlign: 'right', fontWeight: 'bold', fontSize: '1.15rem' }} />
                        </td>
                     </tr>
 
-                    {/* Row 4: {t('shipping.footer.insurance')} */}
+                    {/* Row 4: Insurance */}
                     <tr>
-                       <td colSpan={2} style={{ border: 'none' }}></td>
-                       <td style={{ padding: '12px', background: 'rgba(212, 175, 55, 0.05)', border: '1px solid var(--border-color)' }}>{t('shipping.footer.insurance')}</td>
+                       <td style={{ padding: '12px', background: 'rgba(212, 175, 55, 0.05)', border: '1px solid var(--border-color)', textAlign: 'left' }}>{t('shipping.footer.insurance')}</td>
                        <td style={{ padding: '8px', border: '1px solid var(--border-color)' }}>
-                          <input type="number" value={footerInfo.insurance} onChange={e => setFooterInfo({...footerInfo, insurance: e.target.value})} placeholder="0.00" style={{ width: '100%', background: 'transparent', border: 'none', color: 'var(--text-main)', textAlign: 'center', fontWeight: 'bold', fontSize: '1rem' }} />
+                          <input type="number" value={footerInfo.insurance} onChange={e => setFooterInfo({...footerInfo, insurance: e.target.value})} placeholder="0.00" style={{ width: '100%', background: 'transparent', border: 'none', color: 'var(--text-main)', textAlign: 'right', fontWeight: 'bold', fontSize: '1.15rem' }} />
                        </td>
                     </tr>
 
-                    {/* Row 5: {t('shipping.footer.internal_shipping')} */}
+                    {/* Row 5: Internal Shipping */}
                     <tr>
-                       <td colSpan={2} style={{ border: 'none' }}></td>
-                       <td style={{ padding: '12px', background: 'rgba(212, 175, 55, 0.05)', border: '1px solid var(--border-color)' }}>{t('shipping.footer.internal_shipping')}</td>
+                       <td style={{ padding: '12px', background: 'rgba(212, 175, 55, 0.05)', border: '1px solid var(--border-color)', textAlign: 'left' }}>{t('shipping.footer.internal_shipping')}</td>
                        <td style={{ padding: '8px', border: '1px solid var(--border-color)' }}>
-                          <input type="number" value={footerInfo.internalShipping} onChange={e => setFooterInfo({...footerInfo, internalShipping: e.target.value})} placeholder="0.00" style={{ width: '100%', background: 'transparent', border: 'none', color: 'var(--text-main)', textAlign: 'center', fontWeight: 'bold', fontSize: '1rem' }} />
+                          <input type="number" value={footerInfo.internalShipping} onChange={e => setFooterInfo({...footerInfo, internalShipping: e.target.value})} placeholder="0.00" style={{ width: '100%', background: 'transparent', border: 'none', color: 'var(--text-main)', textAlign: 'right', fontWeight: 'bold', fontSize: '1.15rem' }} />
                        </td>
                     </tr>
 
                     {/* Row 6: Final Total */}
                     <tr>
-                       <td colSpan={2} style={{ border: 'none' }}></td>
-                       <td style={{ padding: '12px', background: 'var(--accent-color)', color: '#000', border: '1px solid var(--border-color)' }} className="total-cell">{t('shipping.footer.invoice_total')}</td>
-                       <td style={{ padding: '12px', background: 'rgba(212, 175, 55, 0.5)', border: '1px solid var(--border-color)', color: 'var(--accent-color)', fontSize: '1.4rem' }} className="total-cell">
+                       <td style={{ padding: '12px', background: 'var(--accent-color)', color: '#000', border: '1px solid var(--border-color)', textAlign: 'left' }} className="total-cell">{t('shipping.footer.invoice_total')}</td>
+                       <td style={{ padding: '12px', background: 'rgba(212, 175, 55, 0.5)', border: '1px solid var(--border-color)', color: 'var(--accent-color)', fontSize: '1.4rem', textAlign: 'right' }} className="total-cell">
                           {invoiceTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })} {primaryCurrency}
                        </td>
                     </tr>

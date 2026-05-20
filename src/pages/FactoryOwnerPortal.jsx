@@ -58,8 +58,8 @@ const FactoryOwnerPortal = () => {
     try {
       const { data: oDataResp, error: oError } = await supabase
         .from('orders')
-        .select('order_data')
-        .eq('serial_number', termToSearch.trim())
+        .select('serial_number, order_data')
+        .ilike('serial_number', termToSearch.trim())
         .single();
         
       if (oError || !oDataResp) {
@@ -70,6 +70,7 @@ const FactoryOwnerPortal = () => {
       }
       
       const oData = oDataResp.order_data;
+      setModelNo(oDataResp.serial_number);
       setOriginalOrderData(oData);
 
       setProductInfo({
@@ -221,7 +222,7 @@ const FactoryOwnerPortal = () => {
       const { error } = await supabase
         .from('orders')
         .update({ order_data: updatedOrderData })
-        .eq('serial_number', modelNo.trim());
+        .ilike('serial_number', modelNo.trim());
 
       if (error) throw error;
       toast.success(t('owner.messages.save_success'), { id: toastId });

@@ -167,15 +167,23 @@ const UserManagement = () => {
           initialPermissions[p] = { view: true, add: false, edit: false, delete: false, export: false };
         });
       }
+
+      // Deep copy and strip internal system fields that must NOT be copied
+      const cleanedPermissions = JSON.parse(JSON.stringify(initialPermissions));
+      delete cleanedPermissions.__auth_email;   // Must NOT copy source user's login email
+      delete cleanedPermissions.__is_suspended; // Must NOT copy suspended status
+
       setFormData(prev => ({
         ...prev,
+        // Keep the new user's username/password, only copy role + permissions
         role: selectedUser.role,
         allowed_pages: selectedUser.allowed_pages || [],
-        permissions: JSON.parse(JSON.stringify(initialPermissions)) // Deep copy
+        permissions: cleanedPermissions
       }));
       toast.success(t('user_mgmt.messages.permissions_copied') || 'Permissions copied successfully!');
     }
   };
+
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -185,7 +193,8 @@ const UserManagement = () => {
     }
 
     try {
-      const allowedPagesArray = Object.keys(formData.permissions).filter(pageId => formData.permissions[pageId]?.view);
+      const PAGE_IDS = ALL_PAGES.map(p => p.id);
+      const allowedPagesArray = PAGE_IDS.filter(pageId => formData.permissions[pageId]?.view === true);
       
       if (isEditing) {
         const oldUser = users.find(u => u.id === editId);

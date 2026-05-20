@@ -44,7 +44,7 @@ const ExportOrder = () => {
       const { data, error } = await supabase
         .from('orders')
         .select('*')
-        .eq('serial_number', termToSearch.trim())
+        .ilike('serial_number', termToSearch.trim())
         .single();
 
       if (error || !data) {
@@ -71,6 +71,7 @@ const ExportOrder = () => {
         }
         
         toast.success(t('export.messages.fetch_success'), { id: toastId });
+        setSearchTerm(data.serial_number);
         setOrder({ serialNumber: data.serial_number, ...orderData });
       }
     } catch {

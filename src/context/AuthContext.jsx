@@ -10,19 +10,43 @@ export const AuthProvider = ({ children }) => {
   const { t } = useTranslation();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [mfaPending, setMfaPending] = useState(false);
+  const [mfaFactors, setMfaFactors] = useState([]);
+
+  const checkMfaAssurance = async () => {
+    try {
+      const { data: aalData, error: aalError } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      if (aalError) throw aalError;
+      
+      if (aalData.nextLevel === 'aal2' && aalData.currentLevel === 'aal1') {
+        setMfaPending(true);
+        // Fetch active factors that can be used for verification challenge
+        const { data: factorsData, error: factorsError } = await supabase.auth.mfa.listFactors();
+        if (!factorsError && factorsData?.all) {
+          const verifiedFactors = factorsData.all.filter(f => f.status === 'verified');
+          setMfaFactors(verifiedFactors);
+        } else {
+          setMfaFactors([]);
+        }
+      } else {
+        setMfaPending(false);
+        setMfaFactors([]);
+      }
+    } catch (err) {
+      console.error('Error checking MFA level:', err);
+    }
+  };
 
   const fetchUserPermissions = async (authSessionUser) => {
     try {
       if (!authSessionUser) {
         setUser(null);
         setLoading(false);
-        return null; // Return value for sync usage
+        return null;
       }
 
-      // Use user_metadata.username if available, otherwise fallback to parsing email
       const username = authSessionUser.user_metadata?.username || authSessionUser.email.replace('@greenhand.local', '');
 
-      // Fetch role and pages from system_users
       const { data, error } = await supabase
         .from('system_users')
         .select('id, username, role, allowed_pages, permissions')
@@ -32,7 +56,6 @@ export const AuthProvider = ({ children }) => {
       let userObj;
       if (error || !data) {
         console.warn('Could not fetch system_users record:', error);
-        // If user is not in system_users and is not admin, they were probably deleted! Deny access.
         if (username !== 'admin' && authSessionUser.user_metadata?.role !== 'admin') {
           console.error('User was deleted from system_users. Denying access.');
           await supabase.auth.signOut();
@@ -41,7 +64,6 @@ export const AuthProvider = ({ children }) => {
           return null;
         }
         
-        // Fallback for Master Admin created from Supabase dashboard directly
         userObj = {
           id: authSessionUser.id,
           username: username,
@@ -57,6 +79,30 @@ export const AuthProvider = ({ children }) => {
           allowed_pages: data.allowed_pages || [],
           permissions: data.permissions || {}
         };
+
+        // Sync auth user_metadata if it is empty or out-of-sync
+        const meta = authSessionUser.user_metadata || {};
+        const needsSync = !meta.username || 
+                          meta.role !== data.role || 
+                          JSON.stringify(meta.permissions) !== JSON.stringify(data.permissions) ||
+                          JSON.stringify(meta.allowed_pages) !== JSON.stringify(data.allowed_pages);
+        
+        if (needsSync) {
+          console.log('Syncing user_metadata to Supabase Auth...');
+          supabase.auth.updateUser({
+            data: {
+              username: data.username,
+              role: data.role,
+              allowed_pages: data.allowed_pages || [],
+              permissions: data.permissions || {}
+            }
+          }).then(() => {
+            console.log('User metadata synced successfully. Refreshing session...');
+            supabase.auth.refreshSession();
+          }).catch(err => {
+            console.error('Failed to sync auth user_metadata:', err);
+          });
+        }
       }
       
       setUser(userObj);
@@ -70,18 +116,24 @@ export const AuthProvider = ({ children }) => {
   };
 
   useEffect(() => {
-    // 1. Initial Session Check
     setLoading(true);
     supabase.auth.getSession().then(({ data: { session } }) => {
-      fetchUserPermissions(session?.user);
+      if (session?.user) {
+        fetchUserPermissions(session.user);
+        checkMfaAssurance();
+      } else {
+        setLoading(false);
+      }
     });
 
-    // 2. Listen for Auth Changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
         fetchUserPermissions(session.user);
+        checkMfaAssurance();
       } else {
         setUser(null);
+        setMfaPending(false);
+        setMfaFactors([]);
         setLoading(false);
       }
     });
@@ -93,8 +145,6 @@ export const AuthProvider = ({ children }) => {
     try {
       setLoading(true);
       
-      // 1. First, check if the user exists in our system_users table
-      // We skip this check for 'admin' because the master admin might not be in the table yet
       let email = `${username}@greenhand.local`;
       if (username !== 'admin') {
         const { data: userCheck, error: userCheckError } = await supabase
@@ -118,7 +168,6 @@ export const AuthProvider = ({ children }) => {
         }
       }
 
-      // 2. Try to authenticate with Supabase Auth
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -126,7 +175,6 @@ export const AuthProvider = ({ children }) => {
 
       if (error) {
         console.error('Supabase Auth error:', error);
-        // Since we already know the user exists, an "Invalid login credentials" means the password is wrong
         if (error.message === 'Invalid login credentials') {
           toast.error(t('auth.messages.wrong_password'));
         } else {
@@ -136,14 +184,14 @@ export const AuthProvider = ({ children }) => {
         return false;
       }
       
-      // Manually fetch permissions before resolving so routing works properly
       const userObj = await fetchUserPermissions(data.user);
-      
-      // If userObj is null, it means they were deleted/suspended (handled in fetchUserPermissions)
       if (!userObj) {
         toast.error(t('auth.messages.account_deleted_suspended'));
         return false;
       }
+
+      // Explicitly check for MFA challenge right after signing in
+      await checkMfaAssurance();
       
       return true;
     } catch (err) {
@@ -158,33 +206,89 @@ export const AuthProvider = ({ children }) => {
     try {
       await supabase.auth.signOut();
       setUser(null);
+      setMfaPending(false);
+      setMfaFactors([]);
     } catch (err) {
       console.error('Logout error:', err);
     }
   };
 
-  // Helper function to check if the user has access to a specific path
+  const enrollMfa = async () => {
+    return await supabase.auth.mfa.enroll({
+      factorType: 'totp',
+      issuer: 'GreenHand'
+    });
+  };
+
+  const verifyAndActivateMfa = async (factorId, code) => {
+    const { data: challengeData, error: challengeError } = await supabase.auth.mfa.challenge({
+      factorId
+    });
+    if (challengeError) throw challengeError;
+
+    const { data, error } = await supabase.auth.mfa.verify({
+      factorId,
+      challengeId: challengeData.id,
+      code
+    });
+    if (error) throw error;
+
+    // Refresh session to transition the token to AAL2
+    await supabase.auth.refreshSession();
+
+    await checkMfaAssurance();
+    return data;
+  };
+
+  const challengeAndVerifyMfa = async (factorId, code) => {
+    const { data: challengeData, error: challengeError } = await supabase.auth.mfa.challenge({
+      factorId
+    });
+    if (challengeError) throw challengeError;
+
+    const { data, error } = await supabase.auth.mfa.verify({
+      factorId,
+      challengeId: challengeData.id,
+      code
+    });
+    if (error) throw error;
+
+    // Refresh session to load the updated JWT token with AAL2 claim
+    await supabase.auth.refreshSession();
+
+    // Explicitly clear pending state as the code verification was successful
+    setMfaPending(false);
+
+    // Synchronize authentication assurance levels and factors
+    await checkMfaAssurance();
+    
+    return data;
+  };
+
+  const unenrollMfa = async (factorId) => {
+    const { data, error } = await supabase.auth.mfa.unenroll({
+      factorId
+    });
+    if (error) throw error;
+    setMfaPending(false);
+    setMfaFactors([]);
+    return data;
+  };
+
   const hasAccess = (path) => {
     if (!user) return false;
-    // Admin has access to everything
     if (user.role === 'admin') return true;
+    if (path === '/') return true;
     
-    // Check if path matches exactly or is root
-    if (path === '/') return true; // Home is accessible to all logged in
-    
-    // Trim starting slash for comparison if needed
     const normalizedPath = path.startsWith('/') ? path.substring(1) : path;
     
-    // New permissions logic
     if (user.permissions && user.permissions[normalizedPath] && user.permissions[normalizedPath].view) {
       return true;
     }
     
-    // Fallback to old allowed_pages logic
     return user.allowed_pages?.includes(normalizedPath);
   };
 
-  // Helper function to check specific granular permissions
   const hasPermission = (page, action) => {
     if (!user) return false;
     if (user.role === 'admin') return true;
@@ -193,8 +297,6 @@ export const AuthProvider = ({ children }) => {
       return !!user.permissions[page][action];
     }
     
-    // If no explicit permissions object exists yet, but they have page access via old method,
-    // we assume they have view access, but block destructive actions (edit, delete, add)
     if (action === 'view' && user.allowed_pages?.includes(page)) {
       return true;
     }
@@ -203,7 +305,20 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, hasAccess, hasPermission }}>
+    <AuthContext.Provider value={{
+      user,
+      loading,
+      login,
+      logout,
+      hasAccess,
+      hasPermission,
+      mfaPending,
+      mfaFactors,
+      enrollMfa,
+      verifyAndActivateMfa,
+      challengeAndVerifyMfa,
+      unenrollMfa
+    }}>
       {children}
     </AuthContext.Provider>
   );

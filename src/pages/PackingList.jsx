@@ -61,7 +61,7 @@ const PackingList = () => {
     sealNo: ''
   });
 
-  const [isExporting] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [showFetchDialog, setShowFetchDialog] = useState(false);
   const [showImageColumn, setShowImageColumn] = useState(false);
 
@@ -180,10 +180,18 @@ const PackingList = () => {
       let invalidItems = [];
 
       try {
-          const { data: ordersData } = await supabase.from('orders').select('serial_number').in('serial_number', serialsToCheck);
-          const existingOrders = new Set(ordersData?.map(o => o.serial_number) || []);
+          const querySerials = [];
+          serialsToCheck.forEach(s => {
+              querySerials.push(s);
+              querySerials.push(s.toLowerCase());
+              querySerials.push(s.toUpperCase());
+          });
+          const uniqueQuerySerials = [...new Set(querySerials)];
+
+          const { data: ordersData } = await supabase.from('orders').select('serial_number').in('serial_number', uniqueQuerySerials);
+          const existingOrders = new Set(ordersData?.map(o => o.serial_number.toLowerCase()) || []);
           
-          const { data: recData } = await supabase.from('receivings').select('serial_number, receive_data').in('serial_number', serialsToCheck);
+          const { data: recData } = await supabase.from('receivings').select('serial_number, receive_data').in('serial_number', uniqueQuerySerials);
           const receivedMap = new Map();
           recData?.forEach(r => {
               const isReceivedStatus = r.receive_data && r.receive_data.status && typeof r.receive_data.status === 'string' && (
@@ -193,20 +201,21 @@ const PackingList = () => {
                   r.receive_data.status === t('receiving.info.received')
               );
               if (isReceivedStatus) {
-                  receivedMap.set(r.serial_number, true);
+                  receivedMap.set(r.serial_number.toLowerCase(), true);
               }
           });
           const seenSerials = new Set();
           rows.forEach(r => {
               const s = r.serial.trim();
               if (s) {
-                  if (seenSerials.has(s)) {
+                  const sLower = s.toLowerCase();
+                  if (seenSerials.has(sLower)) {
                       invalidItems.push({ id: r.id, serial: s, reason: t('shipping.validation.reasons.duplicate') });
                   } else {
-                      seenSerials.add(s);
-                      if (!existingOrders.has(s)) {
+                      seenSerials.add(sLower);
+                      if (!existingOrders.has(sLower)) {
                           invalidItems.push({ id: r.id, serial: s, reason: t('shipping.validation.reasons.not_found') });
-                      } else if (!receivedMap.has(s)) {
+                      } else if (!receivedMap.has(sLower)) {
                           invalidItems.push({ id: r.id, serial: s, reason: t('shipping.validation.reasons.not_received') });
                       }
                   }
@@ -261,8 +270,10 @@ const PackingList = () => {
         }
         
         try {
-            const { data: orderData } = await supabase.from('orders').select('order_data').eq('serial_number', row.serial.trim()).single();
-            const { data: recData } = await supabase.from('receivings').select('receive_data').eq('serial_number', row.serial.trim()).single();
+            const { data: orderData } = await supabase.from('orders').select('serial_number, order_data').ilike('serial_number', row.serial.trim()).single();
+            const { data: recData } = await supabase.from('receivings').select('serial_number, receive_data').ilike('serial_number', row.serial.trim()).single();
+
+            const matchedSerial = orderData?.serial_number || recData?.serial_number || row.serial.trim();
 
             let desc = row.desc;
             let imageUrl = row.image;
@@ -328,7 +339,7 @@ const PackingList = () => {
             serialCartonMap.push({
                 isSkipped: false,
                 rowId: row.id,
-                serial: row.serial.trim(),
+                serial: matchedSerial,
                 factoryId,
                 receivedAt,
                 expandedCartons,
@@ -581,6 +592,7 @@ const PackingList = () => {
     font-family: 'Arial', 'Microsoft YaHei', sans-serif;
     direction: ltr;
     margin: 20px;
+    font-size: 14px;
   }
   .pl-header {
     border-bottom: 3px solid #1a5276;
@@ -588,13 +600,13 @@ const PackingList = () => {
     text-align: center;
   }
   .company-name {
-    font-size: 22px;
+    font-size: 26px;
     font-weight: 900;
     color: #1a5276;
     text-transform: uppercase;
   }
   .company-tel {
-    font-size: 11px;
+    font-size: 13px;
     color: #555;
     margin-top: 5px;
   }
@@ -607,7 +619,7 @@ const PackingList = () => {
   }
   .pl-meta-table td {
     padding: 8px;
-    font-size: 11px;
+    font-size: 13px;
     border: 1px solid #cbd5e1;
   }
   .pl-meta-label {
@@ -615,7 +627,7 @@ const PackingList = () => {
     color: #1a5276;
   }
   .pl-title {
-    font-size: 18px;
+    font-size: 22px;
     color: #1a5276;
     text-align: center;
     margin: 20px 0;
@@ -626,7 +638,7 @@ const PackingList = () => {
   .pl-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 11px;
+    font-size: 13px;
     border: 2px solid #1a5276;
   }
   .pl-table th {
@@ -635,7 +647,7 @@ const PackingList = () => {
     font-weight: bold;
     padding: 10px 5px;
     border: 1px solid #1a5276;
-    font-size: 10px;
+    font-size: 12px;
     text-transform: uppercase;
   }
   .pl-table td {
@@ -657,7 +669,7 @@ const PackingList = () => {
     color: white;
     font-weight: bold;
     font-style: italic;
-    font-size: 10px;
+    font-size: 12px;
     padding: 8px;
   }
   .pl-total-row td {
@@ -666,13 +678,13 @@ const PackingList = () => {
     color: #1a5276;
     border-top: 2px solid #1a5276;
     border-bottom: 2px solid #1a5276;
-    font-size: 12px;
+    font-size: 14px;
   }
   .pl-bottom-table {
     width: 100%;
     margin-top: 20px;
     border-collapse: collapse;
-    font-size: 11px;
+    font-size: 13px;
   }
   .pl-bottom-table td {
     border: 1px solid #000;
@@ -898,7 +910,13 @@ ${imgInfo.base64Data}
   };
 
   const exportToPDF = () => {
+    const today = new Date();
+    const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const invoiceNo = headerInfo.invoiceNo ? `_${headerInfo.invoiceNo}` : '';
+    const originalTitle = document.title;
+    document.title = `Packing_List${invoiceNo}_${dateStr}`;
     window.print();
+    setTimeout(() => { document.title = originalTitle; }, 1000);
   };
 
   return (
@@ -938,7 +956,7 @@ ${imgInfo.base64Data}
               body, html {
                 background: #fff !important; color: #000 !important;
                 margin: 0 !important; padding: 0 !important;
-                font-size: 10px !important;
+                font-size: 12px !important;
               }
               body * { visibility: hidden; }
               #invoice-print-area, #invoice-print-area * { visibility: visible; }
@@ -955,58 +973,58 @@ ${imgInfo.base64Data}
                 padding: 12px !important;
                 background: #fff !important;
               }
-              .pl-header input { font-size: 15px !important; color: #1a5276 !important; font-family: 'Arial', sans-serif !important; font-weight: bold !important; }
-              .pl-header .pl-tel input { font-size: 11px !important; color: #555 !important; font-family: sans-serif !important; }
+              .pl-header input { font-size: 17px !important; color: #1a5276 !important; font-family: 'Arial', sans-serif !important; font-weight: bold !important; }
+              .pl-header .pl-tel input { font-size: 13px !important; color: #555 !important; font-family: sans-serif !important; }
               .pl-meta {
                 padding: 8px 12px !important; gap: 8px !important;
                 background: #f8fafc !important; border: 1px solid #cbd5e1 !important; border-radius: 4px !important;
                 margin-top: 8px !important;
               }
-              .pl-meta label { font-size: 9px !important; color: #64748b !important; margin-bottom: 2px !important; text-transform: uppercase !important; letter-spacing: 0.5px !important; }
+              .pl-meta label { font-size: 11px !important; color: #64748b !important; margin-bottom: 2px !important; text-transform: uppercase !important; letter-spacing: 0.5px !important; }
               .pl-meta input, .pl-meta .form-control {
-                font-size: 11px !important; padding: 4px 6px !important;
+                font-size: 13px !important; padding: 4px 6px !important;
                 border: 1px solid #94a3b8 !important; color: #0f172a !important; font-weight: bold !important;
                 background: #fff !important; min-height: unset !important; height: auto !important;
               }
-              .pl-title { font-size: 16px !important; margin: 12px 0 8px !important; text-transform: uppercase !important; letter-spacing: 1.5px !important; color: #1a5276 !important; font-weight: 900 !important; }
-              .pl-table { font-size: 10px !important; table-layout: auto !important; border-collapse: collapse !important; border: 2px solid #1a5276 !important; }
+              .pl-title { font-size: 18px !important; margin: 12px 0 8px !important; text-transform: uppercase !important; letter-spacing: 1.5px !important; color: #1a5276 !important; font-weight: 900 !important; }
+              .pl-table { font-size: 12px !important; table-layout: auto !important; border-collapse: collapse !important; border: 2px solid #1a5276 !important; }
               .pl-table th {
-                padding: 6px 4px !important; font-size: 9px !important;
+                padding: 8px 6px !important; font-size: 11px !important;
                 background: #1a5276 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
                 border: 1px solid #1a5276 !important; color: #fff !important;
                 white-space: normal !important; text-transform: uppercase !important; letter-spacing: 0.5px !important;
               }
               .pl-table td {
-                padding: 4px !important; border: 1px solid #94a3b8 !important; color: #0f172a !important;
+                padding: 6px !important; border: 1px solid #94a3b8 !important; color: #0f172a !important;
                 white-space: normal !important; word-wrap: break-word !important; overflow-wrap: break-word !important;
               }
               .pl-table td span { color: #0f172a !important; }
               .pl-table input {
-                font-size: 10px !important; color: #0f172a !important; font-weight: bold !important;
+                font-size: 12px !important; color: #0f172a !important; font-weight: bold !important;
                 padding: 0 !important; height: auto !important; min-height: unset !important;
                 white-space: normal !important; overflow: visible !important;
               }
-              .pl-table img { width: 35px !important; height: 45px !important; border-radius: 2px !important; border: 1px solid #ccc !important; }
+              .pl-table img { width: 40px !important; height: 52px !important; border-radius: 2px !important; border: 1px solid #ccc !important; }
               .pl-table .pl-total-row td {
-                padding: 6px 8px !important; font-size: 11px !important;
+                padding: 8px 10px !important; font-size: 12px !important;
                 background: #eaf2f8 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
                 font-weight: 900 !important; border-top: 2px solid #1a5276 !important; border-bottom: 2px solid #1a5276 !important; color: #1a5276 !important;
               }
               .pl-table .pl-mixed-hdr td {
                 background: #2980b9 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
-                font-size: 9px !important; padding: 5px !important; font-style: italic !important; color: #fff !important; font-weight: bold !important; letter-spacing: 1px !important;
+                font-size: 11px !important; padding: 6px !important; font-style: italic !important; color: #fff !important; font-weight: bold !important; letter-spacing: 1px !important;
               }
-              .pl-bottom { font-size: 10px !important; gap: 2px !important; margin-top: 6px !important; }
+              .pl-bottom { font-size: 12px !important; gap: 2px !important; margin-top: 6px !important; }
               .pl-bottom > div {
-                padding: 3px 8px !important; border-radius: 0 !important;
+                padding: 4px 10px !important; border-radius: 0 !important;
                 background: #fff !important; border: 1px solid #000 !important;
               }
-              .pl-bottom input { font-size: 10px !important; color: #000 !important; }
+              .pl-bottom input { font-size: 12px !important; color: #000 !important; }
             }
           `}
         </style>
 
-      <div id="invoice-print-area" style={{ 
+      <div id="invoice-print-area" className="" style={{ 
           background: 'var(--surface-color)', 
           border: '2px solid var(--accent-color)', 
           borderRadius: '16px', 
@@ -1105,7 +1123,7 @@ ${imgInfo.base64Data}
 
            {/* ─── INVOICE TABLE ─── */}
            <div style={{ overflowX: 'auto' }}>
-             <table className="pl-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center', fontSize: '0.9rem' }}>
+             <table className="pl-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center', fontSize: '1.15rem' }}>
                <thead>
                  <tr style={{ background: 'var(--surface-highlight)', borderBottom: '2px solid var(--accent-color)' }}>
                    <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '40px' }}>{t('packing.table.cols.no')}</th>
@@ -1303,7 +1321,7 @@ ${imgInfo.base64Data}
                                         {isFirst && (
                                             showImageColumn && (
                                                 <td rowSpan={packagesToRender.length} style={{ border: '1px solid var(--border-color)', padding: '2px', textAlign: 'center' }}>
-                                                    {row.image && <img src={row.image} alt="Item" style={{ width: '50px', height: '60px', objectFit: 'contain' }} />}
+                                                    {row.image && <img src={row.image} alt="Item" crossOrigin="anonymous" style={{ width: '50px', height: '60px', objectFit: 'contain' }} />}
                                                 </td>
                                             )
                                         )}
@@ -1394,7 +1412,7 @@ ${imgInfo.base64Data}
 
                                          {showImageColumn && (
                                              <td style={{ border: '1px solid var(--border-color)', padding: '2px', textAlign: 'center' }}>
-                                                 {item.image && <img src={item.image} alt="Item" style={{ width: '50px', height: '60px', objectFit: 'contain' }} />}
+                                                 {item.image && <img src={item.image} alt="Item" crossOrigin="anonymous" style={{ width: '50px', height: '60px', objectFit: 'contain' }} />}
                                              </td>
                                          )}
                                          <td style={{ border: '1px solid var(--border-color)', padding: '5px' }}>

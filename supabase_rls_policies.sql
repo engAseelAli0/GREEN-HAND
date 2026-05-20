@@ -62,7 +62,11 @@ ON public.lookup_settings
 FOR SELECT 
 TO authenticated 
 USING (
-    (auth.jwt() -> 'user_metadata' -> 'permissions' ->> '__is_suspended') IS DISTINCT FROM 'true'
+    (auth.jwt() -> 'user_metadata' -> 'permissions' ->> '__is_suspended') IS DISTINCT FROM 'true' OR
+    EXISTS (
+        SELECT 1 FROM public.system_users u 
+        WHERE u.id = auth.uid() AND (u.permissions ->> '__is_suspended') IS DISTINCT FROM 'true'
+    )
 );
 
 -- التعديل/الإضافة/الحذف مسموح فقط للأدمن أو من يملك صلاحيات تعديل صفحة الإدارة
@@ -72,7 +76,12 @@ FOR ALL
 TO authenticated 
 USING (
     (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin' OR 
-    (auth.jwt() -> 'user_metadata' -> 'permissions' -> 'admin' ->> 'edit') = 'true'
+    (auth.jwt() -> 'user_metadata' -> 'permissions' -> 'admin' ->> 'edit') = 'true' OR
+    EXISTS (
+        SELECT 1 FROM public.system_users u 
+        WHERE u.id = auth.uid() 
+          AND (u.role = 'admin' OR (u.permissions -> 'admin' ->> 'edit') = 'true')
+    )
 );
 
 -- =========================================================================
@@ -85,7 +94,7 @@ ON public.orders
 FOR SELECT 
 TO authenticated 
 USING (
-    (auth.jwt() -> 'user_metadata' -> 'permissions' ->> '__is_suspended') IS DISTINCT FROM 'true' AND (
+    ((auth.jwt() -> 'user_metadata' -> 'permissions' ->> '__is_suspended') IS DISTINCT FROM 'true' AND (
         (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin' OR
         (auth.jwt() -> 'user_metadata' -> 'permissions' -> 'entry' ->> 'view') = 'true' OR
         (auth.jwt() -> 'user_metadata' -> 'permissions' -> 'order-reports' ->> 'view') = 'true' OR
@@ -97,6 +106,24 @@ USING (
         (auth.jwt() -> 'user_metadata' -> 'permissions' -> 'packing-list' ->> 'view') = 'true' OR
         (auth.jwt() -> 'user_metadata' -> 'permissions' -> 'shipping-invoice' ->> 'view') = 'true' OR
         (auth.jwt() -> 'user_metadata' -> 'permissions' -> 'warehouse-receipt' ->> 'view') = 'true'
+    )) OR
+    EXISTS (
+        SELECT 1 FROM public.system_users u
+        WHERE u.id = auth.uid()
+          AND (u.permissions ->> '__is_suspended') IS DISTINCT FROM 'true'
+          AND (
+              u.role = 'admin' OR
+              (u.permissions -> 'entry' ->> 'view') = 'true' OR
+              (u.permissions -> 'order-reports' ->> 'view') = 'true' OR
+              (u.permissions -> 'export' ->> 'view') = 'true' OR
+              (u.permissions -> 'receiving' ->> 'view') = 'true' OR
+              (u.permissions -> 'factory-portal' ->> 'view') = 'true' OR
+              (u.permissions -> 'reports' ->> 'view') = 'true' OR
+              (u.permissions -> 'analytics' ->> 'view') = 'true' OR
+              (u.permissions -> 'packing-list' ->> 'view') = 'true' OR
+              (u.permissions -> 'shipping-invoice' ->> 'view') = 'true' OR
+              (u.permissions -> 'warehouse-receipt' ->> 'view') = 'true'
+          )
     )
 );
 
@@ -106,9 +133,18 @@ ON public.orders
 FOR INSERT 
 TO authenticated 
 WITH CHECK (
-    (auth.jwt() -> 'user_metadata' -> 'permissions' ->> '__is_suspended') IS DISTINCT FROM 'true' AND (
+    ((auth.jwt() -> 'user_metadata' -> 'permissions' ->> '__is_suspended') IS DISTINCT FROM 'true' AND (
         (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin' OR
         (auth.jwt() -> 'user_metadata' -> 'permissions' -> 'entry' ->> 'add') = 'true'
+    )) OR
+    EXISTS (
+        SELECT 1 FROM public.system_users u
+        WHERE u.id = auth.uid()
+          AND (u.permissions ->> '__is_suspended') IS DISTINCT FROM 'true'
+          AND (
+              u.role = 'admin' OR
+              (u.permissions -> 'entry' ->> 'add') = 'true'
+          )
     )
 );
 
@@ -118,19 +154,41 @@ ON public.orders
 FOR UPDATE 
 TO authenticated 
 USING (
-    (auth.jwt() -> 'user_metadata' -> 'permissions' ->> '__is_suspended') IS DISTINCT FROM 'true' AND (
+    ((auth.jwt() -> 'user_metadata' -> 'permissions' ->> '__is_suspended') IS DISTINCT FROM 'true' AND (
         (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin' OR
         (auth.jwt() -> 'user_metadata' -> 'permissions' -> 'entry' ->> 'edit') = 'true' OR
         (auth.jwt() -> 'user_metadata' -> 'permissions' -> 'receiving' ->> 'edit') = 'true' OR
         (auth.jwt() -> 'user_metadata' -> 'permissions' -> 'factory-portal' ->> 'edit') = 'true'
+    )) OR
+    EXISTS (
+        SELECT 1 FROM public.system_users u
+        WHERE u.id = auth.uid()
+          AND (u.permissions ->> '__is_suspended') IS DISTINCT FROM 'true'
+          AND (
+              u.role = 'admin' OR
+              (u.permissions -> 'entry' ->> 'edit') = 'true' OR
+              (u.permissions -> 'receiving' ->> 'edit') = 'true' OR
+              (u.permissions -> 'factory-portal' ->> 'edit') = 'true'
+          )
     )
 )
 WITH CHECK (
-    (auth.jwt() -> 'user_metadata' -> 'permissions' ->> '__is_suspended') IS DISTINCT FROM 'true' AND (
+    ((auth.jwt() -> 'user_metadata' -> 'permissions' ->> '__is_suspended') IS DISTINCT FROM 'true' AND (
         (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin' OR
         (auth.jwt() -> 'user_metadata' -> 'permissions' -> 'entry' ->> 'edit') = 'true' OR
         (auth.jwt() -> 'user_metadata' -> 'permissions' -> 'receiving' ->> 'edit') = 'true' OR
         (auth.jwt() -> 'user_metadata' -> 'permissions' -> 'factory-portal' ->> 'edit') = 'true'
+    )) OR
+    EXISTS (
+        SELECT 1 FROM public.system_users u
+        WHERE u.id = auth.uid()
+          AND (u.permissions ->> '__is_suspended') IS DISTINCT FROM 'true'
+          AND (
+              u.role = 'admin' OR
+              (u.permissions -> 'entry' ->> 'edit') = 'true' OR
+              (u.permissions -> 'receiving' ->> 'edit') = 'true' OR
+              (u.permissions -> 'factory-portal' ->> 'edit') = 'true'
+          )
     )
 );
 
@@ -140,9 +198,18 @@ ON public.orders
 FOR DELETE 
 TO authenticated 
 USING (
-    (auth.jwt() -> 'user_metadata' -> 'permissions' ->> '__is_suspended') IS DISTINCT FROM 'true' AND (
+    ((auth.jwt() -> 'user_metadata' -> 'permissions' ->> '__is_suspended') IS DISTINCT FROM 'true' AND (
         (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin' OR
         (auth.jwt() -> 'user_metadata' -> 'permissions' -> 'entry' ->> 'delete') = 'true'
+    )) OR
+    EXISTS (
+        SELECT 1 FROM public.system_users u
+        WHERE u.id = auth.uid()
+          AND (u.permissions ->> '__is_suspended') IS DISTINCT FROM 'true'
+          AND (
+              u.role = 'admin' OR
+              (u.permissions -> 'entry' ->> 'delete') = 'true'
+          )
     )
 );
 
@@ -156,7 +223,7 @@ ON public.receivings
 FOR SELECT 
 TO authenticated 
 USING (
-    (auth.jwt() -> 'user_metadata' -> 'permissions' ->> '__is_suspended') IS DISTINCT FROM 'true' AND (
+    ((auth.jwt() -> 'user_metadata' -> 'permissions' ->> '__is_suspended') IS DISTINCT FROM 'true' AND (
         (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin' OR
         (auth.jwt() -> 'user_metadata' -> 'permissions' -> 'receiving' ->> 'view') = 'true' OR
         (auth.jwt() -> 'user_metadata' -> 'permissions' -> 'factory-portal' ->> 'view') = 'true' OR
@@ -167,6 +234,23 @@ USING (
         (auth.jwt() -> 'user_metadata' -> 'permissions' -> 'shipping-invoice' ->> 'view') = 'true' OR
         (auth.jwt() -> 'user_metadata' -> 'permissions' -> 'warehouse-receipt' ->> 'view') = 'true' OR
         (auth.jwt() -> 'user_metadata' -> 'permissions' -> 'analytics' ->> 'view') = 'true'
+    )) OR
+    EXISTS (
+        SELECT 1 FROM public.system_users u
+        WHERE u.id = auth.uid()
+          AND (u.permissions ->> '__is_suspended') IS DISTINCT FROM 'true'
+          AND (
+              u.role = 'admin' OR
+              (u.permissions -> 'receiving' ->> 'view') = 'true' OR
+              (u.permissions -> 'factory-portal' ->> 'view') = 'true' OR
+              (u.permissions -> 'entry' ->> 'view') = 'true' OR
+              (u.permissions -> 'order-reports' ->> 'view') = 'true' OR
+              (u.permissions -> 'reports' ->> 'view') = 'true' OR
+              (u.permissions -> 'packing-list' ->> 'view') = 'true' OR
+              (u.permissions -> 'shipping-invoice' ->> 'view') = 'true' OR
+              (u.permissions -> 'warehouse-receipt' ->> 'view') = 'true' OR
+              (u.permissions -> 'analytics' ->> 'view') = 'true'
+          )
     )
 );
 

@@ -104,14 +104,14 @@ const FactoryReceiving = () => {
     try {
       const { data: recData } = await supabase
         .from('receivings')
-        .select('receive_data')
-        .eq('serial_number', termToSearch.trim())
+        .select('serial_number, receive_data')
+        .ilike('serial_number', termToSearch.trim())
         .single();
 
       const { data: oDataResp, error: oError } = await supabase
         .from('orders')
-        .select('order_data')
-        .eq('serial_number', termToSearch.trim())
+        .select('serial_number, order_data')
+        .ilike('serial_number', termToSearch.trim())
         .single();
         
       if (oError || !oDataResp) {
@@ -122,6 +122,7 @@ const FactoryReceiving = () => {
       }
       
       const oData = oDataResp.order_data;
+      setModelNo(oDataResp.serial_number);
 
       if (user && user.role !== 'admin') {
          const allowedFactories = user.permissions?.allowed_factories || [];
@@ -311,7 +312,7 @@ const FactoryReceiving = () => {
       const { data: orderRow } = await supabase
         .from('orders')
         .select('order_data')
-        .eq('serial_number', modelNo.trim())
+        .ilike('serial_number', modelNo.trim())
         .single();
       if (orderRow?.order_data) {
         const orderWithActivity = appendActivity(orderRow.order_data, createActivityItem({
@@ -328,7 +329,7 @@ const FactoryReceiving = () => {
         await supabase
           .from('orders')
           .update({ order_data: orderWithActivity })
-          .eq('serial_number', modelNo.trim());
+          .ilike('serial_number', modelNo.trim());
       }
       toast.success(t('receiving.messages.save_success'), { id: toastId });
       

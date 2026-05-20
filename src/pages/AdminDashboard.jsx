@@ -1,9 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useAppData } from '../context/AppDataContext';
-import { Plus, Trash2, Edit, Edit2, Check, X, ImagePlus, ShoppingBag, Banknote, Scissors, Palette, Factory, Ruler, Package, Box, ShoppingCart, Stamp, SlidersHorizontal, ListChecks, Search, Sparkles, GripVertical, Tag, Layers, Puzzle, ChevronDown, Building, User, Shield } from 'lucide-react';
+import { Plus, Trash2, Edit, Edit2, Check, X, ImagePlus, ShoppingBag, Banknote, Scissors, Palette, Factory, Ruler, Package, Box, ShoppingCart, Stamp, SlidersHorizontal, ListChecks, Search, Sparkles, GripVertical, Tag, Layers, Puzzle, ChevronDown, Building, User, Shield, Database, ShieldAlert } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import toast from 'react-hot-toast';
 import UserManagement from '../components/UserManagement';
+import BackupRestore from '../components/BackupRestore';
+import AccountSecurity from '../components/AccountSecurity';
 import { compressImage } from '../utils/imageUtils';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
@@ -32,13 +34,17 @@ const AdminDashboard = () => {
     { id: 'measurements', name: t('admin.tabs.measurements'), icon: SlidersHorizontal },
     { id: 'packagingConditionsList', name: t('admin.tabs.packagingConditionsList'), icon: ListChecks },
     { id: 'buyerCodes', name: t('admin.tabs.buyerCodes'), icon: Tag },
-    { id: 'system_users', name: t('admin.tabs.system_users'), icon: Shield }
+    { id: 'system_users', name: t('admin.tabs.system_users'), icon: Shield },
+    { id: 'backup', name: t('admin.tabs.backup', { defaultValue: 'النسخ الاحتياطي' }), icon: Database },
+    { id: 'security', name: t('admin.tabs.security', { defaultValue: 'أمان الحساب' }), icon: ShieldAlert }
   ];
 
   const filteredTabs = tabs.filter(tab => {
     if (user?.role === 'admin') return true;
     if (allowedAdminTabs.length === 0) {
       if (tab.id === 'system_users') return false;
+      if (tab.id === 'backup') return false;
+      if (tab.id === 'security') return false;
       return true;
     }
     return allowedAdminTabs.includes(tab.id);
@@ -782,11 +788,15 @@ const AdminDashboard = () => {
               <ActiveIcon size={20} color="var(--accent-color)" />
               {t('admin.manage_prefix')} {activeTabInfo?.name}
             </div>
-            {activeTab !== 'system_users' && <span style={styles.badge}>{t('admin.items_count', { count: currentItems.length })}</span>}
+             {activeTab !== 'system_users' && activeTab !== 'backup' && activeTab !== 'security' && <span style={styles.badge}>{t('admin.items_count', { count: currentItems.length })}</span>}
           </div>
 
           {activeTab === 'system_users' ? (
             <UserManagement />
+          ) : activeTab === 'backup' ? (
+            <BackupRestore />
+          ) : activeTab === 'security' ? (
+            <AccountSecurity />
           ) : (
             <>
               {/* ─── Add / Edit Form ─── */}

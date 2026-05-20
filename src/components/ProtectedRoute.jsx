@@ -2,10 +2,11 @@ import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTranslation } from 'react-i18next';
+import MfaChallengeModal from './MfaChallengeModal';
 
 const ProtectedRoute = ({ children }) => {
   const { t } = useTranslation();
-  const { user, loading, hasAccess } = useAuth();
+  const { user, loading, hasAccess, mfaPending } = useAuth();
   const location = useLocation();
 
   if (loading) {
@@ -19,6 +20,11 @@ const ProtectedRoute = ({ children }) => {
   // If not logged in, redirect to login
   if (!user) {
     return <Navigate to="/login" replace />;
+  }
+
+  // If Two-Factor Authentication is pending, block the route and show the challenge screen
+  if (mfaPending) {
+    return <MfaChallengeModal />;
   }
 
   // If logged in but trying to access an unauthorized route

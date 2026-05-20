@@ -1,11 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useAuth } from '../context/AuthContext';
 import { useTranslation } from 'react-i18next';
 import { ShieldAlert, RefreshCw } from 'lucide-react';
 
 const SecurityGuard = ({ children }) => {
-  const { t, i18n } = useTranslation();
-  const { user } = useAuth();
+  const { i18n } = useTranslation();
   const [isBlocked, setIsBlocked] = useState(false);
   const isBlockedRef = useRef(false);
 
@@ -58,17 +56,21 @@ const SecurityGuard = ({ children }) => {
       let isDevToolsOpen = false;
 
       // Method A: Dimension Check (Works when DevTools is docked to the window)
-      const threshold = 160;
-      const widthDifference = window.outerWidth - window.innerWidth;
-      const heightDifference = window.outerHeight - window.innerHeight;
+      // Skip this check on mobile devices to prevent false positives from browser bars, safe areas, virtual keyboards, and zoom.
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      if (!isMobile) {
+        const threshold = 160;
+        const widthDifference = window.outerWidth - window.innerWidth;
+        const heightDifference = window.outerHeight - window.innerHeight;
 
-      // If DevTools is docked on the right/left or bottom
-      const isDockedSide = widthDifference > threshold;
-      const isDockedBottom = heightDifference > threshold;
+        // If DevTools is docked on the right/left or bottom
+        const isDockedSide = widthDifference > threshold;
+        const isDockedBottom = heightDifference > threshold;
 
-      // Verify it's not just a standard window resize/maximize by checking typical browser chrome borders (usually < 50px)
-      if (isDockedSide || isDockedBottom) {
-        isDevToolsOpen = true;
+        // Verify it's not just a standard window resize/maximize by checking typical browser chrome borders (usually < 50px)
+        if (isDockedSide || isDockedBottom) {
+          isDevToolsOpen = true;
+        }
       }
 
       // Method B: Debugger timing check (Works for docked, undocked/floating, or separate window DevTools)
@@ -77,7 +79,7 @@ const SecurityGuard = ({ children }) => {
       try {
         const debuggerFn = new Function('debugger');
         debuggerFn();
-      } catch (err) {
+      } catch {
         // Suppress any errors
       }
       const endTime = performance.now();
@@ -113,18 +115,28 @@ const SecurityGuard = ({ children }) => {
 
   const handleRetry = () => {
     // Immediate force-check
-    const threshold = 160;
-    const widthDifference = window.outerWidth - window.innerWidth;
-    const heightDifference = window.outerHeight - window.innerHeight;
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    
+    let isDimensionDetect = false;
+    if (!isMobile) {
+      const threshold = 160;
+      const widthDifference = window.outerWidth - window.innerWidth;
+      const heightDifference = window.outerHeight - window.innerHeight;
+      if (widthDifference > threshold || heightDifference > threshold) {
+        isDimensionDetect = true;
+      }
+    }
     
     const startTime = performance.now();
     try {
       const debuggerFn = new Function('debugger');
       debuggerFn();
-    } catch (err) {}
+    } catch {
+      // Suppress any errors
+    }
     const endTime = performance.now();
 
-    const stillOpen = (widthDifference > threshold) || (heightDifference > threshold) || (endTime - startTime > 100);
+    const stillOpen = isDimensionDetect || (endTime - startTime > 100);
 
     if (!stillOpen) {
       setIsBlocked(false);

@@ -6,6 +6,26 @@ import { useTranslation } from 'react-i18next';
 
 const AuthContext = createContext();
 
+const deepEqual = (obj1, obj2) => {
+  if (obj1 === obj2) return true;
+  if (typeof obj1 !== 'object' || obj1 === null || typeof obj2 !== 'object' || obj2 === null) {
+    return false;
+  }
+  if (Array.isArray(obj1) && Array.isArray(obj2)) {
+    if (obj1.length !== obj2.length) return false;
+    const sorted1 = [...obj1].sort();
+    const sorted2 = [...obj2].sort();
+    return sorted1.every((val, index) => val === sorted2[index]);
+  }
+  const keys1 = Object.keys(obj1);
+  const keys2 = Object.keys(obj2);
+  if (keys1.length !== keys2.length) return false;
+  for (const key of keys1) {
+    if (!keys2.includes(key) || !deepEqual(obj1[key], obj2[key])) return false;
+  }
+  return true;
+};
+
 export const AuthProvider = ({ children }) => {
   const { t } = useTranslation();
   const [user, setUser] = useState(null);
@@ -56,7 +76,13 @@ export const AuthProvider = ({ children }) => {
       let userObj;
       if (error || !data) {
         console.warn('Could not fetch system_users record:', error);
-        if (username !== 'admin' && authSessionUser.user_metadata?.role !== 'admin') {
+        
+        // PGRST116 is the PostgREST code for "The query returned 0 rows".
+        // If the error is not PGRST116, it is likely a transient network error,
+        // so we should not sign the user out. Instead, we allow them to fall back to session metadata.
+        const isUserNotFound = error && error.code === 'PGRST116';
+
+        if (isUserNotFound && username !== 'admin' && authSessionUser.user_metadata?.role !== 'admin') {
           console.error('User was deleted from system_users. Denying access.');
           await supabase.auth.signOut();
           setUser(null);
@@ -84,8 +110,8 @@ export const AuthProvider = ({ children }) => {
         const meta = authSessionUser.user_metadata || {};
         const needsSync = !meta.username || 
                           meta.role !== data.role || 
-                          JSON.stringify(meta.permissions) !== JSON.stringify(data.permissions) ||
-                          JSON.stringify(meta.allowed_pages) !== JSON.stringify(data.allowed_pages);
+                          !deepEqual(meta.permissions, data.permissions) ||
+                          !deepEqual(meta.allowed_pages, data.allowed_pages);
         
         if (needsSync) {
           console.log('Syncing user_metadata to Supabase Auth...');

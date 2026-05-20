@@ -8,6 +8,7 @@ import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
 import { CustomDateInput } from '../components/CustomDateInput';
 import { useFilteredLookups } from '../hooks/useFilteredLookups';
+
 const toEnglishNumbers = (str) => {
   if (str === null || str === undefined) return '';
   return str.toString().replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d));
@@ -94,7 +95,6 @@ const ShippingInvoice = () => {
     toast.success(t('shipping.messages.clear_success'));
   };
 
-  // Auto-calculate Total Amount for each row when Qty or Unit Price changes
   useEffect(() => {
     const updatedRows = rows.map(r => {
       const q = parseFloat(r.qty) || 0;
@@ -102,7 +102,6 @@ const ShippingInvoice = () => {
       return { ...r, totalAmount: q * p };
     });
     
-    // Only update if there's an actual change in totals to prevent infinite loops
     const hasChanges = updatedRows.some((r, i) => r.totalAmount !== rows[i].totalAmount);
     if (hasChanges) {
       setRows(updatedRows);
@@ -127,7 +126,6 @@ const ShippingInvoice = () => {
   };
 
   const handleRowChange = (id, field, value) => {
-    // Force English numbers for numeric fields
     let finalValue = value;
     if (['qty', 'unitPrice', 'serial'].includes(field)) {
         finalValue = toEnglishNumbers(value);
@@ -269,7 +267,6 @@ const ShippingInvoice = () => {
     const toastId = toast.loading(t('shipping.messages.fetching_data'));
     let successCount = 0;
     
-    // Create a copy of rows
     let updatedRows = [...rows];
     if (removeBadRows) {
         if (badRowIdsToRemove && badRowIdsToRemove.length > 0) {
@@ -284,7 +281,7 @@ const ShippingInvoice = () => {
     }
     for (let i = 0; i < updatedRows.length; i++) {
         let r = updatedRows[i];
-        if (r.serial.trim() && (removeBadRows ? true : !badSerialsToSkip.includes(r.serial.trim()))) { // Always fetch fresh data
+        if (r.serial.trim() && (removeBadRows ? true : !badSerialsToSkip.includes(r.serial.trim()))) {
             try {
                 const { data, error } = await supabase
                     .from('orders')
@@ -296,7 +293,6 @@ const ShippingInvoice = () => {
                     const d = data.order_data;
                     const matchedSerial = data.serial_number || r.serial.trim();
                     
-                    // Data-level authorization check
                     if (user && user.role !== 'admin') {
                        const allowedFactories = user.permissions?.allowed_factories || [];
                        const allowedCompanies = user.permissions?.allowed_companies || [];
@@ -322,7 +318,7 @@ const ShippingInvoice = () => {
 
                     updatedRows[i] = {
                         ...r,
-                        serial: matchedSerial, // Keep the clean database casing
+                        serial: matchedSerial,
                         desc: englishOnly(d.productName) || '',
                         arabicName: englishOnly(d.productName) || '',
                         qty: totalPieces.toString(),
@@ -348,7 +344,6 @@ const ShippingInvoice = () => {
     }
   };
 
-  // Calculations
   const totalItemsCount = rows.filter(r => r.serial.trim() !== '').length;
   const totalPcs = rows.reduce((acc, r) => acc + (parseFloat(r.qty) || 0), 0);
   const subTotalAmount = rows.reduce((acc, r) => acc + (r.totalAmount || 0), 0);
@@ -361,18 +356,175 @@ const ShippingInvoice = () => {
   const intShip = parseFloat(footerInfo.internalShipping) || 0;
 
   const invoiceTotal = subTotalAmount + commissionAmount + contFee + ins + intShip;
-
-  // Primary currency from first row
   const primaryCurrency = rows[0]?.currency || 'RMB ¥';
 
-  const exportToPDF = () => {
-    const today = new Date();
-    const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-    const invoiceNo = headerInfo.invoiceNo ? `_${headerInfo.invoiceNo}` : '';
-    const originalTitle = document.title;
-    document.title = `Shipping_Invoice${invoiceNo}_${dateStr}`;
-    window.print();
-    setTimeout(() => { document.title = originalTitle; }, 1000);
+  // ─── الدالة المعدلة والمطورة لتصدير PDF الاحترافي ───
+  const exportToPDF = async () => {
+    if (rows.length === 0 || totalItemsCount === 0) {
+      return toast.error(t('shipping.messages.enter_serials_first', { defaultValue: 'لا توجد بيانات صالحة للتصدير' }));
+    }
+    
+    const toastId = toast.loading(t('reports.messages.preparing_pdf', { defaultValue: 'جاري تجهيز ملف الـ PDF...' }));
+    
+    try {
+      const companyDetails = [
+        headerInfo.fax ? `${headerInfo.fax}` : '',
+        headerInfo.tel ? `${headerInfo.tel}` : '',
+        headerInfo.address ? `${headerInfo.address}` : ''
+      ].filter(Boolean).join(' | ');
+
+      const fD = (d) => { 
+        if (!d || d === '-') return '-'; 
+        const p = d.split('-'); 
+        return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : d; 
+      };
+
+      // 1. إنشاء حاوية ووردبريس مؤقتة معزولة لتنسيق الطباعة بدقة وثبات تام
+      const el = document.createElement('div');
+      el.style.cssText = 'position:fixed;left:-9999px;top:0;width:1050px;background:#fff;padding:25px 30px;font-family:"Arial","Microsoft YaHei",sans-serif;color:#000;font-size:14px;line-height:1.4;direction:ltr;text-align:left;-webkit-font-smoothing:antialiased;';
+
+      const b = 'border:1px solid #cbd5e1;padding:8px 6px;font-weight:600;';
+      const tc = b + 'text-align:center;font-size:13px;';
+      const bl = b + 'text-align:left;font-size:13px;';
+      const hr = 'border:1px solid #1a5276;font-weight:900;text-align:center;font-size:12px;background:#1a5276;color:#fff;padding:10px 5px;text-transform:uppercase;';
+
+      // 2. بناء صفوف الجدول الديناميكي بـ HTML
+      let tableRowsHtml = '';
+      rows.forEach((row, index) => {
+        if (!row.serial.trim()) return;
+        tableRowsHtml += `
+          <tr>
+            <td style="${tc}font-weight:bold;">${index + 1}</td>
+            <td style="${tc}font-weight:bold;mso-number-format:'\\@';">${row.serial}</td>
+            <td style="${bl}">${row.desc || ''}</td>
+            <td style="${tc}direction:rtl;">${row.arabicName || ''}</td>
+            <td style="${tc}font-weight:bold;">${row.qty || ''}</td>
+            <td style="${tc}">${row.currency || ''}</td>
+            <td style="${tc}">${row.unitPrice || ''}</td>
+            <td style="${tc}font-weight:bold;color:#1a5276;">${row.totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+            ${showImageColumn ? `
+            <td style="${tc}width:90px;height:90px;vertical-align:middle;padding:5px;">
+              ${row.image ? `<img src="${row.image}" style="width:75px;height:75px;object-fit:contain;border:1px solid #ccc;border-radius:4px;display:block;margin:0 auto;" crossOrigin="anonymous" />` : '-'}
+            </td>` : ''}
+            <td style="${tc}">${row.factoryCode || row.details || '-'}</td>
+          </tr>
+        `;
+      });
+
+      // 3. تجميع هيكل الفاتورة المتكامل بستايل بريميوم متناسق
+      el.innerHTML = `
+        <div style="border-bottom:3px solid #1a5276;padding-bottom:15px;text-align:center;margin-bottom:20px;">
+          <div style="font-size:28px;font-weight:900;color:#1a5276;text-transform:uppercase;letter-spacing:0.5px;">${headerInfo.companyName}</div>
+          <div style="font-size:13px;color:#555;margin-top:6px;">${companyDetails}</div>
+        </div>
+
+        <table style="width:100%;margin-bottom:20px;background-color:#f8fafc;border:1px solid #cbd5e1;border-collapse:collapse;">
+          <tr>
+            <td style="${bl}width:16%;font-weight:bold;color:#1a5276;">${t('shipping.header.invoice_no')}：</td>
+            <td style="${tc}width:17%;font-weight:bold;">${headerInfo.invoiceNo || '-'}</td>
+            <td style="${bl}width:16%;font-weight:bold;color:#1a5276;">${t('shipping.header.branch')}：</td>
+            <td style="${tc}width:17%; font-weight:bold;">${headerInfo.branch || '-'}</td>
+            <td style="${bl}width:16%;font-weight:bold;color:#1a5276;">${t('shipping.header.date')}：</td>
+            <td style="${tc}width:18%;font-weight:bold;">${fD(headerInfo.date)}</td>
+          </tr>
+        </table>
+
+        <div style="font-size:22px;color:#1a5276;text-align:center;margin:20px 0;font-weight:bold;text-transform:uppercase;letter-spacing:1.5px;">
+          SHIPPING INVOICE
+        </div>
+
+        <table style="width:100%;border-collapse:collapse;border:2px solid #1a5276;margin-bottom:20px;">
+          <thead>
+            <tr>
+              <th style="${hr}width:40px;">No</th>
+              <th style="${hr}width:130px;">${t('shipping.table.cols.item_no')}<br/><small>${t('shipping.table.cols.item_no_ar')}</small></th>
+              <th style="${hr}">${t('shipping.table.cols.desc')}<br/><small>${t('shipping.table.cols.desc_ar')}</small></th>
+              <th style="${hr}">${t('shipping.table.cols.arabic_name')}<br/><small>${t('shipping.table.cols.arabic_name_en')}</small></th>
+              <th style="${hr}width:80px;">${t('shipping.table.cols.qty')}<br/><small>${t('shipping.table.cols.qty_ar')}</small></th>
+              <th style="${hr}width:80px;">${t('shipping.table.cols.currency')}<br/><small>${t('shipping.table.cols.currency_ar')}</small></th>
+              <th style="${hr}width:90px;">${t('shipping.table.cols.unit_price')}<br/><small>${t('shipping.table.cols.unit_price_ar')}</small></th>
+              <th style="${hr}width:120px;">${t('shipping.table.cols.total_amount')}<br/><small>${t('shipping.table.cols.total_amount_ar')}</small></th>
+              ${showImageColumn ? `<th style="${hr}width:100px;">${t('shipping.table.cols.item_image')}<br/><small>${t('shipping.table.cols.item_image_ar')}</small></th>` : ''}
+              <th style="${hr}width:120px;">${t('shipping.table.cols.other_details_ar')}<br/><small>${t('shipping.table.cols.other_details')}</small></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tableRowsHtml}
+          </tbody>
+        </table>
+
+        <div style="width:100%;margin-top:15px;display:inline-block;">
+          <table style="width:100%;border-collapse:collapse;border:2px solid #1a5276;font-size:13px;">
+            <tr>
+              <td style="${bl}padding:9px;color:#475569;">Subtotal (${totalItemsCount} Items / ${totalPcs} PCS)</td>
+              <td style="${tc}padding:9px;background:#f1f5f9;font-weight:900;color:#1a5276;text-align:right;width:40%;">${subTotalAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })} ${primaryCurrency}</td>
+            </tr>
+            <tr>
+              <td style="${bl}padding:9px;color:#475569;">Commission Amount (${commPercent}%)</td>
+              <td style="${tc}padding:9px;text-align:right;font-weight:bold;">${commissionAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })} ${primaryCurrency}</td>
+            </tr>
+            <tr>
+              <td style="${bl}padding:9px;color:#475569;">Container Fee</td>
+              <td style="${tc}padding:9px;text-align:right;font-weight:bold;">${contFee.toLocaleString('en-US', { minimumFractionDigits: 2 })} ${primaryCurrency}</td>
+            </tr>
+            <tr>
+              <td style="${bl}padding:9px;color:#475569;">Insurance</td>
+              <td style="${tc}padding:9px;text-align:right;font-weight:bold;">${ins.toLocaleString('en-US', { minimumFractionDigits: 2 })} ${primaryCurrency}</td>
+            </tr>
+            <tr>
+              <td style="${bl}padding:9px;color:#475569;">Internal Shipping</td>
+              <td style="${tc}padding:9px;text-align:right;font-weight:bold;">${intShip.toLocaleString('en-US', { minimumFractionDigits: 2 })} ${primaryCurrency}</td>
+            </tr>
+            <tr style="background:rgba(26,82,118,0.15);">
+              <td style="${bl}padding:10px;font-weight:900;color:#1a5276;font-size:14px;">Invoice Total Amount</td>
+              <td style="${tc}padding:10px;text-align:right;font-weight:900;color:#1a5276;font-size:15px;">${invoiceTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })} ${primaryCurrency}</td>
+            </tr>
+          </table>
+        </div>
+
+        <table style="width:100%;margin-top:25px;border-collapse:collapse;border:1px solid #000;">
+          <tr>
+            <td style="${bl}width:200px;background:#f8fafc;border:1px solid #000;font-weight:bold;">Say Total:</td>
+            <td style="${bl}color:#1a5276;border:1px solid #000;font-weight:bold;">${invoiceTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })} ${primaryCurrency} & ${totalPcs} PCS</td>
+          </tr>
+          <tr>
+            <td style="${bl}background:#f8fafc;border:1px solid #000;font-weight:bold;">Container No:</td>
+            <td style="${bl}border:1px solid #000;font-weight:bold;">${footerInfo.containerNo || '-'}</td>
+          </tr>
+          <tr>
+            <td style="${bl}background:#f8fafc;border:1px solid #000;font-weight:bold;">Seal No:</td>
+            <td style="${bl}border:1px solid #000;font-weight:bold;">${footerInfo.sealNo || '-'}</td>
+          </tr>
+        </table>
+      `;
+
+      document.body.appendChild(el);
+
+      // 4. استدعاء مكتبة html2canvas لأخذ سكرين شوت برمجية بدقة Scale 3 لدعم تعدد اللغات بشكل مثالي
+      const { default: html2canvas } = await import('html2canvas');
+      const canvas = await html2canvas(el, { scale: 3, useCORS: true, logging: false, backgroundColor: '#ffffff' });
+      document.body.removeChild(el);
+
+      const imgData = canvas.toDataURL('image/jpeg', 1.0);
+      
+      // 5. استخدام jsPDF لإنشاء مستند يتناسب طوله تلقائياً مع حجم الفاتورة لمنع تداخل الصفحات
+      const { jsPDF } = await import('jspdf');
+      const pW = 210; 
+      const pM = 6;   
+      const cW = pW - pM * 2; 
+      const cH = (canvas.height * cW) / canvas.width; 
+      
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [pW, Math.max(cH + pM * 2, 297)] });
+      pdf.addImage(imgData, 'JPEG', pM, pM, cW, cH);
+      
+      const invoiceNoStr = headerInfo.invoiceNo ? `_${headerInfo.invoiceNo}` : '';
+      pdf.save(`Shipping_Invoice${invoiceNoStr}_${localDate}.pdf`);
+      
+      toast.success(t('reports.messages.pdf_success', { defaultValue: 'تم تصدير ملف الـ PDF بنجاح!' }), { id: toastId });
+    } catch (err) {
+      toast.error(t('reports.messages.pdf_error', { defaultValue: 'فشل تصدير ملف الـ PDF' }), { id: toastId });
+      console.error(err);
+    }
   };
 
   const exportToExcel = async () => {
@@ -582,7 +734,7 @@ const ShippingInvoice = () => {
   </table>
 
   <!-- ─── TITLE ─── -->
-  <div class="inv-title">${t('shipping.header.invoice_title')}</div>
+  <div class="inv-title">SHIPPING INVOICE</div>
 
   <!-- ─── TABLE ─── -->
   <table class="inv-table">
@@ -679,7 +831,6 @@ const ShippingInvoice = () => {
 </html>
 `;
 
-      // Fetch and convert all images to base64
       const imagePromises = Array.from(imageMap.entries()).map(async ([src, imgInfo]) => {
         const base64Info = await getBase64Image(src);
         if (base64Info) {
@@ -689,7 +840,6 @@ const ShippingInvoice = () => {
       });
       await Promise.all(imagePromises);
 
-      // Construct MHTML
       let mhtmlString = `MIME-Version: 1.0
 Content-Type: multipart/related; boundary="----=_NextPart_ExcelImage"
 
@@ -699,7 +849,6 @@ Content-Transfer-Encoding: 8bit
 
 ` + htmlString;
 
-      // Append images to MHTML
       imageMap.forEach((imgInfo) => {
         if (imgInfo.base64Data) {
           mhtmlString += `
@@ -743,10 +892,10 @@ ${imgInfo.base64Data}
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
           {hasPermission('shipping-invoice', 'export') && (
             <>
-              <button className="btn btn-outline no-print" onClick={exportToExcel} disabled={isExporting} style={{ padding: '12px 24px', fontSize: '1.1rem', color: '#107c41', borderColor: '#107c41', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <button className="btn no-print" onClick={exportToExcel} disabled={isExporting} style={{ padding: '12px 24px', fontSize: '1.1rem', backgroundColor: '#10b981', color: 'white', border: 'none', display: 'flex', alignItems: 'center', gap: '0.5rem', boxShadow: '0 4px 15px rgba(16, 185, 129, 0.3)' }}>
                 <FileSpreadsheet size={20} /> {t('shipping.actions.excel_btn')}
               </button>
-              <button className="btn btn-primary no-print" onClick={exportToPDF} style={{ padding: '12px 24px', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <button className="btn no-print" onClick={exportToPDF} style={{ padding: '12px 24px', fontSize: '1.1rem', backgroundColor: '#ef4444', color: 'white', border: 'none', display: 'flex', alignItems: 'center', gap: '0.5rem', boxShadow: '0 4px 15px rgba(239, 68, 68, 0.3)' }}>
                 <Printer size={20} /> {t('shipping.print_btn')}
               </button>
             </>
@@ -764,108 +913,7 @@ ${imgInfo.base64Data}
           direction: 'ltr'
       }}>
         
-        {/* Print Styles */}
-        <style>
-          {`
-            @media print {
-              @page { size: portrait; margin: 6mm 8mm; }
-              *, *::before, *::after { box-sizing: border-box; }
-              body, html {
-                background: #fff !important;
-                color: #000 !important;
-                margin: 0 !important; padding: 0 !important;
-                font-size: 12px !important;
-              }
-              body * { visibility: hidden; }
-              #invoice-print-area, #invoice-print-area * { visibility: visible; }
-              #invoice-print-area {
-                position: absolute; left: 0; top: 0; width: 100% !important;
-                border: none !important; box-shadow: none !important;
-                border-radius: 0 !important; overflow: visible !important;
-                background: #fff !important; color: #000 !important;
-                padding: 0 !important;
-              }
-              .no-print { display: none !important; }
-              .inv-header-section {
-                border-bottom: 3px solid #1a5276 !important;
-                padding: 12px !important;
-                background: #fff !important;
-              }
-              .inv-header-section input {
-                font-size: 17px !important; color: #1a5276 !important; font-family: 'Arial', sans-serif !important; font-weight: bold !important;
-              }
-              .inv-header-section .company-tel input {
-                font-size: 13px !important; color: #555 !important; font-family: sans-serif !important;
-              }
-              .inv-meta-grid {
-                padding: 8px 12px !important; gap: 8px !important;
-                background: #f8fafc !important; border: 1px solid #cbd5e1 !important;
-                border-radius: 4px !important; margin-top: 8px !important;
-              }
-              .inv-meta-grid label { font-size: 11px !important; color: #64748b !important; margin-bottom: 2px !important; text-transform: uppercase !important; letter-spacing: 0.5px !important; }
-              .inv-meta-grid input, .inv-meta-grid .form-control {
-                font-size: 13px !important; padding: 4px 6px !important;
-                border: 1px solid #94a3b8 !important; color: #0f172a !important; font-weight: bold !important;
-                background: #fff !important; min-height: unset !important;
-                height: auto !important;
-              }
-              .inv-title-h2 { font-size: 18px !important; margin: 12px 0 8px !important; text-transform: uppercase !important; letter-spacing: 1.5px !important; color: #1a5276 !important; font-weight: 900 !important; }
-              /* Table compact */
-              .inv-main-table { font-size: 12px !important; table-layout: auto !important; border-collapse: collapse !important; border: 2px solid #1a5276 !important; }
-              .inv-main-table th {
-                padding: 8px 6px !important; font-size: 11px !important;
-                background: #1a5276 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
-                border: 1px solid #1a5276 !important; color: #fff !important;
-                white-space: normal !important; text-transform: uppercase !important; letter-spacing: 0.5px !important;
-              }
-              .inv-main-table td {
-                padding: 6px !important; border: 1px solid #94a3b8 !important;
-                color: #0f172a !important; white-space: normal !important;
-                word-wrap: break-word !important; overflow-wrap: break-word !important;
-              }
-              .inv-main-table td span { color: #0f172a !important; }
-              .inv-main-table input {
-                font-size: 12px !important; color: #0f172a !important; font-weight: bold !important;
-                padding: 0 !important; height: auto !important;
-                min-height: unset !important;
-                display: none !important;
-              }
-              .inv-main-table .print-val {
-                display: inline !important; font-size: 12px !important;
-                color: #0f172a !important; font-weight: bold !important;
-              }
-              .inv-main-table img { width: 40px !important; height: 52px !important; border-radius: 2px !important; border: 1px solid #ccc !important; }
-              /* Footer table */
-              .inv-footer-table { font-size: 12px !important; border-collapse: collapse !important; border: 2px solid #1a5276 !important; margin-left: 0 !important; margin-right: auto !important; }
-              .inv-footer-table td {
-                padding: 8px 10px !important; border: 1px solid #94a3b8 !important;
-                color: #0f172a !important; font-weight: bold !important;
-              }
-              .inv-footer-table input {
-                font-size: 12px !important; color: #0f172a !important; font-weight: bold !important;
-                padding: 0 !important;
-              }
-              .inv-footer-table .highlight-cell {
-                background: #f8fafc !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
-              }
-              .inv-footer-table .total-cell {
-                background: #eaf2f8 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
-                font-weight: 900 !important; border-top: 2px solid #1a5276 !important; border-bottom: 2px solid #1a5276 !important; color: #1a5276 !important;
-              }
-              /* Bottom details */
-              .inv-bottom-details { font-size: 12px !important; gap: 2px !important; margin-top: 6px !important; }
-              .inv-bottom-details > div {
-                padding: 4px 10px !important; border-radius: 0 !important;
-                background: #fff !important; border: 1px solid #000 !important;
-              }
-              .inv-bottom-details input {
-                font-size: 12px !important; color: #000 !important;
-              }
-            }
-          `}
-        </style>
-        
-        {/* ─── INVOICE HEADER ─── */}
+        {/* HTML/CSS Layout Table Elements */}
         <div className="inv-header-section" style={{ 
             background: 'var(--surface-highlight)', 
             borderBottom: '2px solid var(--accent-color)',
@@ -889,7 +937,6 @@ ${imgInfo.base64Data}
              </div>
            </div>
 
-           {/* Dropdown for Companies */}
            {showCompanyDropdown && (
              <div className="no-print" style={{
                position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)',
@@ -956,7 +1003,6 @@ ${imgInfo.base64Data}
 
            <h2 className="inv-title-h2" style={{ textAlign: 'center', margin: '1rem 0', fontSize: '1.8rem', color: 'var(--text-strong)' }}>{t('shipping.header.list_title')}</h2>
 
-           {/* ─── INVOICE TABLE ─── */}
            <div style={{ overflowX: 'auto' }}>
              <table className="inv-main-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center', fontSize: '1.15rem' }}>
                <thead>
@@ -1004,33 +1050,14 @@ ${imgInfo.base64Data}
                                };
                                handleSerialKeyDown(syntheticEvent, row.id);
                              }}
-                             style={{
-                               background: 'transparent',
-                               border: 'none',
-                               color: 'var(--accent-color)',
-                               cursor: 'pointer',
-                               padding: '2px',
-                               display: 'flex',
-                               alignItems: 'center',
-                               justifyContent: 'center',
-                               flexShrink: 0
-                             }}
+                             style={{ background: 'transparent', border: 'none', color: 'var(--accent-color)', cursor: 'pointer', padding: '2px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
                              title="F9 Search"
                            >
                              <Search size={14} />
                            </button>
                         </div>
                         {activeF9RowId === row.id && showSerialsList && (
-                          <div style={{
-                            position: 'fixed', top: f9Position.top, left: f9Position.left, transform: 'translateX(-50%)',
-                            width: '250px', maxHeight: '250px', overflowY: 'auto',
-                            backgroundColor: 'var(--surface-color)',
-                            border: '1px solid var(--border-color)',
-                            borderRadius: 'var(--radius-md)',
-                            boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
-                            zIndex: 99999,
-                            textAlign: 'right'
-                          }}>
+                          <div style={{ position: 'fixed', top: f9Position.top, left: f9Position.left, transform: 'translateX(-50%)', width: '250px', maxHeight: '250px', overflowY: 'auto', backgroundColor: 'var(--surface-color)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)', zIndex: 99999, textAlign: 'right' }}>
                             <div style={{ padding: '0.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--surface-highlight)' }}>
                                 <span style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>{t('print.search.title')}</span>
                                 <button onClick={() => { setShowSerialsList(false); setSerialSearchQuery(''); setActiveF9RowId(null); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-color)', padding: 0, display: 'flex', alignItems: 'center' }}>
@@ -1175,7 +1202,6 @@ ${imgInfo.base64Data}
              </table>
            </div>
 
-
            {!isExporting && (
              <div className="no-print" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginTop: '1rem', gap: '1rem' }}>
                 {hasPermission('shipping-invoice', 'add') && (
@@ -1194,11 +1220,9 @@ ${imgInfo.base64Data}
              </div>
            )}
 
-           {/* ─── FOOTER CALCULATIONS (ALWAYS LEFT-ALIGNED) ─── */}
            <div style={{ display: 'flex', justifyContent: 'left', marginTop: '2rem', width: '100%' }}>
               <table className="inv-footer-table" style={{ width: '800px', borderCollapse: 'collapse', textAlign: 'center', fontWeight: 'bold', fontSize: '1.15rem', marginLeft: '0', marginRight: 'auto' }} dir="ltr">
                  <tbody>
-                    {/* Row 1: Subtotal */}
                     <tr>
                        <td style={{ padding: '12px', border: '1px solid var(--border-color)', color: 'var(--text-muted)', textAlign: 'left' }}>
                           {t('shipping.footer.total')} ({totalItemsCount} {t('shipping.footer.items')} / {totalPcs} {t('shipping.footer.pcs')})
@@ -1208,7 +1232,6 @@ ${imgInfo.base64Data}
                        </td>
                     </tr>
                     
-                    {/* Row 2: Commission */}
                     <tr>
                        <td style={{ padding: '12px', background: 'rgba(212, 175, 55, 0.05)', border: '1px solid var(--border-color)', textAlign: 'left' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1226,7 +1249,6 @@ ${imgInfo.base64Data}
                        </td>
                     </tr>
 
-                    {/* Row 3: Container Fee */}
                     <tr>
                        <td style={{ padding: '12px', background: 'rgba(212, 175, 55, 0.05)', border: '1px solid var(--border-color)', textAlign: 'left' }}>{t('shipping.footer.container_fee')}</td>
                        <td style={{ padding: '8px', border: '1px solid var(--border-color)' }}>
@@ -1234,7 +1256,6 @@ ${imgInfo.base64Data}
                        </td>
                     </tr>
 
-                    {/* Row 4: Insurance */}
                     <tr>
                        <td style={{ padding: '12px', background: 'rgba(212, 175, 55, 0.05)', border: '1px solid var(--border-color)', textAlign: 'left' }}>{t('shipping.footer.insurance')}</td>
                        <td style={{ padding: '8px', border: '1px solid var(--border-color)' }}>
@@ -1242,7 +1263,6 @@ ${imgInfo.base64Data}
                        </td>
                     </tr>
 
-                    {/* Row 5: Internal Shipping */}
                     <tr>
                        <td style={{ padding: '12px', background: 'rgba(212, 175, 55, 0.05)', border: '1px solid var(--border-color)', textAlign: 'left' }}>{t('shipping.footer.internal_shipping')}</td>
                        <td style={{ padding: '8px', border: '1px solid var(--border-color)' }}>
@@ -1250,7 +1270,6 @@ ${imgInfo.base64Data}
                        </td>
                     </tr>
 
-                    {/* Row 6: Final Total */}
                     <tr>
                        <td style={{ padding: '12px', background: 'var(--accent-color)', color: '#000', border: '1px solid var(--border-color)', textAlign: 'left' }} className="total-cell">{t('shipping.footer.invoice_total')}</td>
                        <td style={{ padding: '12px', background: 'rgba(212, 175, 55, 0.5)', border: '1px solid var(--border-color)', color: 'var(--accent-color)', fontSize: '1.4rem', textAlign: 'right' }} className="total-cell">
@@ -1261,7 +1280,6 @@ ${imgInfo.base64Data}
               </table>
            </div>
 
-           {/* ─── BOTTOM DETAILS ─── */}
            <div className="inv-bottom-details" style={{ marginTop: '2rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', fontWeight: 'bold', fontSize: '1.1rem' }} dir="ltr">
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: 'var(--surface-highlight)', padding: '10px 15px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
                  <span style={{ width: '200px' }}>{t('shipping.footer.say_total')}</span>
@@ -1282,7 +1300,6 @@ ${imgInfo.base64Data}
         </div>
       </div>
 
-      {/* ─── FETCH DIALOG ─── */}
       {showFetchDialog && (
          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', zIndex: 9999, display: 'flex', justifyContent: 'center', alignItems: 'center', backdropFilter: 'blur(5px)' }}>
             <div className="card fade-in" style={{ width: '450px', textAlign: 'center', border: '2px solid var(--accent-color)', boxShadow: '0 10px 40px rgba(212,175,55,0.2)' }}>
@@ -1303,7 +1320,6 @@ ${imgInfo.base64Data}
          </div>
       )}
 
-      {/* ─── F9 OVERLAY ─── */}
       {showSerialsList && (
           <div 
             style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 99998 }} 
@@ -1311,7 +1327,6 @@ ${imgInfo.base64Data}
           />
       )}
 
-      {/* ─── VALIDATION MODAL ─── */}
       {showValidationModal && (
          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', zIndex: 9999, display: 'flex', justifyContent: 'center', alignItems: 'center', backdropFilter: 'blur(5px)' }}>
             <div className="card fade-in" style={{ width: '550px', border: '2px solid #ef4444', boxShadow: '0 10px 40px rgba(239, 68, 68, 0.2)' }}>
@@ -1352,7 +1367,6 @@ ${imgInfo.base64Data}
          </div>
       )}
 
-      {/* ─── CLEAR CONFIRM MODAL ─── */}
       {showClearConfirm && (
          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', zIndex: 9999, display: 'flex', justifyContent: 'center', alignItems: 'center', backdropFilter: 'blur(5px)' }}>
             <div className="card fade-in" style={{ width: '400px', border: '2px solid #ef4444', boxShadow: '0 10px 40px rgba(239, 68, 68, 0.2)', textAlign: 'center' }}>

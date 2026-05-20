@@ -909,14 +909,204 @@ ${imgInfo.base64Data}
     }
   };
 
-  const exportToPDF = () => {
-    const today = new Date();
-    const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-    const invoiceNo = headerInfo.invoiceNo ? `_${headerInfo.invoiceNo}` : '';
-    const originalTitle = document.title;
-    document.title = `Packing_List${invoiceNo}_${dateStr}`;
-    window.print();
-    setTimeout(() => { document.title = originalTitle; }, 1000);
+  const exportToPDF = async () => {
+    if (rows.length === 0 || uniqueSerials.size === 0) {
+      return toast.error(t('shipping.messages.enter_serials_first', { defaultValue: 'لا توجد بيانات صالحة للتصدير' }));
+    }
+
+    const toastId = toast.loading(t('reports.messages.preparing_pdf', { defaultValue: 'جاري تجهيز ملف الـ PDF...' }));
+
+    try {
+      const companyDetails = [
+        headerInfo.fax ? `${headerInfo.fax}` : '',
+        headerInfo.tel ? `${headerInfo.tel}` : ''
+      ].filter(Boolean).join(' | ');
+
+      const fD = (d) => { 
+        if (!d || d === '-') return '-'; 
+        const p = d.split('-'); 
+        return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : d; 
+      };
+
+      // 1. إنشاء حاوية مؤقتة معزولة لتنسيق الطباعة بدقة وثبات تام
+      const el = document.createElement('div');
+      el.style.cssText = 'position:fixed;left:-9999px;top:0;width:1050px;background:#fff;padding:25px 30px;font-family:"Arial","Microsoft YaHei",sans-serif;color:#000;font-size:14px;line-height:1.4;direction:ltr;text-align:left;-webkit-font-smoothing:antialiased;';
+
+      const b = 'border:1px solid #cbd5e1;padding:8px 6px;font-weight:600;';
+      const tc = b + 'text-align:center;font-size:13px;';
+      const bl = b + 'text-align:left;font-size:13px;';
+      const hr = 'border:1px solid #1a5276;font-weight:900;text-align:center;font-size:12px;background:#1a5276;color:#fff;padding:10px 5px;text-transform:uppercase;';
+
+      // 2. بناء صفوف الجدول الديناميكي بـ HTML
+      let tableRowsHtml = '';
+      rows.forEach((row, index) => {
+        if (!row.serial.trim()) return;
+        const totalItemQty = normalSerialTotals[row.serial.trim()] || 0;
+        const packagesToRender = (row.packages && row.packages.length > 0) ? row.packages : [{ cartonNo: '', cartonQty: '', packingKind: 'Pcs', qtyPerCarton: '' }];
+        
+        packagesToRender.forEach((pkg, pIndex) => {
+          const isFirst = pIndex === 0;
+          const c = parseFloat(pkg.cartonQty) || 0;
+          const q = parseFloat(pkg.qtyPerCarton) || 0;
+          const itemQty = c * q;
+
+          tableRowsHtml += `
+            <tr>
+              ${isFirst ? `<td style="${tc}font-weight:bold;" rowspan="${packagesToRender.length}">${index + 1}</td>` : ''}
+              <td style="${tc}font-weight:bold;mso-number-format:'\\@';">${pkg.cartonNo || ''}</td>
+              ${isFirst ? `<td style="${tc}font-weight:bold;mso-number-format:'\\@';" rowspan="${packagesToRender.length}">${row.serial}</td>` : ''}
+              ${isFirst ? `<td style="${bl}" rowspan="${packagesToRender.length}">${row.desc || ''}</td>` : ''}
+              <td style="${tc}">${pkg.cartonQty || ''}</td>
+              <td style="${tc}">${pkg.packingKind || ''}</td>
+              <td style="${tc}">${pkg.qtyPerCarton || ''}</td>
+              <td style="${tc}font-weight:bold;">${itemQty > 0 ? itemQty : ''}</td>
+              ${isFirst ? `<td style="${tc}font-weight:bold;color:#1a5276;" rowspan="${packagesToRender.length}">${totalItemQty > 0 ? totalItemQty : ''}</td>` : ''}
+              ${isFirst && showImageColumn ? `
+              <td style="${tc}width:90px;height:90px;vertical-align:middle;padding:5px;" rowspan="${packagesToRender.length}">
+                ${row.image ? `<img src="${row.image}" style="width:75px;height:75px;object-fit:contain;border:1px solid #ccc;border-radius:4px;display:block;margin:0 auto;" crossOrigin="anonymous" />` : '-'}
+              </td>` : ''}
+              ${isFirst ? `<td style="${tc}" rowspan="${packagesToRender.length}">${row.factoryCode || row.details || '-'}</td>` : ''}
+            </tr>
+          `;
+        });
+      });
+
+      // إدراج المجموعات المشتركة (Mixed Groups)
+      if (mixedGroups.length > 0) {
+        tableRowsHtml += `
+          <tr style="background:rgba(26,82,118,0.1);">
+            <td colspan="${showImageColumn ? 11 : 10}" style="${tc}font-weight:bold;color:#1a5276;text-align:center;">
+              ${t('packing.table.mixed_header')}
+            </td>
+          </tr>
+        `;
+
+        mixedGroups.forEach((group, index) => {
+          const c = parseFloat(group.cartonQty) || 0;
+          let totalGroupQty = 0;
+          group.items.forEach(i => {
+            totalGroupQty += c * (parseFloat(i.qtyPerCarton) || 0);
+          });
+
+          group.items.forEach((item, itemIdx) => {
+            const isFirst = itemIdx === 0;
+            const itemQty = c * (parseFloat(item.qtyPerCarton) || 0);
+
+            tableRowsHtml += `
+              <tr>
+                ${isFirst ? `<td style="${tc}font-weight:bold;" rowspan="${group.items.length}">-</td>` : ''}
+                ${isFirst ? `<td style="${tc}font-weight:bold;color:#1a5276;" rowspan="${group.items.length}">${group.cartonNo}</td>` : ''}
+                <td style="${tc}font-weight:bold;mso-number-format:'\\@';">${item.serial}</td>
+                <td style="${bl}">${item.desc || ''}</td>
+                ${isFirst ? `<td style="${tc}font-weight:bold;" rowspan="${group.items.length}">${group.cartonQty}</td>` : ''}
+                <td style="${tc}">${item.packingKind || ''}</td>
+                <td style="${tc}">${item.qtyPerCarton || ''}</td>
+                <td style="${tc}font-weight:bold;">${itemQty > 0 ? itemQty : ''}</td>
+                ${isFirst ? `<td style="${tc}font-weight:bold;color:#1a5276;" rowspan="${group.items.length}">${totalGroupQty > 0 ? totalGroupQty : ''}</td>` : ''}
+                ${showImageColumn ? `
+                <td style="${tc}width:90px;height:90px;vertical-align:middle;padding:5px;">
+                  ${item.image ? `<img src="${item.image}" style="width:75px;height:75px;object-fit:contain;border:1px solid #ccc;border-radius:4px;display:block;margin:0 auto;" crossOrigin="anonymous" />` : '-'}
+                </td>` : ''}
+                <td style="${tc}">${item.factoryCode || item.details || '-'}</td>
+              </tr>
+            `;
+          });
+        });
+      }
+
+      // 3. تجميع هيكل الفاتورة المتكامل بستايل بريميوم متناسق
+      el.innerHTML = `
+        <div style="border-bottom:3px solid #1a5276;padding-bottom:15px;text-align:center;margin-bottom:20px;">
+          <div style="font-size:28px;font-weight:900;color:#1a5276;text-transform:uppercase;letter-spacing:0.5px;">${headerInfo.companyName}</div>
+          <div style="font-size:13px;color:#555;margin-top:6px;">${companyDetails}</div>
+        </div>
+
+        <table style="width:100%;margin-bottom:20px;background-color:#f8fafc;border:1px solid #cbd5e1;border-collapse:collapse;">
+          <tr>
+            <td style="${bl}width:16%;font-weight:bold;color:#1a5276;">${t('packing.header.invoice_no')}：</td>
+            <td style="${tc}width:17%;font-weight:bold;">${headerInfo.invoiceNo || '-'}</td>
+            <td style="${bl}width:16%;font-weight:bold;color:#1a5276;">${t('packing.header.branch')}：</td>
+            <td style="${tc}width:17%;font-weight:bold;">${headerInfo.branch || '-'}</td>
+            <td style="${bl}width:16%;font-weight:bold;color:#1a5276;">${t('packing.header.date')}：</td>
+            <td style="${tc}width:18%;font-weight:bold;">${fD(headerInfo.date)}</td>
+          </tr>
+        </table>
+
+        <div style="font-size:22px;color:#1a5276;text-align:center;margin:20px 0;font-weight:bold;text-transform:uppercase;letter-spacing:1.5px;">
+          ${t('packing.header.list_title')}
+        </div>
+
+        <table style="width:100%;border-collapse:collapse;border:2px solid #1a5276;margin-bottom:20px;">
+          <thead>
+            <tr>
+              <th style="${hr}width:40px;">No</th>
+              <th style="${hr}width:90px;">${t('packing.table.cols.carton_no')}<br/><small>${t('packing.table.cols.carton_no_ar')}</small></th>
+              <th style="${hr}width:120px;">${t('packing.table.cols.item_no')}<br/><small>${t('packing.table.cols.item_no_ar')}</small></th>
+              <th style="${hr}">${t('packing.table.cols.desc')}<br/><small>${t('packing.table.cols.desc_ar')}</small></th>
+              <th style="${hr}width:70px;">${t('packing.table.cols.carton_qty')}<br/><small>${t('packing.table.cols.carton_qty_ar')}</small></th>
+              <th style="${hr}width:70px;">${t('packing.table.cols.packing_kind')}<br/><small>${t('packing.table.cols.packing_kind_ar')}</small></th>
+              <th style="${hr}width:80px;">${t('packing.table.cols.qty_per_ctn')}<br/><small>${t('packing.table.cols.qty_per_ctn_ar')}</small></th>
+              <th style="${hr}width:80px;">${t('packing.table.cols.item_qty')}<br/><small>${t('packing.table.cols.item_qty_ar')}</small></th>
+              <th style="${hr}width:90px;">${t('packing.table.cols.total_item_qty')}<br/><small>${t('packing.table.cols.total_item_qty_ar')}</small></th>
+              ${showImageColumn ? `<th style="${hr}width:100px;">${t('packing.table.cols.image')}<br/><small>${t('packing.table.cols.image_ar')}</small></th>` : ''}
+              <th style="${hr}">${t('packing.table.cols.details_ar')}<br/><small>${t('packing.table.cols.details')}</small></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tableRowsHtml}
+            
+            <tr style="background:#eaf2f8;font-weight:bold;font-size:13px;color:#1a5276;border-top:2px solid #1a5276;border-bottom:2px solid #1a5276;">
+              <td style="${tc}padding:10px 5px;" colspan="3">${t('packing.footer.total')}</td>
+              <td style="${tc}padding:10px 5px;">${uniqueSerials.size} ${t('shipping.footer.items')}</td>
+              <td style="${tc}padding:10px 5px;" colspan="3">${totalCtn} ${t('shipping.footer.ctn', { defaultValue: 'CTN' })}</td>
+              <td style="${tc}padding:10px 5px;" colspan="${showImageColumn ? 4 : 3}">${totalPcs} ${t('shipping.footer.pcs')}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <table style="width:100%;margin-top:25px;border-collapse:collapse;border:1px solid #000;">
+          <tr>
+            <td style="${bl}width:200px;background:#f8fafc;border:1px solid #000;font-weight:bold;">Total Summary:</td>
+            <td style="${bl}color:#1a5276;border:1px solid #000;font-weight:bold;">${totalCtn} ${t('shipping.footer.ctn', { defaultValue: 'CTN' })} & ${totalPcs} ${t('shipping.footer.pcs')}</td>
+          </tr>
+          <tr>
+            <td style="${bl}background:#f8fafc;border:1px solid #000;font-weight:bold;">Container No:</td>
+            <td style="${bl}border:1px solid #000;font-weight:bold;">${footerInfo.containerNo || '-'}</td>
+          </tr>
+          <tr>
+            <td style="${bl}background:#f8fafc;border:1px solid #000;font-weight:bold;">Seal No:</td>
+            <td style="${bl}border:1px solid #000;font-weight:bold;">${footerInfo.sealNo || '-'}</td>
+          </tr>
+        </table>
+      `;
+
+      document.body.appendChild(el);
+
+      // 4. استدعاء مكتبة html2canvas لأخذ سكرين شوت برمجية بدقة Scale 3
+      const { default: html2canvas } = await import('html2canvas');
+      const canvas = await html2canvas(el, { scale: 3, useCORS: true, logging: false, backgroundColor: '#ffffff' });
+      document.body.removeChild(el);
+
+      const imgData = canvas.toDataURL('image/jpeg', 1.0);
+      
+      // 5. استخدام jsPDF لإنشاء مستند يتناسب طوله تلقائياً مع حجم الجدول لمنع تداخل الصفحات
+      const { jsPDF } = await import('jspdf');
+      const pW = 210; 
+      const pM = 6;   
+      const cW = pW - pM * 2; 
+      const cH = (canvas.height * cW) / canvas.width; 
+      
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [pW, Math.max(cH + pM * 2, 297)] });
+      pdf.addImage(imgData, 'JPEG', pM, pM, cW, cH);
+      
+      const invoiceNoStr = headerInfo.invoiceNo ? `_${headerInfo.invoiceNo}` : '';
+      pdf.save(`Packing_List${invoiceNoStr}_${localDate}.pdf`);
+      
+      toast.success(t('reports.messages.pdf_success', { defaultValue: 'تم تصدير ملف الـ PDF بنجاح!' }), { id: toastId });
+    } catch (err) {
+      toast.error(t('reports.messages.pdf_error', { defaultValue: 'فشل تصدير ملف الـ PDF' }), { id: toastId });
+      console.error(err);
+    }
   };
 
   return (
@@ -934,10 +1124,10 @@ ${imgInfo.base64Data}
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
           {hasPermission('packing', 'export') && (
             <>
-              <button onClick={exportToExcel} className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#107c41', borderColor: '#107c41', padding: '10px 20px', fontSize: '1.1rem' }}>
+              <button onClick={exportToExcel} className="btn" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', backgroundColor: '#10b981', color: 'white', border: 'none', padding: '10px 20px', fontSize: '1.1rem', boxShadow: '0 4px 15px rgba(16, 185, 129, 0.3)' }}>
                 <FileSpreadsheet size={20} /> {t('packing.excel_btn')}
               </button>
-              <button onClick={exportToPDF} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--accent-color)', color: '#000', padding: '10px 20px', fontSize: '1.1rem', border: 'none' }}>
+              <button onClick={exportToPDF} className="btn" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', backgroundColor: '#ef4444', color: 'white', border: 'none', padding: '10px 20px', fontSize: '1.1rem', boxShadow: '0 4px 15px rgba(239, 68, 68, 0.3)' }}>
                 <Printer size={20} /> {t('packing.print_btn')}
               </button>
             </>

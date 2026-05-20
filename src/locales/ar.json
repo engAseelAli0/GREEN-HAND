@@ -417,7 +417,7 @@
     },
     "export": {
       "excel": "تصدير Excel",
-      "pdf": "طباعة PDF"
+      "pdf": "تصدير PDF"
     },
     "info": {
       "title": "بيانات الطلبية والمصنع (Product & Factory Info)",
@@ -725,12 +725,13 @@
   "shipping": {
     "title": "فاتورة الشحن والتقارير المجمعة",
     "subtitle": "إنشاء فواتير شحن مجمعة، إدخال الأرقام التسلسلية وجلب البيانات آلياً بضغطة زر.",
-    "print_btn": "طباعة الفاتورة (Print)",
+    "print_btn": "تصدير PDF",
     "header": {
       "buyer": "Buyer (المشتري):",
       "invoice_no": "Invoice No. (رقم الفاتورة):",
       "branch": "Company Address (عنوان الشركة):",
       "date": "Date (التاريخ):",
+      "invoice_title": "فاتورة الشحن",
       "list_title": "Invoice List"
     },
     "table": {
@@ -762,7 +763,7 @@
       "add_row": "إضافة صف فارغ",
       "fetch_all": "جلب بيانات كل الأصناف المدخلة",
       "clear_all": "تفريغ كافة البيانات",
-      "excel_btn": "تحميل إكسل"
+      "excel_btn": "تحميل Excel"
     },
     "footer": {
       "total": "Total",
@@ -814,8 +815,8 @@
   "packing": {
     "title": "بوليصة التعبئة (Packing List)",
     "subtitle": "كشف تعبئة البضائع للجمارك مع إمكانية دمج عدة موديلات في كرتون واحد.",
-    "print_btn": "تصدير PDF / طباعة",
-    "excel_btn": "تحميل إكسل",
+    "print_btn": "تصدير PDF",
+    "excel_btn": "تحميل Excel",
     "header": {
       "company": "ARABIAN FRIENDSHIP TRADING CO.,LIMITED",
       "tel": "Tel:",

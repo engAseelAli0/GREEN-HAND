@@ -740,6 +740,7 @@
       "invoice_no": "Invoice No.:",
       "branch": "Company Address:",
       "date": "Date:",
+      "invoice_title": "Shipping Invoice",
       "list_title": "Invoice List"
     },
     "table": {

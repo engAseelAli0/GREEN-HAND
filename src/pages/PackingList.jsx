@@ -196,14 +196,19 @@ const PackingList = () => {
                   receivedMap.set(r.serial_number, true);
               }
           });
-
+          const seenSerials = new Set();
           rows.forEach(r => {
               const s = r.serial.trim();
               if (s) {
-                  if (!existingOrders.has(s)) {
-                      invalidItems.push({ id: r.id, serial: s, reason: t('shipping.validation.reasons.not_found') });
-                  } else if (!receivedMap.has(s)) {
-                      invalidItems.push({ id: r.id, serial: s, reason: t('shipping.validation.reasons.not_received') });
+                  if (seenSerials.has(s)) {
+                      invalidItems.push({ id: r.id, serial: s, reason: t('shipping.validation.reasons.duplicate') });
+                  } else {
+                      seenSerials.add(s);
+                      if (!existingOrders.has(s)) {
+                          invalidItems.push({ id: r.id, serial: s, reason: t('shipping.validation.reasons.not_found') });
+                      } else if (!receivedMap.has(s)) {
+                          invalidItems.push({ id: r.id, serial: s, reason: t('shipping.validation.reasons.not_received') });
+                      }
                   }
               }
           });
@@ -224,7 +229,7 @@ const PackingList = () => {
       }
   };
 
-    const fetchAllData = async (withImage, badSerialsToSkip = [], removeBadRows = false) => {
+    const fetchAllData = async (withImage, badSerialsToSkip = [], removeBadRows = false, badRowIdsToRemove = []) => {
     setShowImageColumn(withImage);
     const toastId = toast.loading(t('shipping.messages.fetching_data'));
     let successCount = 0;
@@ -236,13 +241,21 @@ const PackingList = () => {
     // Determine the working rows
     let workingRows = [...rows];
     if (removeBadRows) {
-        workingRows = workingRows.filter(r => !badSerialsToSkip.includes(r.serial.trim()));
+        if (badRowIdsToRemove && badRowIdsToRemove.length > 0) {
+            workingRows = workingRows.filter(r => !badRowIdsToRemove.includes(r.id));
+        } else {
+            workingRows = workingRows.filter(r => !badSerialsToSkip.includes(r.serial.trim()));
+        }
+    }
+
+    if (workingRows.length === 0) {
+        workingRows = [{ id: Date.now(), serial: '', desc: '', details: '', image: '', packages: [{ id: Date.now() + 1, cartonNo: '', cartonQty: '', packingKind: 'Pcs', qtyPerCarton: '' }], factoryCode: '' }];
     }
 
     // First pass
     for (let i = 0; i < workingRows.length; i++) {
         let row = workingRows[i];
-        if (!row.serial.trim() || badSerialsToSkip.includes(row.serial.trim())) { 
+        if (!row.serial.trim() || (removeBadRows ? false : badSerialsToSkip.includes(row.serial.trim()))) { 
             serialCartonMap.push({ isSkipped: true, row });
             continue; 
         }
@@ -463,6 +476,7 @@ const PackingList = () => {
 
   // ─── CALCULATIONS ON THE FLY ───
   const serialTotals = {};
+  const normalSerialTotals = {};
   let totalCtn = 0;
   let totalPcs = 0;
   let uniqueSerials = new Set();
@@ -482,6 +496,7 @@ const PackingList = () => {
       if (s) {
           uniqueSerials.add(s);
           serialTotals[s] = (serialTotals[s] || 0) + rowQty;
+          normalSerialTotals[s] = (normalSerialTotals[s] || 0) + rowQty;
       }
   });
 
@@ -500,124 +515,390 @@ const PackingList = () => {
       });
   });
 
-  const exportToPDF = () => {
-    window.print();
-  };
-
   const exportToExcel = async () => {
     try {
-      const { utils, writeFile } = await import('xlsx');
-      
-      const excelData = [];
-      
-      // Header
-      excelData.push([t('packing.title')]);
-      excelData.push([]);
-      excelData.push([t('packing.header.invoice_no'), headerInfo.invoiceNo, t('packing.header.date'), headerInfo.date]);
-      excelData.push([t('packing.header.branch'), headerInfo.branch]);
-      excelData.push([]);
-      
-      // Table Header
-      excelData.push([
-        t('packing.table.cols.no'),
-        t('packing.table.cols.carton_no'),
-        t('packing.table.cols.item_no'),
-        t('packing.table.cols.desc'),
-        t('packing.table.cols.carton_qty'),
-        t('packing.table.cols.packing_kind'),
-        t('packing.table.cols.qty_per_ctn'),
-        t('packing.table.cols.item_qty'),
-        t('packing.table.cols.total_item_qty'),
-        t('packing.table.cols.details_ar')
-      ]);
-      
-      // Table Rows
-      rows.forEach((row, index) => {
-        const totalItemQty = serialTotals[row.serial.trim()] || 0;
-        const packages = (row.packages && row.packages.length > 0) ? row.packages : [{ cartonNo: '', cartonQty: '', packingKind: 'Pcs', qtyPerCarton: '' }];
-        
-        packages.forEach((pkg, pIndex) => {
-            const isFirst = pIndex === 0;
-            const c = parseFloat(pkg.cartonQty) || 0;
-            const q = parseFloat(pkg.qtyPerCarton) || 0;
-            const itemQty = c * q;
+      const getAbsoluteImageUrl = (imgSrc) => {
+        if (!imgSrc) return '';
+        if (imgSrc.startsWith('data:') || imgSrc.startsWith('http://') || imgSrc.startsWith('https://')) {
+          return imgSrc;
+        }
+        const origin = window.location.origin;
+        return `${origin}${imgSrc.startsWith('/') ? '' : '/'}${imgSrc}`;
+      };
 
-            excelData.push([
-                isFirst ? index + 1 : '',
-                pkg.cartonNo,
-                isFirst ? row.serial : '',
-                isFirst ? row.desc : '',
-                pkg.cartonQty,
-                pkg.packingKind,
-                pkg.qtyPerCarton,
-                itemQty || '',
-                isFirst ? totalItemQty : '',
-                isFirst ? (row.factoryCode || row.details || '-') : ''
-            ]);
-        });
+      const getBase64Image = async (imgSrc) => {
+        if (!imgSrc) return null;
+        const absoluteUrl = getAbsoluteImageUrl(imgSrc);
+        if (absoluteUrl.startsWith('data:')) {
+          const matches = absoluteUrl.match(/^data:([^;]+);base64,(.+)$/);
+          if (matches) {
+            return {
+              mimeType: matches[1],
+              base64Data: matches[2]
+            };
+          }
+        }
+        try {
+          const response = await fetch(absoluteUrl);
+          const blob = await response.blob();
+          const base64 = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+          const matches = base64.match(/^data:([^;]+);base64,(.+)$/);
+          if (matches) {
+            return {
+              mimeType: matches[1],
+              base64Data: matches[2]
+            };
+          }
+        } catch (err) {
+          console.error('Error fetching image for Excel:', absoluteUrl, err);
+        }
+        return null;
+      };
+
+      const imageMap = new Map();
+      const registerImage = (imgSrc) => {
+        if (!imgSrc) return null;
+        if (imageMap.has(imgSrc)) {
+          return imageMap.get(imgSrc).cid;
+        }
+        const cid = `image_${imageMap.size}`;
+        imageMap.set(imgSrc, { cid, src: imgSrc, mimeType: 'image/jpeg', base64Data: '' });
+        return cid;
+      };
+
+      let htmlString = `
+<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+<head>
+<meta charset="utf-8" />
+<!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Packing List</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->
+<style>
+  body {
+    font-family: 'Arial', 'Microsoft YaHei', sans-serif;
+    direction: ltr;
+    margin: 20px;
+  }
+  .pl-header {
+    border-bottom: 3px solid #1a5276;
+    padding: 15px;
+    text-align: center;
+  }
+  .company-name {
+    font-size: 22px;
+    font-weight: 900;
+    color: #1a5276;
+    text-transform: uppercase;
+  }
+  .company-tel {
+    font-size: 11px;
+    color: #555;
+    margin-top: 5px;
+  }
+  .pl-meta-table {
+    width: 100%;
+    margin-top: 15px;
+    background-color: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-collapse: collapse;
+  }
+  .pl-meta-table td {
+    padding: 8px;
+    font-size: 11px;
+    border: 1px solid #cbd5e1;
+  }
+  .pl-meta-label {
+    font-weight: bold;
+    color: #1a5276;
+  }
+  .pl-title {
+    font-size: 18px;
+    color: #1a5276;
+    text-align: center;
+    margin: 20px 0;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+  }
+  .pl-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+    border: 2px solid #1a5276;
+  }
+  .pl-table th {
+    background-color: #1a5276;
+    color: white;
+    font-weight: bold;
+    padding: 10px 5px;
+    border: 1px solid #1a5276;
+    font-size: 10px;
+    text-transform: uppercase;
+  }
+  .pl-table td {
+    border: 1px solid #cbd5e1;
+    padding: 6px;
+    color: #0f172a;
+    text-align: center;
+    vertical-align: middle;
+  }
+  .pl-table img {
+    width: 50px;
+    height: 60px;
+    object-fit: contain;
+    border: 1px solid #ccc;
+    border-radius: 2px;
+  }
+  .pl-mixed-hdr td {
+    background-color: #2980b9;
+    color: white;
+    font-weight: bold;
+    font-style: italic;
+    font-size: 10px;
+    padding: 8px;
+  }
+  .pl-total-row td {
+    background-color: #eaf2f8;
+    font-weight: 900;
+    color: #1a5276;
+    border-top: 2px solid #1a5276;
+    border-bottom: 2px solid #1a5276;
+    font-size: 12px;
+  }
+  .pl-bottom-table {
+    width: 100%;
+    margin-top: 20px;
+    border-collapse: collapse;
+    font-size: 11px;
+  }
+  .pl-bottom-table td {
+    border: 1px solid #000;
+    padding: 8px 12px;
+    font-weight: bold;
+    background-color: #fff;
+  }
+  .pl-bottom-label {
+    width: 250px;
+    color: #000;
+  }
+  .pl-bottom-value {
+    color: #1a5276;
+  }
+  .text-cell {
+    mso-number-format: "\\@";
+  }
+</style>
+</head>
+<body>
+
+  <!-- ─── HEADER ─── -->
+  <div class="pl-header">
+    <div class="company-name">${headerInfo.companyName}</div>
+    <div class="company-tel">
+      ${headerInfo.fax ? `<span>${headerInfo.fax}</span>` : ''}
+      &nbsp;&nbsp;&nbsp;&nbsp;
+      ${headerInfo.tel ? `<span>${headerInfo.tel}</span>` : ''}
+    </div>
+  </div>
+
+  <!-- ─── METADATA ─── -->
+  <table class="pl-meta-table">
+    <tr>
+      <td class="pl-meta-label" width="15%">${t('packing.header.invoice_no')}:</td>
+      <td width="18%">${headerInfo.invoiceNo || ''}</td>
+      <td class="pl-meta-label" width="15%">${t('packing.header.branch')}:</td>
+      <td width="18%">${headerInfo.branch || ''}</td>
+      <td class="pl-meta-label" width="15%">${t('packing.header.date')}:</td>
+      <td width="19%">${headerInfo.date || ''}</td>
+    </tr>
+  </table>
+
+  <!-- ─── TITLE ─── -->
+  <div class="pl-title">${t('packing.header.list_title')}</div>
+
+  <!-- ─── TABLE ─── -->
+  <table class="pl-table">
+    <thead>
+      <tr>
+        <th width="40">${t('packing.table.cols.no')}</th>
+        <th width="90">${t('packing.table.cols.carton_no')}<br/><span style="font-size:8px; font-weight:normal;">${t('packing.table.cols.carton_no_ar')}</span></th>
+        <th width="120">${t('packing.table.cols.item_no')}<br/><span style="font-size:8px; font-weight:normal;">${t('packing.table.cols.item_no_ar')}</span></th>
+        <th>${t('packing.table.cols.desc')}<br/><span style="font-size:8px; font-weight:normal;">${t('packing.table.cols.desc_ar')}</span></th>
+        <th width="70">${t('packing.table.cols.carton_qty')}<br/><span style="font-size:8px; font-weight:normal;">${t('packing.table.cols.carton_qty_ar')}</span></th>
+        <th width="70">${t('packing.table.cols.packing_kind')}<br/><span style="font-size:8px; font-weight:normal;">${t('packing.table.cols.packing_kind_ar')}</span></th>
+        <th width="80">${t('packing.table.cols.qty_per_ctn')}<br/><span style="font-size:8px; font-weight:normal;">${t('packing.table.cols.qty_per_ctn_ar')}</span></th>
+        <th width="80">${t('packing.table.cols.item_qty')}<br/><span style="font-size:8px; font-weight:normal;">${t('packing.table.cols.item_qty_ar')}</span></th>
+        <th width="90">${t('packing.table.cols.total_item_qty')}<br/><span style="font-size:8px; font-weight:normal;">${t('packing.table.cols.total_item_qty_ar')}</span></th>
+        ${showImageColumn ? `<th width="100">${t('packing.table.cols.image')}<br/><span style="font-size:8px; font-weight:normal;">${t('packing.table.cols.image_ar')}</span></th>` : ''}
+        <th>${t('packing.table.cols.details_ar')}<br/><span style="font-size:8px; font-weight:normal;">${t('packing.table.cols.details')}</span></th>
+      </tr>
+    </thead>
+    <tbody>
+`;
+
+    // Render normal rows
+    rows.forEach((row, index) => {
+      const totalItemQty = normalSerialTotals[row.serial.trim()] || 0;
+      const packagesToRender = (row.packages && row.packages.length > 0) ? row.packages : [{ cartonNo: '', cartonQty: '', packingKind: 'Pcs', qtyPerCarton: '' }];
+      
+      packagesToRender.forEach((pkg, pIndex) => {
+        const isFirst = pIndex === 0;
+        const c = parseFloat(pkg.cartonQty) || 0;
+        const q = parseFloat(pkg.qtyPerCarton) || 0;
+        const itemQty = c * q;
+        const rowCid = row.image ? registerImage(row.image) : null;
+        const needsImageRowHeight = isFirst && showImageColumn && rowCid;
+
+        htmlString += `
+      <tr height="${needsImageRowHeight ? 95 : 25}" style="${needsImageRowHeight ? 'height:95px;' : ''}">
+        ${isFirst ? `<td rowspan="${packagesToRender.length}" style="font-weight:bold;">${index + 1}</td>` : ''}
+        <td class="text-cell" style="font-weight:bold;">${pkg.cartonNo || ''}</td>
+        ${isFirst ? `<td class="text-cell" rowspan="${packagesToRender.length}" style="font-weight:bold;">${row.serial}</td>` : ''}
+        ${isFirst ? `<td rowspan="${packagesToRender.length}">${row.desc || ''}</td>` : ''}
+        <td>${pkg.cartonQty || ''}</td>
+        <td>${pkg.packingKind || ''}</td>
+        <td>${pkg.qtyPerCarton || ''}</td>
+        <td style="font-weight:bold;">${itemQty > 0 ? itemQty : ''}</td>
+        ${isFirst ? `<td rowspan="${packagesToRender.length}" style="font-weight:bold; color:#d4af37;">${totalItemQty > 0 ? totalItemQty : ''}</td>` : ''}
+        ${isFirst && showImageColumn ? `
+        <td rowspan="${packagesToRender.length}" style="width:90px; height:90px; text-align:center; vertical-align:middle; padding:5px;">
+          ${rowCid ? `<img src="cid:${rowCid}" style="width:80px; height:80px; display:block; margin:0 auto;" width="80" height="80" alt="Item" />` : ''}
+        </td>` : ''}
+        ${isFirst ? `<td rowspan="${packagesToRender.length}">${row.factoryCode || row.details || '-'}</td>` : ''}
+      </tr>
+`;
       });
+    });
 
-      // Mixed Groups
+    // Render mixed groups
+    if (mixedGroups.length > 0) {
+      htmlString += `
+      <tr class="pl-mixed-hdr">
+        <td colspan="${showImageColumn ? 11 : 10}" style="text-align:center;">
+          ${t('packing.table.mixed_header')}
+        </td>
+      </tr>
+`;
+
       mixedGroups.forEach((group, index) => {
-        excelData.push(['', '', '', `--- ${t('packing.table.mixed_header')} (${group.cartonNo}) ---`, '', '', '', '', '', '']);
-        const groupCtn = parseFloat(group.cartonQty) || 0;
+        const c = parseFloat(group.cartonQty) || 0;
+        let totalGroupQty = 0;
+        group.items.forEach(i => {
+          totalGroupQty += c * (parseFloat(i.qtyPerCarton) || 0);
+        });
+
         group.items.forEach((item, itemIdx) => {
-            const q = parseFloat(item.qtyPerCarton) || 0;
-            const itemQty = groupCtn * q;
-            const totalItemQty = serialTotals[item.serial.trim()] || 0;
-            
-            excelData.push([
-                `M${index + 1}`,
-                itemIdx === 0 ? group.cartonNo : '',
-                item.serial,
-                item.desc,
-                itemIdx === 0 ? group.cartonQty : '',
-                item.packingKind,
-                item.qtyPerCarton,
-                itemQty || '',
-                totalItemQty,
-                item.factoryCode || item.details || '-'
-            ]);
+          const isFirst = itemIdx === 0;
+          const itemQty = c * (parseFloat(item.qtyPerCarton) || 0);
+          const itemCid = item.image ? registerImage(item.image) : null;
+
+          htmlString += `
+      <tr height="${showImageColumn && itemCid ? 95 : 25}" style="${showImageColumn && itemCid ? 'height:95px;' : ''}">
+        ${isFirst ? `<td rowspan="${group.items.length}">-</td>` : ''}
+        ${isFirst ? `<td class="text-cell" rowspan="${group.items.length}" style="font-weight:bold; color:#d4af37;">${group.cartonNo}</td>` : ''}
+        <td class="text-cell" style="font-weight:bold;">${item.serial}</td>
+        <td>${item.desc || ''}</td>
+        ${isFirst ? `<td rowspan="${group.items.length}" style="font-weight:bold;">${group.cartonQty}</td>` : ''}
+        <td>${item.packingKind || ''}</td>
+        <td>${item.qtyPerCarton || ''}</td>
+        <td style="font-weight:bold;">${itemQty > 0 ? itemQty : ''}</td>
+        ${isFirst ? `<td rowspan="${group.items.length}" style="font-weight:bold;">${totalGroupQty > 0 ? totalGroupQty : ''}</td>` : ''}
+        ${showImageColumn ? `
+        <td style="width:90px; height:90px; text-align:center; vertical-align:middle; padding:5px;">
+          ${itemCid ? `<img src="cid:${itemCid}" style="width:80px; height:80px; display:block; margin:0 auto;" width="80" height="80" alt="Item" />` : ''}
+        </td>` : ''}
+        <td>${item.factoryCode || item.details || '-'}</td>
+      </tr>
+`;
         });
       });
-      
-      excelData.push([]);
-      
-      // Footer
-      excelData.push([t('packing.footer.total'), '', '', '', totalCtn, '', '', totalPcs, '', '']);
-      excelData.push(['', t('packing.footer.container_no'), footerInfo.containerNo, '', t('packing.footer.seal_no'), footerInfo.sealNo, '', '', '', '']);
-      
-      const ws = utils.aoa_to_sheet(excelData);
-      ws['!dir'] = 'rtl'; // Right to left
-      
-      // Merge title row
-      ws['!merges'] = [
-        { s: { r: 0, c: 0 }, e: { r: 0, c: 9 } }
-      ];
-      
-      // Set column widths
-      ws['!cols'] = [
-        { wch: 5 },  // No
-        { wch: 15 }, // Carton No
-        { wch: 15 }, // Item No
-        { wch: 25 }, // Desc
-        { wch: 10 }, // Carton Qty
-        { wch: 10 }, // Packing Kind
-        { wch: 10 }, // Qty per Ctn
-        { wch: 10 }, // Item Qty
-        { wch: 15 }, // Total Item Qty
-        { wch: 20 }  // Other Details
-      ];
-      
-      const wb = utils.book_new();
-      utils.book_append_sheet(wb, ws, "Packing List");
-      
-      writeFile(wb, `Packing_List_${headerInfo.invoiceNo || 'Export'}.xlsx`);
+    }
+
+    // Totals Row
+    htmlString += `
+      <tr class="pl-total-row">
+        <td colspan="3">${t('packing.footer.total')}</td>
+        <td>${uniqueSerials.size} ${t('shipping.footer.items')}</td>
+        <td colspan="3">${totalCtn} ${t('shipping.footer.ctn', { defaultValue: 'CTN' })}</td>
+        <td colspan="${showImageColumn ? 4 : 3}">${totalPcs} ${t('shipping.footer.pcs')}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- ─── BOTTOM DETAILS ─── -->
+  <table class="pl-bottom-table">
+    <tr>
+      <td class="pl-bottom-label">${t('packing.footer.summary_label')}</td>
+      <td class="pl-bottom-value">${totalCtn} ${t('shipping.footer.ctn', { defaultValue: 'CTN' })} & ${totalPcs} ${t('shipping.footer.pcs')}</td>
+    </tr>
+    <tr>
+      <td class="pl-bottom-label">${t('packing.footer.container_no')}</td>
+      <td>${footerInfo.containerNo || '-'}</td>
+    </tr>
+    <tr>
+      <td class="pl-bottom-label">${t('packing.footer.seal_no')}</td>
+      <td>${footerInfo.sealNo || '-'}</td>
+    </tr>
+  </table>
+
+</body>
+</html>
+`;
+
+      // Fetch and convert all images to base64
+      const imagePromises = Array.from(imageMap.entries()).map(async ([src, imgInfo]) => {
+        const base64Info = await getBase64Image(src);
+        if (base64Info) {
+          imgInfo.mimeType = base64Info.mimeType;
+          imgInfo.base64Data = base64Info.base64Data;
+        }
+      });
+      await Promise.all(imagePromises);
+
+      // Construct MHTML
+      let mhtmlString = `MIME-Version: 1.0
+Content-Type: multipart/related; boundary="----=_NextPart_ExcelImage"
+
+------=_NextPart_ExcelImage
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+
+` + htmlString;
+
+      // Append images to MHTML
+      imageMap.forEach((imgInfo) => {
+        if (imgInfo.base64Data) {
+          mhtmlString += `
+------=_NextPart_ExcelImage
+Content-Type: ${imgInfo.mimeType}
+Content-Transfer-Encoding: base64
+Content-Location: ${imgInfo.cid}
+
+${imgInfo.base64Data}
+`;
+        }
+      });
+
+      mhtmlString += `\n------=_NextPart_ExcelImage--\n`;
+
+      const blob = new Blob([mhtmlString], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Packing_List_${headerInfo.invoiceNo || 'Export'}.xls`;
+      link.click();
       toast.success(t('excel_export_success'));
     } catch (error) {
       console.error('Error exporting to Excel:', error);
       toast.error(t('excel_export_error'));
     }
+  };
+
+  const exportToPDF = () => {
+    window.print();
   };
 
   return (
@@ -845,8 +1126,8 @@ const PackingList = () => {
                </thead>
                <tbody>
                  {rows.map((row, index) => {
-                    const totalItemQty = serialTotals[row.serial.trim()] || 0;
-                    const packagesToRender = (row.packages && row.packages.length > 0) ? row.packages : [{ id: 'fallback_' + row.id, cartonNo: '', cartonQty: '', packingKind: 'Pcs', qtyPerCarton: '' }];
+                     const totalItemQty = normalSerialTotals[row.serial.trim()] || 0;
+                     const packagesToRender = (row.packages && row.packages.length > 0) ? row.packages : [{ id: 'fallback_' + row.id, cartonNo: '', cartonQty: '', packingKind: 'Pcs', qtyPerCarton: '' }];
 
                     return (
                         <React.Fragment key={row.id}>
@@ -1233,9 +1514,10 @@ const PackingList = () => {
                <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
                   <button onClick={() => {
                       const badSerials = invalidSerials.map(inv => inv.serial);
+                      const badIds = invalidSerials.map(inv => inv.id);
                       setHighlightedSerials([]);
                       setShowValidationModal(false);
-                      setTimeout(() => fetchAllData(pendingFetchOptions, badSerials, true), 0);
+                      setTimeout(() => fetchAllData(pendingFetchOptions, badSerials, true, badIds), 0);
                   }} className="btn btn-primary" style={{ flex: 1, background: '#ef4444', color: '#fff', border: 'none', padding: '12px', fontSize: '1.1rem' }}>
                      {t('shipping.validation.remove_invalid')}
                   </button>

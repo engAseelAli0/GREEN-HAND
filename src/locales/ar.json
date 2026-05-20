@@ -40,8 +40,8 @@
     "reports": "التقارير والإحصائيات",
     "order_reports": "تقارير الطلبيات",
     "shipping_invoice": "فاتورة الشحن",
-    "packing_list": "فاتورة الجمارك (Packing List)",
-    "warehouse_receipt": "تقرير استلام البضائع (Warehouse Receipt)"
+    "packing_list": "فاتورة الجمارك ",
+    "warehouse_receipt": "تقرير استلام البضائع"
   },
   "home": {
     "entry_desc": "واجهة التسجيل الذكية. إنشاء طلبيات جديدة للمصانع، وتحديد الكميات، ألوان المنتجات وتوزيع المقاسات في قاعدة البيانات.",
@@ -257,7 +257,7 @@
       "select_company": "? اختر الشركة ?",
       "date_label": "التاريخ (Date)",
       "fetch_serial_label": "رقم الموديل للاسترداد (Item No)",
-      "fetch_placeholder": "أدخل الرقم... (F9)",
+      "fetch_placeholder": "أدخل الرقم او اضغط (F9)",
       "fetch_btn": "جلب (Fetch)",
       "clear_btn": "تفريغ وبدء جديد",
       "select_company_placeholder": "اضغط لاختيار الشركة",
@@ -557,7 +557,7 @@
     "back_btn": "العودة للبوابة",
     "search": {
       "label": "أدخل رقم الموديل لاستخراج بيانات الدفعات",
-      "placeholder": "مثال: 22890 (F9)",
+      "placeholder": "(F9) اضغط",
       "generate_btn": "توليد الجدول",
       "loading": "جاري السحب...",
       "setup_btn": "إعدادات الصفحة",
@@ -676,7 +676,7 @@
         "items_count": "{{count}} أصناف (Items)"
       }
     },
-    "detailed_terms": "شروط التعبئة الإضافية للفاتورة",
+    "detailed_terms": "الشروط المطلوبة للفاتورة",
     "no_terms_available": "لا توجد شروط مضافة حالياً. يمكنك إضافتها من الإعدادات.",
     "activity": {
       "smart_log": "سجل النشاط الذكي",
@@ -791,7 +791,8 @@
       "remove_invalid": "حذف الأسطر غير الصالحة",
       "reasons": {
         "not_found": "غير موجود في قاعدة البيانات",
-        "not_received": "غير مستلم من المصنع"
+        "not_received": "غير مستلم من المصنع",
+        "duplicate": "صنف مكرر"
       }
     },
     "clear_confirm": {
@@ -1079,7 +1080,7 @@
       "plasticBagSizes": "أحجام الأكياس",
       "tradeMarks": "العلامات التجارية",
       "measurements": "قائمة المقاسات",
-      "packagingConditionsList": "شروط التعبئة الإضافية",
+      "packagingConditionsList": "الشروط المطلوبة",
       "buyerCodes": "رموز المشترين",
       "system_users": "إدارة المستخدمين"
     },
@@ -1155,13 +1156,18 @@
     "edit_mode_desc": "قم بتحديث بيانات وصلاحيات المستخدم أدناه.",
     "add_new_user_desc": "أدخل التفاصيل لإنشاء مستخدم جديد في النظام.",
     "no_users": "لا يوجد مستخدمين",
+    "copy_permissions_label": "نسخ صلاحيات مستخدم",
+    "copy_permissions_placeholder": "— اختر مستخدم للنسخ منه —",
+    "allowed_admin_tabs": "أقسام لوحة الإدارة المسموح بها",
+    "allowed_admin_tabs_desc": "حدد الأقسام التي تظهر للمستخدم داخل لوحة التحكم الاستراتيجية. إذا لم يتم تحديد أي قسم، فستظهر له كافة الأقسام تلقائياً.",
     "messages": {
       "suspend_success": "تم إيقاف الحساب مؤقتاً",
       "activate_success": "تم تنشيط الحساب",
       "status_error": "حدث خطأ أثناء تغيير حالة الحساب",
       "username_required": "اسم المستخدم مطلوب",
       "password_required": "كلمة المرور مطلوبة للمستخدمين الجدد",
-      "save_error": "حدث خطأ أثناء حفظ المستخدم"
+      "save_error": "حدث خطأ أثناء حفظ المستخدم",
+      "permissions_copied": "تم نسخ الصلاحيات بنجاح!"
     }
   },
   "image_editor": {

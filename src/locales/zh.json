@@ -257,7 +257,7 @@
       "select_company": "? 选择公司 ?",
       "date_label": "日期",
       "fetch_serial_label": "款号读取",
-      "fetch_placeholder": "输入编号... (F9)",
+      "fetch_placeholder": "输入编号或按 (F9)",
       "fetch_btn": "读取",
       "clear_btn": "清空并新建",
       "select_company_placeholder": "点击选择公司",
@@ -671,7 +671,7 @@
         "items_count": "{{count}} 项目 (Items)"
       }
     },
-    "detailed_terms": "发票附加包装条款",
+    "detailed_terms": "发票所需条件",
     "no_terms_available": "目前没有附加条款。您可以在设置中添加。",
     "activity": {
       "smart_log": "智能活动日志",
@@ -786,7 +786,8 @@
       "remove_invalid": "删除无效行",
       "reasons": {
         "not_found": "数据库中未找到",
-        "not_received": "未从工厂接收"
+        "not_received": "未从工厂接收",
+        "duplicate": "重复品项"
       }
     },
     "clear_confirm": {
@@ -1075,7 +1076,7 @@
       "plasticBagSizes": "胶袋尺寸",
       "tradeMarks": "品牌/商标",
       "measurements": "尺码列表",
-      "packagingConditionsList": "额外包装条件",
+      "packagingConditionsList": "所需条件",
       "buyerCodes": "买家代码",
       "system_users": "用户管理"
     },
@@ -1150,13 +1151,18 @@
     "edit_mode_desc": "在下方更新用户的详细信息和权限。",
     "add_new_user_desc": "填写详细信息以在系统中创建新用户。",
     "no_users": "未找到用户",
+    "copy_permissions_label": "复制用户权限",
+    "copy_permissions_placeholder": "— 选择要复制的用户 —",
+    "allowed_admin_tabs": "允许的后台管理板块",
+    "allowed_admin_tabs_desc": "选择用户在后台管理面板中可见的板块。如果未选择，默认将显示所有板块。",
     "messages": {
       "suspend_success": "账户已成功停用",
       "activate_success": "账户已成功激活",
       "status_error": "更改账户状态时出错",
       "username_required": "用户名是必填项",
       "password_required": "新用户必须填写密码",
-      "save_error": "保存用户时出错"
+      "save_error": "保存用户时出错",
+      "permissions_copied": "权限复制成功！"
     }
   },
   "image_editor": {

@@ -35,6 +35,26 @@ const ALL_PAGES = [
 
 const ROLES = ['admin', 'data_entry', 'warehouse', 'factory', 'guest'];
 
+const ADMIN_TABS = [
+  { id: 'products', nameKey: 'admin.tabs.products', icon: '🛍️' },
+  { id: 'componentParts', nameKey: 'admin.tabs.componentParts', icon: '🧩' },
+  { id: 'currencies', nameKey: 'admin.tabs.currencies', icon: '💵' },
+  { id: 'fabrics', nameKey: 'admin.tabs.fabrics', icon: '✂️' },
+  { id: 'materials', nameKey: 'admin.tabs.materials', icon: '🥞' },
+  { id: 'colors', nameKey: 'admin.tabs.colors', icon: '🎨' },
+  { id: 'factories', nameKey: 'admin.tabs.factories', icon: '🏭' },
+  { id: 'companies', nameKey: 'admin.tabs.companies', icon: '🏢' },
+  { id: 'sizes', nameKey: 'admin.tabs.sizes', icon: '📏' },
+  { id: 'cartonPackages', nameKey: 'admin.tabs.cartonPackages', icon: '📦' },
+  { id: 'cartonSizes', nameKey: 'admin.tabs.cartonSizes', icon: '🔲' },
+  { id: 'plasticBagSizes', nameKey: 'admin.tabs.plasticBagSizes', icon: '🛒' },
+  { id: 'tradeMarks', nameKey: 'admin.tabs.tradeMarks', icon: '🏷️' },
+  { id: 'measurements', nameKey: 'admin.tabs.measurements', icon: '⚙️' },
+  { id: 'packagingConditionsList', nameKey: 'admin.tabs.packagingConditionsList', icon: '📝' },
+  { id: 'buyerCodes', nameKey: 'admin.tabs.buyerCodes', icon: '🔖' },
+  { id: 'system_users', nameKey: 'admin.tabs.system_users', icon: '🛡️' }
+];
+
 const UserManagement = () => {
   const { t } = useTranslation();
   const { lookups } = useAppData();
@@ -133,6 +153,27 @@ const UserManagement = () => {
     } catch (error) {
       toast.error(t('user_mgmt.messages.status_error'));
       console.error(error);
+    }
+  };
+
+  const handleCopyPermissions = (copyFromUserId) => {
+    if (!copyFromUserId) return;
+    const selectedUser = users.find(u => u.id === Number(copyFromUserId) || u.id === copyFromUserId);
+    if (selectedUser) {
+      let initialPermissions = selectedUser.permissions || {};
+      if (!selectedUser.permissions && selectedUser.allowed_pages) {
+        initialPermissions = {};
+        selectedUser.allowed_pages.forEach(p => {
+          initialPermissions[p] = { view: true, add: false, edit: false, delete: false, export: false };
+        });
+      }
+      setFormData(prev => ({
+        ...prev,
+        role: selectedUser.role,
+        allowed_pages: selectedUser.allowed_pages || [],
+        permissions: JSON.parse(JSON.stringify(initialPermissions)) // Deep copy
+      }));
+      toast.success(t('user_mgmt.messages.permissions_copied') || 'Permissions copied successfully!');
     }
   };
 
@@ -556,6 +597,49 @@ const UserManagement = () => {
             <div style={{ padding: '2rem', overflowY: 'auto', flex: 1 }}>
               <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
                 
+                {/* Copy User Permissions (Only on new user creation) */}
+                {!isEditing && (
+                  <div style={{ 
+                    display: 'flex', 
+                    flexDirection: 'column', 
+                    gap: '0.5rem', 
+                    background: 'rgba(212, 175, 55, 0.03)', 
+                    padding: '1.25rem', 
+                    borderRadius: '12px', 
+                    border: '1px solid rgba(212, 175, 55, 0.15)',
+                    boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.2)'
+                  }}>
+                    <label style={{ fontSize: '0.9rem', fontWeight: '600', color: 'var(--accent-color)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <Users size={16} /> {t('user_mgmt.copy_permissions_label')}
+                    </label>
+                    <div style={{ position: 'relative' }}>
+                      <select 
+                        className="form-control" 
+                        style={{ 
+                          background: 'rgba(0,0,0,0.3)', 
+                          height: '50px', 
+                          paddingRight: '2.5rem', 
+                          appearance: 'none', 
+                          cursor: 'pointer', 
+                          fontSize: '1.05rem', 
+                          border: '1px solid rgba(255,255,255,0.1)',
+                          color: 'var(--text-main)'
+                        }}
+                        onChange={e => handleCopyPermissions(e.target.value)}
+                        defaultValue=""
+                      >
+                        <option value="">{t('user_mgmt.copy_permissions_placeholder')}</option>
+                        {users.map(u => (
+                          <option key={u.id} value={u.id}>
+                            {u.username} ({t(`auth.${u.role}`) || u.role})
+                          </option>
+                        ))}
+                      </select>
+                      <Settings size={20} style={{ position: 'absolute', right: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
+                    </div>
+                  </div>
+                )}
+
                 {/* Basic Info Grid */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.5rem' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
@@ -745,6 +829,57 @@ const UserManagement = () => {
                           })}
                         </div>
                       </div>
+
+                      {/* Allowed Admin Dashboard Sections (Only if Admin Page view is checked) */}
+                      {formData.permissions?.admin?.view && (
+                        <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '2rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
+                            <span style={{ fontSize: '1.2rem' }}>👑</span>
+                            <h4 style={{ margin: 0, color: 'var(--text-strong)', fontSize: '1.1rem' }}>{t('user_mgmt.allowed_admin_tabs')}</h4>
+                          </div>
+                          <p style={{ margin: '0 0 1rem 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                            {t('user_mgmt.allowed_admin_tabs_desc')}
+                          </p>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
+                            {ADMIN_TABS.map((tab) => {
+                              const isSelected = (formData.permissions.allowed_admin_tabs || []).includes(tab.id);
+                              return (
+                                <div 
+                                  key={tab.id} 
+                                  onClick={() => toggleArrayPermission('allowed_admin_tabs', tab.id)} 
+                                  style={{ 
+                                    padding: '0.5rem 1rem', 
+                                    borderRadius: '8px', 
+                                    border: isSelected ? '1px solid var(--accent-color)' : '1px solid rgba(255,255,255,0.1)', 
+                                    background: isSelected ? 'rgba(212,175,55,0.1)' : 'rgba(255,255,255,0.02)', 
+                                    cursor: 'pointer', 
+                                    transition: 'all 0.2s', 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    gap: '0.5rem' 
+                                  }}
+                                >
+                                  <div style={{ 
+                                    width: '16px', 
+                                    height: '16px', 
+                                    borderRadius: '4px', 
+                                    border: '1px solid ' + (isSelected ? 'var(--accent-color)' : 'rgba(255,255,255,0.2)'), 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    justifyContent: 'center', 
+                                    background: isSelected ? 'var(--accent-color)' : 'transparent' 
+                                  }}>
+                                    {isSelected && <CheckCircle size={12} color="#000" />}
+                                  </div>
+                                  <span style={{ fontSize: '0.9rem', color: isSelected ? 'var(--accent-color)' : 'var(--text-main)', fontWeight: isSelected ? 'bold' : 'normal' }}>
+                                    {tab.icon} {t(tab.nameKey)}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

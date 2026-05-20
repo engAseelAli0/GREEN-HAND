@@ -57,7 +57,7 @@ const ShippingInvoice = () => {
   ]);
 
   const [footerInfo, setFooterInfo] = useState({
-    commissionPercent: '5',
+    commissionPercent: '',
     containerFee: '',
     insurance: '',
     internalShipping: '',
@@ -222,13 +222,19 @@ const ShippingInvoice = () => {
               }
           });
 
+          const seenSerials = new Set();
           rows.forEach(r => {
               const s = r.serial.trim();
               if (s) {
-                  if (!existingOrders.has(s)) {
-                      invalidItems.push({ id: r.id, serial: s, reason: t('shipping.validation.reasons.not_found') });
-                  } else if (!receivedMap.has(s)) {
-                      invalidItems.push({ id: r.id, serial: s, reason: t('shipping.validation.reasons.not_received') });
+                  if (seenSerials.has(s)) {
+                      invalidItems.push({ id: r.id, serial: s, reason: t('shipping.validation.reasons.duplicate') });
+                  } else {
+                      seenSerials.add(s);
+                      if (!existingOrders.has(s)) {
+                          invalidItems.push({ id: r.id, serial: s, reason: t('shipping.validation.reasons.not_found') });
+                      } else if (!receivedMap.has(s)) {
+                          invalidItems.push({ id: r.id, serial: s, reason: t('shipping.validation.reasons.not_received') });
+                      }
                   }
               }
           });
@@ -249,7 +255,7 @@ const ShippingInvoice = () => {
       }
   };
 
-  const fetchAllData = async (withImage, badSerialsToSkip = [], removeBadRows = false) => {
+  const fetchAllData = async (withImage, badSerialsToSkip = [], removeBadRows = false, badRowIdsToRemove = []) => {
     setShowImageColumn(withImage);
     const toastId = toast.loading(t('shipping.messages.fetching_data'));
     let successCount = 0;
@@ -257,11 +263,19 @@ const ShippingInvoice = () => {
     // Create a copy of rows
     let updatedRows = [...rows];
     if (removeBadRows) {
-        updatedRows = updatedRows.filter(r => !badSerialsToSkip.includes(r.serial.trim()));
+        if (badRowIdsToRemove && badRowIdsToRemove.length > 0) {
+            updatedRows = updatedRows.filter(r => !badRowIdsToRemove.includes(r.id));
+        } else {
+            updatedRows = updatedRows.filter(r => !badSerialsToSkip.includes(r.serial.trim()));
+        }
+    }
+
+    if (updatedRows.length === 0) {
+        updatedRows = [{ id: Date.now(), serial: '', desc: '', arabicName: '', qty: '', currency: '¥ RMB', unitPrice: '', totalAmount: 0, details: '', image: '', factoryCode: '' }];
     }
     for (let i = 0; i < updatedRows.length; i++) {
         let r = updatedRows[i];
-        if (r.serial.trim() && !badSerialsToSkip.includes(r.serial.trim())) { // Always fetch fresh data
+        if (r.serial.trim() && (removeBadRows ? true : !badSerialsToSkip.includes(r.serial.trim()))) { // Always fetch fresh data
             try {
                 const { data, error } = await supabase
                     .from('orders')
@@ -346,80 +360,356 @@ const ShippingInvoice = () => {
 
   const exportToExcel = async () => {
     try {
-      const { utils, writeFile } = await import('xlsx');
-      
-      const excelData = [];
-      
-      // Header
-      excelData.push([t('shipping.title')]);
-      excelData.push([]);
-      excelData.push([t('shipping.header.invoice_no'), headerInfo.invoiceNo, t('shipping.header.date'), headerInfo.date]);
-      excelData.push([t('shipping.header.branch'), headerInfo.branch]);
-      excelData.push([]);
-      
-      // Table Header
-      excelData.push([
-        t('shipping.table.cols.no'),
-        t('shipping.table.cols.item_no'),
-        t('shipping.table.cols.desc'),
-        t('shipping.table.cols.arabic_name'),
-        t('shipping.table.cols.qty'),
-        t('shipping.table.cols.currency'),
-        t('shipping.table.cols.unit_price'),
-        t('shipping.table.cols.total_amount'),
-        t('shipping.table.cols.other_details_ar')
-      ]);
-      
-      // Table Rows
+      const getAbsoluteImageUrl = (imgSrc) => {
+        if (!imgSrc) return '';
+        if (imgSrc.startsWith('data:') || imgSrc.startsWith('http://') || imgSrc.startsWith('https://')) {
+          return imgSrc;
+        }
+        const origin = window.location.origin;
+        return `${origin}${imgSrc.startsWith('/') ? '' : '/'}${imgSrc}`;
+      };
+
+      const getBase64Image = async (imgSrc) => {
+        if (!imgSrc) return null;
+        const absoluteUrl = getAbsoluteImageUrl(imgSrc);
+        if (absoluteUrl.startsWith('data:')) {
+          const matches = absoluteUrl.match(/^data:([^;]+);base64,(.+)$/);
+          if (matches) {
+            return {
+              mimeType: matches[1],
+              base64Data: matches[2]
+            };
+          }
+        }
+        try {
+          const response = await fetch(absoluteUrl);
+          const blob = await response.blob();
+          const base64 = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+          const matches = base64.match(/^data:([^;]+);base64,(.+)$/);
+          if (matches) {
+            return {
+              mimeType: matches[1],
+              base64Data: matches[2]
+            };
+          }
+        } catch (err) {
+          console.error('Error fetching image for Excel:', absoluteUrl, err);
+        }
+        return null;
+      };
+
+      const imageMap = new Map();
+      const registerImage = (imgSrc) => {
+        if (!imgSrc) return null;
+        if (imageMap.has(imgSrc)) {
+          return imageMap.get(imgSrc).cid;
+        }
+        const cid = `image_${imageMap.size}`;
+        imageMap.set(imgSrc, { cid, src: imgSrc, mimeType: 'image/jpeg', base64Data: '' });
+        return cid;
+      };
+
+      const companyDetails = [
+        headerInfo.fax ? `${headerInfo.fax}` : '',
+        headerInfo.tel ? `${headerInfo.tel}` : '',
+        headerInfo.address ? `${headerInfo.address}` : ''
+      ].filter(Boolean).join(' | ');
+
+      let htmlString = `
+<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+<head>
+<meta charset="utf-8" />
+<!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Shipping Invoice</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->
+<style>
+  body {
+    font-family: 'Arial', 'Microsoft YaHei', sans-serif;
+    direction: ltr;
+    margin: 20px;
+  }
+  .inv-header {
+    border-bottom: 3px solid #1a5276;
+    padding: 15px;
+    text-align: center;
+  }
+  .company-name {
+    font-size: 22px;
+    font-weight: 900;
+    color: #1a5276;
+    text-transform: uppercase;
+  }
+  .company-tel {
+    font-size: 11px;
+    color: #555;
+    margin-top: 5px;
+  }
+  .inv-meta-table {
+    width: 100%;
+    margin-top: 15px;
+    background-color: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-collapse: collapse;
+  }
+  .inv-meta-table td {
+    padding: 8px;
+    font-size: 11px;
+    border: 1px solid #cbd5e1;
+  }
+  .inv-meta-label {
+    font-weight: bold;
+    color: #1a5276;
+  }
+  .inv-title {
+    font-size: 18px;
+    color: #1a5276;
+    text-align: center;
+    margin: 20px 0;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+  }
+  .inv-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+    border: 2px solid #1a5276;
+  }
+  .inv-table th {
+    background-color: #1a5276;
+    color: white;
+    font-weight: bold;
+    padding: 10px 5px;
+    border: 1px solid #1a5276;
+    font-size: 10px;
+    text-transform: uppercase;
+  }
+  .inv-table td {
+    border: 1px solid #cbd5e1;
+    padding: 6px;
+    color: #0f172a;
+    text-align: center;
+    vertical-align: middle;
+  }
+  .inv-table img {
+    width: 60px;
+    height: 80px;
+    object-fit: contain;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+  }
+  .text-cell {
+    mso-number-format: "\\@";
+  }
+  .inv-footer-table {
+    width: 60%;
+    margin-top: 20px;
+    float: right;
+    border-collapse: collapse;
+    font-size: 11px;
+  }
+  .inv-footer-table td {
+    border: 1px solid #cbd5e1;
+    padding: 6px;
+    text-align: center;
+    color: #0f172a;
+  }
+  .inv-footer-table td.highlight-cell {
+    background-color: #1a5276;
+    color: white;
+    font-weight: bold;
+  }
+  .inv-bottom-table {
+    width: 100%;
+    margin-top: 20px;
+    border-collapse: collapse;
+    font-size: 11px;
+  }
+  .inv-bottom-table td {
+    border: 1px solid #000;
+    padding: 8px 12px;
+    font-weight: bold;
+    background-color: #fff;
+  }
+  .inv-bottom-label {
+    width: 250px;
+    color: #000;
+  }
+  .inv-bottom-value {
+    color: #1a5276;
+  }
+</style>
+</head>
+<body>
+
+  <!-- ─── HEADER ─── -->
+  <div class="inv-header">
+    <div class="company-name">${headerInfo.companyName}</div>
+    <div class="company-tel">${companyDetails}</div>
+  </div>
+
+  <!-- ─── METADATA ─── -->
+  <table class="inv-meta-table">
+    <tr>
+      <td class="inv-meta-label" width="15%">${t('shipping.header.invoice_no')}:</td>
+      <td width="18%">${headerInfo.invoiceNo || ''}</td>
+      <td class="inv-meta-label" width="15%">${t('shipping.header.branch')}:</td>
+      <td width="18%">${headerInfo.branch || ''}</td>
+      <td class="inv-meta-label" width="15%">${t('shipping.header.date')}:</td>
+      <td width="19%">${headerInfo.date || ''}</td>
+    </tr>
+  </table>
+
+  <!-- ─── TITLE ─── -->
+  <div class="inv-title">${t('shipping.header.invoice_title')}</div>
+
+  <!-- ─── TABLE ─── -->
+  <table class="inv-table">
+    <thead>
+      <tr>
+        <th width="40">${t('shipping.table.cols.no')}</th>
+        <th width="120">${t('shipping.table.cols.item_no')}<br/><span style="font-size:8px; font-weight:normal;">${t('shipping.table.cols.item_no_ar')}</span></th>
+        <th>${t('shipping.table.cols.desc')}<br/><span style="font-size:8px; font-weight:normal;">${t('shipping.table.cols.desc_ar')}</span></th>
+        <th>${t('shipping.table.cols.arabic_name')}<br/><span style="font-size:8px; font-weight:normal;">${t('shipping.table.cols.arabic_name_en')}</span></th>
+        <th width="80">${t('shipping.table.cols.qty')}<br/><span style="font-size:8px; font-weight:normal;">${t('shipping.table.cols.qty_ar')}</span></th>
+        <th width="80">${t('shipping.table.cols.currency')}<br/><span style="font-size:8px; font-weight:normal;">${t('shipping.table.cols.currency_ar')}</span></th>
+        <th width="90">${t('shipping.table.cols.unit_price')}<br/><span style="font-size:8px; font-weight:normal;">${t('shipping.table.cols.unit_price_ar')}</span></th>
+        <th width="120">${t('shipping.table.cols.total_amount')}<br/><span style="font-size:8px; font-weight:normal;">${t('shipping.table.cols.total_amount_ar')}</span></th>
+        ${showImageColumn ? `<th width="100">${t('shipping.table.cols.item_image')}<br/><span style="font-size:8px; font-weight:normal;">${t('shipping.table.cols.item_image_ar')}</span></th>` : ''}
+        <th width="120">${t('shipping.table.cols.other_details_ar')}<br/><span style="font-size:8px; font-weight:normal;">${t('shipping.table.cols.other_details')}</span></th>
+      </tr>
+    </thead>
+    <tbody>
+`;
+
       rows.forEach((row, index) => {
-        excelData.push([
-          index + 1,
-          row.serial,
-          row.desc,
-          row.arabicName,
-          row.qty,
-          row.currency,
-          row.unitPrice,
-          row.totalAmount,
-          row.factoryCode || row.details || '-'
-        ]);
+        const rowCid = row.image ? registerImage(row.image) : null;
+        const needsImageRowHeight = showImageColumn && rowCid;
+        htmlString += `
+      <tr height="${needsImageRowHeight ? 95 : 25}" style="${needsImageRowHeight ? 'height:95px;' : ''}">
+        <td style="font-weight:bold;">${index + 1}</td>
+        <td class="text-cell" style="font-weight:bold;">${row.serial}</td>
+        <td>${row.desc || ''}</td>
+        <td style="direction:rtl;">${row.arabicName || ''}</td>
+        <td style="font-weight:bold;">${row.qty || ''}</td>
+        <td>${row.currency || ''}</td>
+        <td>${row.unitPrice || ''}</td>
+        <td style="font-weight:bold; color:#d4af37;">${row.totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+        ${showImageColumn ? `
+        <td style="width:90px; height:90px; text-align:center; vertical-align:middle; padding:5px;">
+          ${rowCid ? `<img src="cid:${rowCid}" style="width:80px; height:80px; display:block; margin:0 auto;" width="80" height="80" alt="Product" />` : ''}
+        </td>` : ''}
+        <td>${row.factoryCode || row.details || '-'}</td>
+      </tr>
+`;
       });
-      
-      excelData.push([]);
-      
-      // Footer
-      excelData.push([t('shipping.footer.total'), totalItemsCount, '', '', totalPcs, '', '', subTotalAmount, '']);
-      excelData.push(['', '', '', '', '', '', t('shipping.footer.commission') + ` (${footerInfo.commissionPercent}%)`, commissionAmount, '']);
-      excelData.push(['', '', '', '', '', '', t('shipping.footer.container_fee'), footerInfo.containerFee, '']);
-      excelData.push(['', '', '', '', '', '', t('shipping.footer.insurance'), footerInfo.insurance, '']);
-      excelData.push(['', '', '', '', '', '', t('shipping.footer.internal_shipping'), footerInfo.internalShipping, '']);
-      excelData.push(['', '', '', '', '', '', t('shipping.footer.invoice_total'), invoiceTotal, '']);
-      
-      const ws = utils.aoa_to_sheet(excelData);
-      ws['!dir'] = 'rtl'; // Right to left
-      
-      // Merge title row
-      ws['!merges'] = [
-        { s: { r: 0, c: 0 }, e: { r: 0, c: 8 } }
-      ];
-      
-      // Set column widths
-      ws['!cols'] = [
-        { wch: 5 },  // No
-        { wch: 15 }, // Item No
-        { wch: 25 }, // Desc
-        { wch: 25 }, // Arabic Name
-        { wch: 10 }, // Qty
-        { wch: 10 }, // Currency
-        { wch: 15 }, // Unit Price
-        { wch: 15 }, // Total Amount
-        { wch: 20 }  // Other Details
-      ];
-      
-      const wb = utils.book_new();
-      utils.book_append_sheet(wb, ws, "Shipping Invoice");
-      
-      writeFile(wb, `Shipping_Invoice_${headerInfo.invoiceNo || 'Export'}.xlsx`);
+
+      htmlString += `
+    </tbody>
+  </table>
+
+  <!-- ─── FOOTER CALCULATIONS ─── -->
+  <div style="width: 100%; display: inline-block;">
+    <table class="inv-footer-table">
+      <tr>
+        <td class="highlight-cell" width="25%">${t('shipping.footer.total')}</td>
+        <td width="25%">${totalItemsCount} ${t('shipping.footer.items')}</td>
+        <td width="25%">${totalPcs} ${t('shipping.footer.pcs')}</td>
+        <td class="highlight-cell" width="25%">${subTotalAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })} ${primaryCurrency}</td>
+      </tr>
+      <tr>
+        <td colspan="2" style="border:none;"></td>
+        <td style="background-color:rgba(212, 175, 55, 0.05);">${t('shipping.footer.commission')} (${footerInfo.commissionPercent || 0}%)</td>
+        <td>${commissionAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })} ${primaryCurrency}</td>
+      </tr>
+      <tr>
+        <td colspan="2" style="border:none;"></td>
+        <td style="background-color:rgba(212, 175, 55, 0.05);">${t('shipping.footer.container_fee')}</td>
+        <td>${contFee.toLocaleString('en-US', { minimumFractionDigits: 2 })} ${primaryCurrency}</td>
+      </tr>
+      <tr>
+        <td colspan="2" style="border:none;"></td>
+        <td style="background-color:rgba(212, 175, 55, 0.05);">${t('shipping.footer.insurance')}</td>
+        <td>${ins.toLocaleString('en-US', { minimumFractionDigits: 2 })} ${primaryCurrency}</td>
+      </tr>
+      <tr>
+        <td colspan="2" style="border:none;"></td>
+        <td style="background-color:rgba(212, 175, 55, 0.05);">${t('shipping.footer.internal_shipping')}</td>
+        <td>${intShip.toLocaleString('en-US', { minimumFractionDigits: 2 })} ${primaryCurrency}</td>
+      </tr>
+      <tr style="font-size:12px; font-weight:bold; background-color:rgba(212, 175, 55, 0.15);">
+        <td colspan="2" style="border:none;"></td>
+        <td style="color:#1a5276;">${t('shipping.footer.invoice_total')}</td>
+        <td style="color:#1a5276;">${invoiceTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })} ${primaryCurrency}</td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- ─── BOTTOM DETAILS ─── -->
+  <table class="inv-bottom-table">
+    <tr>
+      <td class="inv-bottom-label">${t('shipping.footer.say_total')}</td>
+      <td class="inv-bottom-value">${invoiceTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })} ${primaryCurrency} & ${totalPcs} ${t('shipping.footer.pcs')}</td>
+    </tr>
+    <tr>
+      <td class="inv-bottom-label">${t('shipping.footer.container_no')}</td>
+      <td>${footerInfo.containerNo || '-'}</td>
+    </tr>
+    <tr>
+      <td class="inv-bottom-label">${t('shipping.footer.seal_no')}</td>
+      <td>${footerInfo.sealNo || '-'}</td>
+    </tr>
+  </table>
+
+</body>
+</html>
+`;
+
+      // Fetch and convert all images to base64
+      const imagePromises = Array.from(imageMap.entries()).map(async ([src, imgInfo]) => {
+        const base64Info = await getBase64Image(src);
+        if (base64Info) {
+          imgInfo.mimeType = base64Info.mimeType;
+          imgInfo.base64Data = base64Info.base64Data;
+        }
+      });
+      await Promise.all(imagePromises);
+
+      // Construct MHTML
+      let mhtmlString = `MIME-Version: 1.0
+Content-Type: multipart/related; boundary="----=_NextPart_ExcelImage"
+
+------=_NextPart_ExcelImage
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+
+` + htmlString;
+
+      // Append images to MHTML
+      imageMap.forEach((imgInfo) => {
+        if (imgInfo.base64Data) {
+          mhtmlString += `
+------=_NextPart_ExcelImage
+Content-Type: ${imgInfo.mimeType}
+Content-Transfer-Encoding: base64
+Content-Location: ${imgInfo.cid}
+
+${imgInfo.base64Data}
+`;
+        }
+      });
+
+      mhtmlString += `\n------=_NextPart_ExcelImage--\n`;
+
+      const blob = new Blob([mhtmlString], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Shipping_Invoice_${headerInfo.invoiceNo || 'Export'}.xls`;
+      link.click();
       toast.success(t('excel_export_success'));
     } catch (error) {
       console.error('Error exporting to Excel:', error);
@@ -1030,9 +1320,10 @@ const ShippingInvoice = () => {
                <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
                   <button onClick={() => {
                       const badSerials = invalidSerials.map(inv => inv.serial);
+                      const badIds = invalidSerials.map(inv => inv.id);
                       setHighlightedSerials([]);
                       setShowValidationModal(false);
-                      setTimeout(() => fetchAllData(pendingFetchOptions, badSerials, true), 0);
+                      setTimeout(() => fetchAllData(pendingFetchOptions, badSerials, true, badIds), 0);
                   }} className="btn btn-primary" style={{ flex: 1, background: '#ef4444', color: '#fff', border: 'none', padding: '12px', fontSize: '1.1rem' }}>
                      {t('shipping.validation.remove_invalid')}
                   </button>

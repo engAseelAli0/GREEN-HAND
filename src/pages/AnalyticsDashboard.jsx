@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { Trophy, Coins, Clock, Factory, TrendingUp, AlertTriangle, CheckCircle2, ShieldCheck, Activity, BarChart2, Calendar, FileText, ChevronLeft, ChevronRight, Filter, Brain, Zap, Sparkles } from 'lucide-react';
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { buildOperationalIntelligence, analyzeOrder } from '../utils/orderIntelligence';
-import { formatActivityTime } from '../utils/activityLog';
+import { formatActivityTime, getActivityActionLabel, getActivityNote } from '../utils/activityLog';
 import { englishOnly } from '../utils/textUtils';
 import toast from 'react-hot-toast';
 
@@ -1035,7 +1035,7 @@ const AnalyticsDashboard = () => {
                       </div>
                     </td>
                     <td style={{ padding: '1rem', color: item.color || 'var(--text-strong)', fontWeight: 600 }}>
-                      {t(item.actionLabel || item.action)}
+                      {getActivityActionLabel(item, t)}
                     </td>
                     <td style={{ padding: '1rem' }}>
                       <span style={{ padding: '4px 8px', background: 'rgba(212,175,55,0.1)', color: 'var(--accent-color)', borderRadius: '6px', fontWeight: 'bold' }}>
@@ -1044,7 +1044,7 @@ const AnalyticsDashboard = () => {
                     </td>
                     <td style={{ padding: '1rem', color: 'var(--text-main)', maxWidth: '300px' }}>
                       <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {t(item.note)}
+                        {getActivityNote(item, t)}
                       </div>
                     </td>
                     <td style={{ padding: '1rem', color: 'var(--text-muted)' }}>

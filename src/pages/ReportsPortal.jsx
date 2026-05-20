@@ -12,7 +12,7 @@ import { englishOnly, chineseOnly } from '../utils/textUtils';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { analyzeOrder } from '../utils/orderIntelligence';
-import { activitySummary, formatActivityTime } from '../utils/activityLog';
+import { activitySummary, formatActivityTime, getActivityActionLabel, getActivityNote } from '../utils/activityLog';
 
 const calculateTotalPiecesCount = (orderData) => {
   if (!orderData) return 0;
@@ -896,7 +896,7 @@ const ReportsPortal = () => {
                         <td style={{ padding: '1rem', textAlign: 'center' }}>
                           {actSummary.last ? (
                             <div title={formatActivityTime(actSummary.last.at)} style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                              <span style={{ color: actSummary.last.color || 'var(--accent-color)', fontWeight: 800, fontSize: '0.78rem' }}>{t(actSummary.last.actionLabel) || t(`activity.${actSummary.last.action}`) || actSummary.last.actionLabel}</span>
+                              <span style={{ color: actSummary.last.color || 'var(--accent-color)', fontWeight: 800, fontSize: '0.78rem' }}>{getActivityActionLabel(actSummary.last, t)}</span>
                               <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>{actSummary.last.actor}</span>
                             </div>
                           ) : (
@@ -976,10 +976,10 @@ const ReportsPortal = () => {
                                            </div>
                                            <div style={{ padding: '0.75rem 0.85rem', borderRadius: 12, background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.06)' }}>
                                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.7rem', marginBottom: 4 }}>
-                                               <strong style={{ color: item.color || 'var(--text-strong)' }}>{t(item.actionLabel) || t(`activity.${item.action}`) || item.actionLabel || item.action}</strong>
+                                               <strong style={{ color: item.color || 'var(--text-strong)' }}>{getActivityActionLabel(item, t)}</strong>
                                                <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{formatActivityTime(item.at)}</span>
                                              </div>
-                                             <div style={{ color: 'var(--text-strong)', fontSize: '0.86rem' }}>{item.note}</div>
+                                             <div style={{ color: 'var(--text-strong)', fontSize: '0.86rem' }}>{getActivityNote(item, t)}</div>
                                              <div style={{ color: 'var(--text-muted)', fontSize: '0.76rem', marginTop: 4 }}>{t('reports.activity.by', { actor: item.actor || 'system' })}</div>
                                              {item.changes?.length > 0 && (
                                                <div style={{ marginTop: '0.6rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.35rem' }}>

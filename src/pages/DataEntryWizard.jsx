@@ -77,6 +77,8 @@ const DataEntryWizard = () => {
   const [serialSearchQuery, setSerialSearchQuery] = useState('');
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showPackagingPicker, setShowPackagingPicker] = useState(false);
+  const [tempPackagingConditions, setTempPackagingConditions] = useState({});
+  const [packagingSearchQuery, setPackagingSearchQuery] = useState('');
   const serialSearchRef = useRef(null);
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
@@ -1941,7 +1943,13 @@ const DataEntryWizard = () => {
                   <div ref={packagingPickerRef} style={{ position: 'relative', flex: '1', minWidth: '220px', maxWidth: '400px' }}>
                     <button
                       type="button"
-                      onClick={() => setShowPackagingPicker(prev => !prev)}
+                      onClick={() => {
+                        if (!showPackagingPicker) {
+                          setTempPackagingConditions({ ...(currentOrder.packagingConditions || {}) });
+                          setPackagingSearchQuery('');
+                        }
+                        setShowPackagingPicker(prev => !prev);
+                      }}
                       className="form-control"
                       style={{
                         cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -1952,51 +1960,130 @@ const DataEntryWizard = () => {
                         transition: 'border-color 0.2s'
                       }}
                     >
-                      <span>{selectedConditions.length > 0 ? t('entry.packaging.conditions_selected_count', { count: selectedConditions.length }) : t('entry.packaging.select_conditions_placeholder')}</span>
+                      <span>{selectedConditions.length > 0 ? t('entry.packaging.conditions_selected_count', { count: selectedConditions.length, defaultValue: `تم اختيار ${selectedConditions.length} شرط` }) : t('entry.packaging.select_conditions_placeholder', { defaultValue: 'اختر الشروط المطلوبة...' })}</span>
                       <ChevronLeft size={16} style={{ transform: showPackagingPicker ? 'rotate(90deg)' : 'rotate(-90deg)', transition: 'transform 0.2s', opacity: 0.6 }} />
                     </button>
                     {showPackagingPicker && (
                       <div style={{
                         position: 'absolute', top: '100%', right: 0, left: 0, zIndex: 100,
-                        marginTop: '4px', padding: '0.5rem',
+                        marginTop: '4px', padding: '0.75rem',
                         backgroundColor: 'var(--surface-color)', border: '2px solid var(--accent-color)',
                         borderRadius: 'var(--radius-md)', boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
-                        maxHeight: '260px', overflowY: 'auto'
+                        maxHeight: '340px', overflowY: 'auto'
                       }}>
-                        {lookups.packagingConditionsList?.map((cond, i) => {
-                          const isChecked = !!currentOrder.packagingConditions?.[cond];
-                          return (
-                            <div
-                              key={i}
-                              onClick={() => handlePackagingConditionChange(cond, !isChecked)}
-                              style={{
-                                display: 'flex', alignItems: 'center', gap: '0.6rem',
-                                padding: '0.5rem 0.6rem', cursor: 'pointer',
-                                borderRadius: '6px', transition: 'background-color 0.15s',
-                                backgroundColor: isChecked ? 'rgba(212, 175, 55, 0.12)' : 'transparent',
-                                marginBottom: '2px'
-                              }}
-                              onMouseEnter={(e) => { if (!isChecked) e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)'; }}
-                              onMouseLeave={(e) => { if (!isChecked) e.currentTarget.style.backgroundColor = 'transparent'; }}
-                            >
-                              <div style={{
-                                width: '18px', height: '18px', borderRadius: '4px', flexShrink: 0,
-                                border: isChecked ? '2px solid var(--accent-color)' : '2px solid var(--border-color)',
-                                backgroundColor: isChecked ? 'var(--accent-color)' : 'transparent',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                transition: 'all 0.15s'
-                              }}>
-                                {isChecked && <span style={{ color: '#000', fontSize: '12px', fontWeight: 'bold', lineHeight: 1 }}>✓</span>}
+                        {/* Search filter input inside dropdown */}
+                        <div style={{ marginBottom: '0.75rem', position: 'relative' }}>
+                          <input
+                            type="text"
+                            placeholder={t('entry.packaging.search_placeholder', { defaultValue: 'البحث في الشروط المطلوبة...' })}
+                            value={packagingSearchQuery}
+                            onChange={(e) => setPackagingSearchQuery(e.target.value)}
+                            style={{
+                              width: '100%',
+                              padding: '0.5rem 2rem 0.5rem 0.75rem',
+                              fontSize: '0.9rem',
+                              border: '1px solid var(--border-color)',
+                              borderRadius: 'var(--radius-sm, 6px)',
+                              backgroundColor: 'var(--bg-color)',
+                              color: 'var(--text-main)',
+                              outline: 'none',
+                              textAlign: 'right',
+                              direction: 'rtl'
+                            }}
+                          />
+                          <Search size={15} style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }} />
+                        </div>
+
+                        <div style={{ 
+                          maxHeight: '180px', 
+                          overflowY: 'auto',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '0.25rem'
+                        }}>
+                          {(() => {
+                            const filtered = (lookups.packagingConditionsList || []).filter(cond => {
+                              const condName = typeof cond === 'object' ? cond.name : cond;
+                              return condName.toLowerCase().includes(packagingSearchQuery.toLowerCase());
+                            });
+                            if (filtered.length > 0) {
+                              return filtered.map((cond, i) => {
+                                const condName = typeof cond === 'object' ? cond.name : cond;
+                                const isChecked = !!tempPackagingConditions[condName];
+                                return (
+                                  <div
+                                    key={i}
+                                    onClick={() => setTempPackagingConditions(prev => ({ ...prev, [condName]: !isChecked }))}
+                                    style={{
+                                      display: 'flex', alignItems: 'center', gap: '0.6rem',
+                                      padding: '0.5rem 0.6rem', cursor: 'pointer',
+                                      borderRadius: '6px', transition: 'background-color 0.15s',
+                                      backgroundColor: isChecked ? 'rgba(212, 175, 55, 0.12)' : 'transparent',
+                                      marginBottom: '2px'
+                                    }}
+                                    onMouseEnter={(e) => { if (!isChecked) e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)'; }}
+                                    onMouseLeave={(e) => { if (!isChecked) e.currentTarget.style.backgroundColor = 'transparent'; }}
+                                  >
+                                    <div style={{
+                                      width: '18px', height: '18px', borderRadius: '4px', flexShrink: 0,
+                                      border: isChecked ? '2px solid var(--accent-color)' : '2px solid var(--border-color)',
+                                      backgroundColor: isChecked ? 'var(--accent-color)' : 'transparent',
+                                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                      transition: 'all 0.15s'
+                                    }}>
+                                      {isChecked && <span style={{ color: '#000', fontSize: '12px', fontWeight: 'bold', lineHeight: 1 }}>✓</span>}
+                                    </div>
+                                    <span style={{ fontWeight: isChecked ? 'bold' : 'normal', color: 'var(--text-main)', fontSize: '0.9rem' }}>
+                                      {condName}
+                                    </span>
+                                  </div>
+                                );
+                              });
+                            }
+                            return (
+                              <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                                {t('entry.packaging.no_matching_conditions', { defaultValue: 'لا توجد شروط مطابقة للبحث' })}
                               </div>
-                              <span style={{ fontWeight: isChecked ? 'bold' : 'normal', color: 'var(--text-main)', fontSize: '0.9rem' }}>
-                                {cond}
-                              </span>
-                            </div>
-                          );
-                        })}
-                        {(!lookups.packagingConditionsList || lookups.packagingConditionsList.length === 0) && (
-                          <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>{t('entry.packaging.no_conditions_saved')}</div>
-                        )}
+                            );
+                          })()}
+                        </div>
+
+                        {/* Confirmation and Clear Action Buttons */}
+                        <div style={{ 
+                          display: 'flex', 
+                          justifyContent: 'flex-end', 
+                          gap: '0.5rem', 
+                          borderTop: '1px solid var(--border-color)', 
+                          paddingTop: '0.75rem',
+                          marginTop: '0.75rem'
+                        }}>
+                          <button 
+                            type="button"
+                            onClick={() => setTempPackagingConditions({})}
+                            className="btn"
+                            style={{ padding: '0.35rem 0.8rem', fontSize: '0.8rem', backgroundColor: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-muted)' }}
+                          >
+                            {t('entry.packaging.clear_all', { defaultValue: 'مسح الكل' })}
+                          </button>
+                          <button 
+                            type="button"
+                            onClick={() => {
+                              updateOrder('packagingConditions', tempPackagingConditions);
+                              setShowPackagingPicker(false);
+                              toast.success(t('entry.packaging.conditions_updated', { defaultValue: 'تم تحديث الشروط المختارة' }));
+                            }}
+                            className="btn btn-accent"
+                            style={{ 
+                              padding: '0.35rem 1.2rem', 
+                              fontSize: '0.8rem',
+                              backgroundColor: 'var(--accent-color)',
+                              color: '#000',
+                              fontWeight: 'bold'
+                            }}
+                          >
+                            {t('entry.packaging.ok_btn', { defaultValue: 'موافق' })}
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -2063,7 +2150,7 @@ const DataEntryWizard = () => {
                 id="fetchSerialInput" 
                 className="form-control" 
                 placeholder={t('entry.actions.fetch_placeholder')} 
-                style={{ width: '150px' }} 
+                style={{ width: '210px' }} 
                 onKeyDown={handleF9Press}
                 autoComplete="off"
               />

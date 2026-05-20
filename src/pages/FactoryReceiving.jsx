@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useAppData } from '../context/AppDataContext';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../supabaseClient';
 import { Search, Save, PackageCheck, AlertCircle, Info, Box, Palette, Calculator, CheckCircle2, XCircle, Download, Printer, X, Factory } from 'lucide-react';
@@ -10,6 +11,7 @@ import { appendActivity, createActivityItem } from '../utils/activityLog';
 
 const FactoryReceiving = () => {
   const { t } = useTranslation();
+  const { lookups } = useAppData();
   const { user, hasPermission } = useAuth();
   
   const [modelNo, setModelNo] = useState('');
@@ -146,7 +148,15 @@ const FactoryReceiving = () => {
         priceCurrency: oData.currency || '',
         reqCartons: `${oData.cartonQty || '?'} ${t('units.carton')} * ${oData.cartonSize || '?'} ${t('units.piece')} (${oData.totalQuantity || '?'} ${t('receiving.packages.total_pcs')})`,
         reqTotalQuantity: parseInt(oData.totalQuantity) || 0,
-        productStatus: (recData && recData.receive_data && recData.receive_data.status) ? recData.receive_data.status : t('receiving.info.not_received'),
+        productStatus: (recData && recData.receive_data && recData.receive_data.status && (
+          recData.receive_data.status.includes('Received') || 
+          recData.receive_data.status === 'مستلمة' || 
+          recData.receive_data.status === '已收货' || 
+          recData.receive_data.status === 'تم الاستلام' || 
+          recData.receive_data.status === 'Received' ||
+          recData.receive_data.status === 'received' ||
+          recData.receive_data.status === 'مستلم'
+        )) ? 'Received' : 'Not Received',
         factoryId: oData.factoryId || t('receiving.messages.undefined'),
         factoryName: ''
       });
@@ -266,7 +276,7 @@ const FactoryReceiving = () => {
 
   const expectedTotalQty = productInfo.reqTotalQuantity || 0;
   const isQtyMatching = isFetched && expectedTotalQty > 0 && totals.totalProd === expectedTotalQty;
-  const isStatusReceived = productInfo.productStatus === t('receiving.info.received');
+  const isStatusReceived = productInfo.productStatus === 'Received';
   
   const totalColorsQty = colors.reduce((acc, col) => acc + (parseInt(col.quantity) || 0), 0);
   const isColorsQtyMatching = isFetched && totalColorsQty === totals.totalProd && totals.totalProd > 0;
@@ -327,7 +337,7 @@ const FactoryReceiving = () => {
       setIsFetched(false);
       setProductInfo({
         mainBarcode: '', prodFullName: '', prodShortName: '', prodPrice: 0,
-        priceCurrency: '', reqCartons: '', reqTotalQuantity: 0, productStatus: '',
+        priceCurrency: '', reqCartons: '', reqTotalQuantity: 0, productStatus: 'Not Received',
         factoryId: '', factoryName: ''
       });
       setPackages(Array.from({ length: 4 }).map((_, i) => ({
@@ -354,7 +364,7 @@ const FactoryReceiving = () => {
       [t('receiving.info.original_order')]: productInfo.reqTotalQuantity,
       [t('receiving.summary.total_ctn')]: totals.totalCtn,
       [t('receiving.summary.total_qty')]: totals.totalProd,
-      [t('receiving.info.status')]: productInfo.productStatus,
+      [t('receiving.info.status')]: productInfo.productStatus === 'Received' ? t('receiving.info.received') : t('receiving.info.not_received'),
       [t('receiving.summary.qty_match')]: (isQtyMatching && isColorsQtyMatching) ? t('receiving.summary.match') : t('receiving.summary.mismatch')
     };
 
@@ -463,7 +473,7 @@ const FactoryReceiving = () => {
   );
 
   return (
-    <div className="fade-in" style={{ paddingBottom: '16rem' }}>
+    <div className="fade-in" style={{ paddingBottom: '2rem' }}>
       {/* ─── HEADER ─── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
@@ -653,12 +663,12 @@ const FactoryReceiving = () => {
                    disabled={!(hasPermission('receiving', 'add') || hasPermission('receiving', 'edit'))}
                    style={{ 
                      padding: '4px', marginTop: '4px', fontWeight: 'bold', border: 'none', background: 'transparent',
-                     color: productInfo.productStatus === t('receiving.info.received') ? '#16a34a' : '#dc2626',
+                     color: productInfo.productStatus === 'Received' ? '#16a34a' : '#dc2626',
                      cursor: (hasPermission('receiving', 'add') || hasPermission('receiving', 'edit')) ? 'pointer' : 'not-allowed'
                    }}
                 >
-                  <option value={t('receiving.info.not_received')}>{t('receiving.info.not_received')}</option>
-                  <option value={t('receiving.info.received')}>{t('receiving.info.received')}</option>
+                  <option value="Not Received">{t('receiving.info.not_received')}</option>
+                  <option value="Received">{t('receiving.info.received')}</option>
                 </select>
               </div>
               <InfoBox label={t('receiving.info.factory')} value={`${productInfo.factoryId} - ${productInfo.factoryName}`} highlight />
@@ -825,7 +835,7 @@ const FactoryReceiving = () => {
                     opacity: (hasPermission('receiving', 'add') || hasPermission('receiving', 'edit')) ? 1 : 0.7
                 }}>
                   <div style={{ background: 'var(--surface-color)', padding: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontSize: '0.85rem', fontWeight: 'bold', borderBottom: '1px solid var(--border-color)' }}>
-                    <div style={{ width: '16px', height: '16px', borderRadius: '50%', border: '1px solid rgba(255,255,255,0.2)', backgroundColor: extractColorCSS(c.colorName), flexShrink: 0 }}></div>
+                    <div style={{ width: '16px', height: '16px', borderRadius: '50%', border: '1px solid rgba(255,255,255,0.2)', backgroundColor: extractColorCSS(c.colorName, lookups?.colors || []), flexShrink: 0 }}></div>
                     {c.colorName}
                   </div>
                   <div style={{ padding: '10px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
@@ -857,11 +867,10 @@ const FactoryReceiving = () => {
         </div>
       )}
 
-      {/* ─── FLOATING SUMMARY & ACTION BAR ─── */}
+      {/* ─── SUMMARY & ACTION BAR (NON-FIXED) ─── */}
       {isFetched && (
-        <div className="fade-in" style={{ 
-          position: 'fixed', bottom: '2rem', left: '50%', transform: 'translateX(-50%)', 
-          width: '90%', maxWidth: '1200px', zIndex: 100, 
+        <div className="fade-in card" style={{ 
+          marginTop: '2rem',
           background: 'linear-gradient(135deg, var(--surface-color) 0%, rgba(30, 41, 59, 0.95) 100%)', 
           border: '2px solid var(--accent-color)', borderRadius: '16px', 
           padding: '1.25rem 2rem', boxShadow: '0 10px 40px rgba(0,0,0,0.5)',

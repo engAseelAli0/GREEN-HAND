@@ -78,6 +78,36 @@ export const activitySummary = (items = []) => {
   };
 };
 
+export const getActivityActionLabel = (item, t) => {
+  if (!item) return '';
+  const key = `activity.${item.action}`;
+  const translated = t(key);
+  if (translated && translated !== key) return translated;
+  return item.actionLabel || item.action || '';
+};
+
+export const getActivityNote = (item, t) => {
+  if (!item) return '';
+  switch (item.action) {
+    case 'create':
+      return t('activity.notes.created', { serial: item.serial || item.meta?.serial || '' });
+    case 'update':
+      return t('activity.notes.updated', { serial: item.serial || item.meta?.serial || '' });
+    case 'delete':
+      return t('activity.notes.deleted', { serial: item.serial || item.meta?.serial || '' });
+    case 'copy':
+      return t('activity.notes.copied', { 
+        from: item.meta?.copiedFrom || '', 
+        to: item.serial || item.meta?.to || '' 
+      });
+    case 'receive':
+      const count = item.meta?.pieces || (typeof item.note === 'string' ? parseInt(item.note.replace(/\D/g, ''), 10) : '') || '';
+      return t('activity.notes.received', { count });
+    default:
+      return t(item.note) || item.note || '';
+  }
+};
+
 export const formatActivityTime = (iso) => {
   if (!iso) return '-';
   try {

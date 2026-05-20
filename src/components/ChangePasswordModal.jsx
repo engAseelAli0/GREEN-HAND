@@ -31,41 +31,32 @@ const ChangePasswordModal = ({ user, onClose }) => {
 
     setLoading(true);
     try {
-      // 1. Verify current password
-      const { data: userData, error: userError } = await supabase
-        .from('system_users')
-        .select('password')
-        .eq('username', user.username)
-        .single();
-        
-      if (userError || !userData) {
-        throw new Error(t('auth.verify_error'));
+      // Get current authenticated user details to retrieve their email
+      const { data: { user: authUser }, error: userError } = await supabase.auth.getUser();
+      if (userError || !authUser) {
+        throw new Error(t('auth.verify_error') || 'Error verifying user');
       }
+
+      // 1. Verify current password by attempting a secure re-authentication
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: authUser.email,
+        password: currentPassword
+      });
       
-      if (userData.password !== currentPassword) {
-        toast.error(t('auth.current_password_incorrect'));
+      if (signInError) {
+        toast.error(t('auth.current_password_incorrect') || 'Current password incorrect');
         setLoading(false);
         return;
       }
 
-      // 2. Update password in Supabase Auth
+      // 2. Update password in Supabase Auth securely
       const { error: authError } = await supabase.auth.updateUser({
         password: newPassword
       });
 
       if (authError) throw authError;
 
-      // 3. Update plain text password in system_users
-      const { error: dbError } = await supabase
-        .from('system_users')
-        .update({ password: newPassword })
-        .eq('username', user.username);
-        
-      if (dbError) {
-        console.warn('Could not update plain text password in system_users:', dbError);
-      }
-
-      toast.success(t('auth.change_password_success'));
+      toast.success(t('auth.change_password_success') || 'Password updated successfully');
       onClose();
     } catch (error) {
       console.error('Error changing password:', error);

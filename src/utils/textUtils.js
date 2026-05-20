@@ -50,9 +50,32 @@ export const chineseOnly = (name) => {
  * Maps color names to CSS colors for UI display.
  * Handles English, Arabic, and mixed string formats.
  */
-export const extractColorCSS = (colorStr) => {
+export const extractColorCSS = (colorStr, definedColors = []) => {
     if (!colorStr) return 'transparent';
-    const lower = colorStr.toLowerCase();
+    const lower = colorStr.toLowerCase().trim();
+    
+    // First, try matching with definedColors from the Admin panel
+    if (Array.isArray(definedColors) && definedColors.length > 0) {
+        // 1. Exact match (case-insensitive)
+        const exactMatch = definedColors.find(c => c && c.name && c.name.toLowerCase().trim() === lower);
+        if (exactMatch && exactMatch.hex) return exactMatch.hex;
+        
+        // 2. Partial match of names
+        const partialMatch = definedColors.find(c => {
+            if (!c || !c.name) return false;
+            const cNameLower = c.name.toLowerCase().trim();
+            return lower.includes(cNameLower) || cNameLower.includes(lower);
+        });
+        if (partialMatch && partialMatch.hex) return partialMatch.hex;
+
+        // 3. Abbreviation match
+        const abbrMatch = definedColors.find(c => {
+            if (!c || !c.abbr) return false;
+            const cAbbrLower = c.abbr.toLowerCase().trim();
+            return cAbbrLower && (lower.includes(cAbbrLower) || cAbbrLower.includes(lower));
+        });
+        if (abbrMatch && abbrMatch.hex) return abbrMatch.hex;
+    }
     
     // Common mappings
     if (lower.includes('red') || lower.includes('أحمر')) return '#ef4444';
@@ -64,7 +87,7 @@ export const extractColorCSS = (colorStr) => {
     if (lower.includes('pink') || lower.includes('وردي') || lower.includes('زهر')) return '#ec4899';
     if (lower.includes('purple') || lower.includes('بنفسجي')) return '#a855f7';
     if (lower.includes('orange') || lower.includes('برتقالي')) return '#f97316';
-    if (lower.includes('gray') || lower.includes('grey') || lower.includes('رمادي')) return '#6b7280';
+    if (lower.includes('gray') || lower.includes('grey') || lower.includes('رمادي') || lower.includes('رصاصي')) return '#6b7280';
     if (lower.includes('brown') || lower.includes('بني')) return '#78350f';
     if (lower.includes('beige') || lower.includes('بيج')) return '#f5f5dc';
     if (lower.includes('gold') || lower.includes('ذهبي')) return '#ffd700';
@@ -75,6 +98,9 @@ export const extractColorCSS = (colorStr) => {
     if (lower.includes('teal')) return '#0f766e';
     if (lower.includes('cyan') || lower.includes('سماوي')) return '#06b6d4';
     if (lower.includes('apricot') || lower.includes('مشمشي')) return '#fbceb1';
+    if (lower.includes('lemon') || lower.includes('limon') || lower.includes('ليمون') || lower.includes('ليموني') || lower.includes('柠檬黄')) return '#facc15';
+    if (lower.includes('cream') || lower.includes('كريمي')) return '#fffdd0';
+    if (lower.includes('pistachio') || lower.includes('بستاج') || lower.includes('fistiki')) return '#d9f99d';
     
     // Try to extract an English word before any separator
     const englishPart = colorStr.split(/[-_]/)[0].trim().replace(/\s+/g, '');

@@ -21,8 +21,21 @@ import { AuthProvider } from './context/AuthContext'
 import ProtectedRoute from './components/ProtectedRoute'
 import { AppDataProvider } from './context/AppDataContext'
 import { ThemeProvider } from './context/ThemeContext'
+import SecurityGuard from './components/SecurityGuard'
 import './i18n'
 import './index.css'
+
+// Disable React Developer Tools globally before React rendering starts
+if (typeof window.__REACT_DEVTOOLS_GLOBAL_HOOK__ === 'object') {
+  for (const [key, value] of Object.entries(window.__REACT_DEVTOOLS_GLOBAL_HOOK__)) {
+    if (key === 'renderers') {
+      window.__REACT_DEVTOOLS_GLOBAL_HOOK__[key] = new Map();
+    } else if (typeof value === 'function') {
+      window.__REACT_DEVTOOLS_GLOBAL_HOOK__[key] = () => {};
+    }
+  }
+}
+
 
 // Global fix to prevent mouse wheel and arrow keys from altering number inputs everywhere
 document.addEventListener('wheel', function() {
@@ -119,28 +132,30 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <ThemeProvider>
       <AppDataProvider>
         <AuthProvider>
-          <BrowserRouter>
-            <Routes>
-              <Route path="/login" element={<Login />} />
-              <Route path="/unauthorized" element={<Unauthorized />} />
-              
-              <Route path="/" element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
-                <Route index element={<HomePortal />} />
-                <Route path="entry" element={<ProtectedRoute><DataEntryWizard /></ProtectedRoute>} />
-                <Route path="admin" element={<ProtectedRoute><AdminDashboard /></ProtectedRoute>} />
-                <Route path="export" element={<ProtectedRoute><ExportOrder /></ProtectedRoute>} />
-                <Route path="receiving" element={<ProtectedRoute><FactoryReceiving /></ProtectedRoute>} />
-                <Route path="factory-portal" element={<ProtectedRoute><FactoryOwnerPortal /></ProtectedRoute>} />
-                <Route path="barcodes" element={<ProtectedRoute><PrintBarcodes /></ProtectedRoute>} />
-                <Route path="reports" element={<ProtectedRoute><ReportsPortal /></ProtectedRoute>} />
-                <Route path="order-reports" element={<ProtectedRoute><OrderReports /></ProtectedRoute>} />
-                <Route path="shipping-invoice" element={<ProtectedRoute><ShippingInvoice /></ProtectedRoute>} />
-                <Route path="packing-list" element={<ProtectedRoute><PackingList /></ProtectedRoute>} />
-                <Route path="warehouse-receipt" element={<ProtectedRoute><WarehouseReceipt /></ProtectedRoute>} />
-                <Route path="analytics" element={<ProtectedRoute><AnalyticsDashboard /></ProtectedRoute>} />
-              </Route>
-            </Routes>
-          </BrowserRouter>
+          <SecurityGuard>
+            <BrowserRouter>
+              <Routes>
+                <Route path="/login" element={<Login />} />
+                <Route path="/unauthorized" element={<Unauthorized />} />
+                
+                <Route path="/" element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
+                  <Route index element={<HomePortal />} />
+                  <Route path="entry" element={<ProtectedRoute><DataEntryWizard /></ProtectedRoute>} />
+                  <Route path="admin" element={<ProtectedRoute><AdminDashboard /></ProtectedRoute>} />
+                  <Route path="export" element={<ProtectedRoute><ExportOrder /></ProtectedRoute>} />
+                  <Route path="receiving" element={<ProtectedRoute><FactoryReceiving /></ProtectedRoute>} />
+                  <Route path="factory-portal" element={<ProtectedRoute><FactoryOwnerPortal /></ProtectedRoute>} />
+                  <Route path="barcodes" element={<ProtectedRoute><PrintBarcodes /></ProtectedRoute>} />
+                  <Route path="reports" element={<ProtectedRoute><ReportsPortal /></ProtectedRoute>} />
+                  <Route path="order-reports" element={<ProtectedRoute><OrderReports /></ProtectedRoute>} />
+                  <Route path="shipping-invoice" element={<ProtectedRoute><ShippingInvoice /></ProtectedRoute>} />
+                  <Route path="packing-list" element={<ProtectedRoute><PackingList /></ProtectedRoute>} />
+                  <Route path="warehouse-receipt" element={<ProtectedRoute><WarehouseReceipt /></ProtectedRoute>} />
+                  <Route path="analytics" element={<ProtectedRoute><AnalyticsDashboard /></ProtectedRoute>} />
+                </Route>
+              </Routes>
+            </BrowserRouter>
+          </SecurityGuard>
         </AuthProvider>
       </AppDataProvider>
     </ThemeProvider>

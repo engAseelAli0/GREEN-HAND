@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAppData } from '../context/AppDataContext';
 import { useAuth } from '../context/AuthContext';
@@ -12,7 +12,7 @@ import { englishOnly, chineseOnly } from '../utils/textUtils';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { analyzeOrder } from '../utils/orderIntelligence';
-import { activitySummary, formatActivityTime } from '../utils/activityLog';
+import { activitySummary, formatActivityTime, getActivityActionLabel, getActivityNote } from '../utils/activityLog';
 
 const calculateTotalPiecesCount = (orderData) => {
   if (!orderData) return 0;
@@ -45,6 +45,22 @@ const OrderReports = () => {
   );
 
   const [selectedTerms, setSelectedTerms] = useState([]);
+  const [showTermsDropdown, setShowTermsDropdown] = useState(false);
+  const [tempSelectedTerms, setTempSelectedTerms] = useState([]);
+  const termsDropdownRef = useRef(null);
+  const [termsSearchQuery, setTermsSearchQuery] = useState('');
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (termsDropdownRef.current && !termsDropdownRef.current.contains(e.target)) {
+        setShowTermsDropdown(false);
+      }
+    };
+    if (showTermsDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showTermsDropdown]);
 
   
   // Filters state
@@ -399,112 +415,185 @@ const OrderReports = () => {
        const bl = b+'text-align:left;font-size:14px;';
        const hr = b+'font-weight:900;text-align:center;font-size:13px;background:#b41e1e;color:#fff;';
        const hg = b+'font-weight:800;text-align:center;font-size:14px;background:#e6e6e6;color:#000;';
-       const empCnt = Math.max(0, 20 - rows.length);
-       let empH = '';
-       const eCell = '<td style="'+tc+'height:20px;"></td>';
-       for (let i = 0; i < empCnt; i++) empH += '<tr>'+eCell.repeat(12)+'</tr>';
+
+       // Determine dynamic columns based on active data
+       const columns = [
+         { id: 'n', labelZh: '数字', labelEn: 'No', style: tc, width: '4%' },
+         { id: 'sn', labelZh: '款号', labelEn: 'Model No.', style: tc, width: '7%' },
+         { id: 'bc', labelZh: '条形码', labelEn: 'Barcode No.', style: tc, width: '10%' },
+         { id: 'pn', labelZh: '产品名称', labelEn: 'Product Name', style: bl, width: '' },
+         { id: 'clrs', labelZh: '颜色', labelEn: 'Colors', style: tc, width: '5%' },
+         { id: 'sc', labelZh: '尺寸', labelEn: 'Size', style: tc, width: '4%' },
+         { id: 'sr', labelZh: '码段', labelEn: 'Prod Sizes', style: tc, width: '8%' },
+         { id: 'qty', labelZh: '数量', labelEn: 'Prod Qty', style: tc, width: '6%' },
+         { id: 'cur', labelZh: '货币', labelEn: 'Currency', style: tc, width: '5%' },
+         { id: 'pr', labelZh: '产品价格', labelEn: 'Prod Price', style: tc, width: '7%' },
+         { id: 'tp', labelZh: '总金额', labelEn: 'Tot. Amount', style: tc, width: '10%' },
+         { id: 'cn', labelZh: '订单备注', labelEn: 'Contract Notes', style: tc, width: '9%' },
+       ];
+
+       const activeCols = columns.filter(col => {
+         // Core columns that should always show
+         if (['n', 'sn', 'pn', 'qty', 'cur', 'pr', 'tp'].includes(col.id)) return true;
+         // Check if at least one row has data for this column
+         return rows.some(r => {
+           const val = r[col.id];
+           if (col.id === 'clrs' || col.id === 'sc') {
+             return val && val !== 0 && val !== '0';
+           }
+           if (col.id === 'sr') {
+             return val && val !== '-' && val !== ' - ' && val !== '';
+           }
+           return val && val !== '-' && val !== '';
+         });
+       });
+
+       // Generate Header HTML dynamically
+       let headerHtml = '<tr>';
+       activeCols.forEach(col => {
+         headerHtml += `<td style="${hr}${col.width ? `width:${col.width};` : ''}">${col.labelZh}<br/>${col.labelEn}</td>`;
+       });
+       headerHtml += '</tr>';
+
+       // Generate Rows HTML dynamically (No empty row padding as per user request)
        let dH = '';
        rows.forEach(r => {
-         dH += '<tr>'+
-           '<td style="'+tc+'">'+r.n+'</td>'+
-           '<td style="'+tc+'">'+r.sn+'</td>'+
-           '<td style="'+tc+'font-size:12px;">'+r.bc+'</td>'+
-           '<td style="'+bl+'word-break:break-word;white-space:normal;">'+r.pn+'</td>'+
-           '<td style="'+tc+'">'+r.clrs+'</td>'+
-           '<td style="'+tc+'">'+(r.sc>0?r.sc:'-')+'</td>'+
-           '<td style="'+tc+'font-size:12px;">'+r.sr+'</td>'+
-           '<td style="'+tc+'font-weight:800;">'+r.qty+'</td>'+
-           '<td style="'+tc+'font-size:12px;">'+r.cur+'</td>'+
-           '<td style="'+tc+'">'+(r.pr?r.pr.toFixed(2):'0.00')+'</td>'+
-           '<td style="'+tc+'font-weight:800;">'+(r.tp>0?r.tp.toLocaleString(undefined,{minimumFractionDigits:2}):'0.00')+'</td>'+
-           '<td style="'+tc+'">'+r.cn+'</td>'+
-         '</tr>';
+         dH += '<tr>';
+         activeCols.forEach(col => {
+           let val = '';
+           if (col.id === 'pr') {
+             val = r.pr ? r.pr.toFixed(2) : '0.00';
+           } else if (col.id === 'tp') {
+             val = r.tp > 0 ? r.tp.toLocaleString(undefined, { minimumFractionDigits: 2 }) : '0.00';
+           } else if (col.id === 'sc') {
+             val = r.sc > 0 ? r.sc : '-';
+           } else {
+             val = r[col.id] || '-';
+           }
+           dH += `<td style="${col.style}">${val}</td>`;
+         });
+         dH += '</tr>';
        });
-       const tbs = 'border-collapse:collapse;width:100%;border:2px solid #000;';
-       el.innerHTML =
-         '<div style="text-align:center;margin-bottom:12px;">'+
-           '<span style="font-size:36px;font-weight:900;color:#b41e1e;letter-spacing:1px;">Order Contract \u8BA2\u5355\u5408\u540C</span>'+
-         '</div>'+
-         '<table style="'+tbs+'"><tbody>'+
-           '<tr>'+
-             '<td style="'+bl+'white-space:nowrap;width:1%;"><b>Fact. Name \u5DE5\u5382\u540D\u5B57\uFF1A</b></td>'+
-             '<td style="'+tc+'font-weight:800;font-size:16px;">'+(fDet.name||'-')+'</td>'+
-             '<td style="'+tc+'background:#b41e1e;color:#fff;font-weight:900;font-size:14px;white-space:nowrap;width:1%;">Cont No.</td>'+
-             '<td style="'+tc+'font-weight:900;font-size:17px;width:15%;">'+contNo+'</td>'+
-           '</tr>'+
-           '<tr>'+
-             '<td style="'+bl+'white-space:nowrap;"><b>Fact. Mobile \u5DE5\u5382\u7535\u8BDD\uFF1A</b></td>'+
-             '<td style="'+tc+'font-weight:800;font-size:14px;">'+(fDet.mobile||'-')+'</td>'+
-             '<td style="'+bl+'white-space:nowrap;"><b>Cust. Code \u5BA2\u6237\u4EE3\u7801:</b></td>'+
-             '<td style="'+tc+'font-weight:800;font-size:14px;">'+custCode+'</td>'+
-           '</tr>'+
-           '<tr>'+
-             '<td style="'+bl+'white-space:nowrap;"><b>Fact. Address \u5DE5\u5382\u5730\u5740\uFF1A</b></td>'+
-             '<td style="'+tc+'font-weight:800;font-size:12px;">'+(fDet.address||'-')+'</td>'+
-             '<td style="'+bl+'white-space:nowrap;"><b>Cust. Mobile \u5BA2\u6237\u624B\u673A\uFF1A</b></td>'+
-             '<td style="'+tc+'font-weight:800;font-size:14px;">'+custMobile+'</td>'+
-           '</tr>'+
-         '</tbody></table>'+
-         '<table style="'+tbs+'border-top:none;"><tbody>'+
-           '<tr>'+
-             '<td style="'+hg+'width:25%;">Request Date \u8BA2\u5355\u65E5\u671F</td>'+
-             '<td style="'+tc+'font-weight:800;font-size:14px;width:25%;">'+fD(reqDate)+'</td>'+
-             '<td style="'+hg+'width:25%;">Delivery Date \u4EA4\u8D27\u65E5\u671F</td>'+
-             '<td style="'+tc+'font-weight:800;font-size:14px;width:25%;">'+fD(delDate)+'</td>'+
-           '</tr>'+
-         '</tbody></table>'+
-         '<table style="'+tbs+'border-top:none;"><tbody>'+
-           '<tr>'+
-             '<td style="'+hr+'width:4%;">\u6570\u5B57<br/>No</td>'+
-             '<td style="'+hr+'width:7%;">\u6B3E\u53F7<br/>Model No.</td>'+
-             '<td style="'+hr+'width:10%;">\u6761\u5F62\u7801<br/>Barcode No.</td>'+
-             '<td style="'+hr+'">\u4EA7\u54C1\u540D\u79F0<br/>Product Name</td>'+
-             '<td style="'+hr+'width:5%;">\u989C\u8272<br/>Colors</td>'+
-             '<td style="'+hr+'width:4%;">\u5C3A\u5BF8<br/>Size</td>'+
-             '<td style="'+hr+'width:8%;">\u7801\u6BB5<br/>Prod Sizes</td>'+
-             '<td style="'+hr+'width:6%;">\u6570\u91CF<br/>Prod Qty</td>'+
-             '<td style="'+hr+'width:5%;">\u8D27\u5E01<br/>Currency</td>'+
-             '<td style="'+hr+'width:7%;">\u4EA7\u54C1\u4EF7\u683C<br/>Prod Price</td>'+
-             '<td style="'+hr+'width:10%;">\u603B\u91D1\u989D<br/>Tot. Amount</td>'+
-             '<td style="'+hr+'width:9%;">\u8BA2\u5355\u5907\u6CE8<br/>Contract Notes</td>'+ 
-           '</tr>'+
-           dH + empH +
-           '<tr style="background:#e6e6e6;">'+
-             '<td style="'+tc+'font-weight:900;">Total \u5408\u8BA1</td>'+
-             '<td style="'+tc+'font-weight:900;">'+rows.length+' Items</td>'+
-             '<td style="'+tc+'"></td><td style="'+tc+'"></td><td style="'+tc+'"></td><td style="'+tc+'"></td><td style="'+tc+'"></td>'+
-             '<td style="'+tc+'font-weight:900;font-size:15px;">'+gQty.toLocaleString()+' PCS</td>'+ 
-             '<td style="'+tc+'"></td><td style="'+tc+'"></td>'+
-             '<td style="'+tc+'font-weight:900;font-size:15px;">'+gAmt.toLocaleString(undefined,{minimumFractionDigits:2})+' '+cur+'</td>'+
-             '<td style="'+tc+'"></td>'+
-           '</tr>'+
-         '</tbody></table>'+
-         '<table style="border-collapse:collapse;width:100%;border:2px solid #000;border-top:none;"><tbody>'+
-           '<tr><td style="'+bl+'background:#e6e6e6;font-weight:800;font-size:14px;">Conditions \u72B6\u51B5\uFF1A</td></tr>'+
-           '<tr><td style="'+bl+'height:'+(90 + empCnt * 20)+'px;vertical-align:top;">' +
-             (selectedTerms.length > 0 
-               ? '<ul style="margin:0;padding-left:20px;font-size:13px;font-weight:bold;">' + selectedTerms.map(t => '<li style="margin-bottom:6px;">' + t + '</li>').join('') + '</ul>' 
-               : '') + 
-           '</td></tr>'+
-         '</tbody></table>'+
-         '<table style="border-collapse:collapse;width:100%;border:2px solid #000;border-top:none;"><tbody><tr>'+
-           '<td style="'+bl+'width:25%;padding:14px 10px;">'+
-             '<div style="font-weight:800;font-size:13px;margin-bottom:20px;">Name \u540D\u5B57</div>'+
-             '<div style="font-weight:800;font-size:13px;">Signature \u7B7E\u540D</div>'+
-           '</td>'+
-           '<td style="'+tc+'width:25%;padding:14px 10px;vertical-align:top;">'+
-             '<div style="color:#b41e1e;font-weight:800;font-size:13px;margin-bottom:20px;">Buyer \u4E70\u65B9</div>'+
-             '<div style="border-bottom:2px solid #000;width:80%;margin:0 auto;height:22px;"></div>'+
-           '</td>'+
-           '<td style="'+tc+'width:25%;padding:14px 10px;vertical-align:top;">'+
-             '<div style="color:#b41e1e;font-weight:800;font-size:13px;margin-bottom:20px;">Coordinator \u534F\u8C03\u5458</div>'+
-             '<div style="border-bottom:2px solid #000;width:80%;margin:0 auto;height:22px;"></div>'+
-           '</td>'+
-           '<td style="'+tc+'width:25%;padding:14px 10px;vertical-align:top;">'+
-             '<div style="color:#b41e1e;font-weight:800;font-size:13px;margin-bottom:20px;">Factory \u5DE5\u5382</div>'+
-             '<div style="border-bottom:2px solid #000;width:80%;margin:0 auto;height:22px;"></div>'+
-           '</td>'+
-         '</tr></tbody></table>';
+
+       // Generate Total Row HTML dynamically
+       let totalRowHtml = '<tr style="background:#e6e6e6;">';
+       activeCols.forEach((col, idx) => {
+         if (col.id === 'n') {
+           totalRowHtml += `<td style="${tc}font-weight:900;">Total \u5408\u8BA1</td>`;
+         } else if (col.id === 'sn') {
+           totalRowHtml += `<td style="${tc}font-weight:900;">${rows.length} Items</td>`;
+         } else if (col.id === 'qty') {
+           totalRowHtml += `<td style="${tc}font-weight:900;font-size:15px;">${gQty.toLocaleString()} PCS</td>`;
+         } else if (col.id === 'tp') {
+           totalRowHtml += `<td style="${tc}font-weight:900;font-size:15px;">${gAmt.toLocaleString(undefined, { minimumFractionDigits: 2 })} ${cur}</td>`;
+         } else {
+           totalRowHtml += `<td style="${tc}"></td>`;
+         }
+       });
+       totalRowHtml += '</tr>';
+
+        const tbs = 'border-collapse:collapse;width:100%;border:2px solid #000;';
+        
+        // Define metadata fields dynamically to hide empty ones
+        const metaFields = [
+          { label: 'Fact. Name 工厂名字', value: fDet.name },
+          { label: 'Cont No.', value: contNo, isHeader: true },
+          { label: 'Fact. Mobile 工厂电话', value: fDet.mobile },
+          { label: 'Cust. Code 客户代码', value: custCode },
+          { label: 'Fact. Address 工厂地址', value: fDet.address },
+          { label: 'Cust. Mobile 客户手机', value: custMobile }
+        ].filter(item => item.value && item.value !== '-' && item.value !== '');
+
+        let metaHtml = '';
+        if (metaFields.length > 0) {
+          metaHtml += `<table style="${tbs}"><tbody>`;
+          for (let i = 0; i < metaFields.length; i += 2) {
+            const item1 = metaFields[i];
+            const item2 = metaFields[i + 1];
+            metaHtml += '<tr>';
+            
+            if (item1) {
+              const bgStyle = item1.isHeader ? 'background:#b41e1e;color:#fff;font-weight:900;' : '';
+              metaHtml += `<td style="${bl}white-space:nowrap;width:1%;${bgStyle}"><b>${item1.label}：</b></td>`;
+              metaHtml += `<td style="${tc}font-weight:800;font-size:14px;${bgStyle}">${item1.value}</td>`;
+            }
+            
+            if (item2) {
+              const bgStyle = item2.isHeader ? 'background:#b41e1e;color:#fff;font-weight:900;' : '';
+              metaHtml += `<td style="${bl}white-space:nowrap;width:1%;${bgStyle}"><b>${item2.label}：</b></td>`;
+              metaHtml += `<td style="${tc}font-weight:800;font-size:14px;${bgStyle}">${item2.value}</td>`;
+            } else if (metaFields.length > 1) {
+              metaHtml += `<td style="${bl}width:1%;"></td><td style="${tc}"></td>`;
+            }
+            metaHtml += '</tr>';
+          }
+          metaHtml += '</tbody></table>';
+        }
+
+        // Define date fields dynamically to hide empty ones
+        let dateHtml = '';
+        const hasReqDate = reqDate && reqDate !== '-' && reqDate !== '';
+        const hasDelDate = delDate && delDate !== '-' && delDate !== '';
+        if (hasReqDate || hasDelDate) {
+          dateHtml += `<table style="${tbs}border-top:none;"><tbody><tr>`;
+          if (hasReqDate) {
+            dateHtml += `<td style="${hg}width:25%;">Request Date 订单日期</td>`;
+            dateHtml += `<td style="${tc}font-weight:800;font-size:14px;width:25%;">${fD(reqDate)}</td>`;
+          }
+          if (hasDelDate) {
+            dateHtml += `<td style="${hg}width:25%;">Delivery Date 交货日期</td>`;
+            dateHtml += `<td style="${tc}font-weight:800;font-size:14px;width:25%;">${fD(delDate)}</td>`;
+          }
+          if (hasReqDate !== hasDelDate) {
+            dateHtml += `<td style="${hg}width:25%;"></td><td style="${tc}width:25%;"></td>`;
+          }
+          dateHtml += `</tr></tbody></table>`;
+        }
+
+        // Define conditions block dynamically to hide it when empty
+        let conditionsHtml = '';
+        if (selectedTerms.length > 0) {
+          conditionsHtml += 
+            `<table style="border-collapse:collapse;width:100%;border:2px solid #000;border-top:none;"><tbody>
+              <tr><td style="${bl}background:#e6e6e6;font-weight:800;font-size:14px;">Conditions 状况：</td></tr>
+              <tr><td style="${bl}height:${Math.max(90, selectedTerms.length * 22)}px;vertical-align:top;padding:8px;">
+                <ul style="margin:0;padding-left:20px;font-size:13px;font-weight:bold;">
+                  ${selectedTerms.map(t => `<li style="margin-bottom:6px;">${t}</li>`).join('')}
+                </ul>
+              </td></tr>
+            </tbody></table>`;
+        }
+
+        el.innerHTML =
+          '<div style="text-align:center;margin-bottom:12px;">'+
+            '<span style="font-size:36px;font-weight:900;color:#b41e1e;letter-spacing:1px;">Order Contract 订单合同</span>'+
+          '</div>'+
+          metaHtml +
+          dateHtml +
+          '<table style="'+tbs+'border-top:none;"><tbody>'+
+            headerHtml +
+            dH +
+            totalRowHtml +
+          '</tbody></table>'+
+          conditionsHtml +
+          '<table style="border-collapse:collapse;width:100%;border:2px solid #000;border-top:none;"><tbody><tr>'+
+            '<td style="'+bl+'width:25%;padding:14px 10px;">'+
+              '<div style="font-weight:800;font-size:13px;margin-bottom:20px;">Name 名字</div>'+
+              '<div style="font-weight:800;font-size:13px;">Signature 签名</div>'+
+            '</td>'+
+            '<td style="'+tc+'width:25%;padding:14px 10px;vertical-align:top;">'+
+              '<div style="color:#b41e1e;font-weight:800;font-size:13px;margin-bottom:20px;">Buyer 买方</div>'+
+              '<div style="border-bottom:2px solid #000;width:80%;margin:0 auto;height:22px;"></div>'+
+            '</td>'+
+            '<td style="'+tc+'width:25%;padding:14px 10px;vertical-align:top;">'+
+              '<div style="color:#b41e1e;font-weight:800;font-size:13px;margin-bottom:20px;">Coordinator 协调员</div>'+
+              '<div style="border-bottom:2px solid #000;width:80%;margin:0 auto;height:22px;"></div>'+
+            '</td>'+
+            '<td style="'+tc+'width:25%;padding:14px 10px;vertical-align:top;">'+
+              '<div style="color:#b41e1e;font-weight:800;font-size:13px;margin-bottom:20px;">Factory 工厂</div>'+
+              '<div style="border-bottom:2px solid #000;width:80%;margin:0 auto;height:22px;"></div>'+
+            '</td>'+
+          '</tr></tbody></table>';
        document.body.appendChild(el);
        const { default: html2canvas } = await import('html2canvas');
        const canvas = await html2canvas(el, { scale: 3, useCORS: true, logging: false, backgroundColor: '#ffffff' });
@@ -728,39 +817,242 @@ const OrderReports = () => {
       <div className="card glass-panel" style={{ marginBottom: '2rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
           <ListChecks color="var(--accent-color)" />
-          <h3 style={{ margin: 0 }}>{t('reports.detailed_terms', { defaultValue: 'شروط التعبئة الإضافية للفاتورة' })}</h3>
+          <h3 style={{ margin: 0 }}>{t('reports.detailed_terms', { defaultValue: 'الشروط المطلوبة للفاتورة' })}</h3>
         </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
-          {lookups.packagingConditionsList && lookups.packagingConditionsList.length > 0 ? lookups.packagingConditionsList.map((term, idx) => {
-            const termName = typeof term === 'object' ? term.name : term;
-            const isSelected = selectedTerms.includes(termName);
-            return (
+        
+        <div ref={termsDropdownRef} style={{ position: 'relative', width: '100%', maxWidth: '500px' }}>
+          <button 
+            type="button"
+            onClick={() => {
+              if (!showTermsDropdown) {
+                setTempSelectedTerms([...selectedTerms]);
+                setTermsSearchQuery('');
+              }
+              setShowTermsDropdown(!showTermsDropdown);
+            }}
+            className="form-control"
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              cursor: 'pointer',
+              backgroundColor: 'var(--surface-color)',
+              border: '1px solid var(--border-color)',
+              padding: '0.75rem 1rem',
+              borderRadius: 'var(--radius-md)',
+              color: 'var(--text-main)',
+              fontSize: '0.95rem',
+              textAlign: 'right',
+              direction: 'rtl'
+            }}
+          >
+            <span style={{ fontWeight: '500' }}>
+              {selectedTerms.length > 0 
+                ? `${t('reports.selected_terms_count', { count: selectedTerms.length, defaultValue: `تم اختيار ${selectedTerms.length} شرط` })}`
+                : `${t('reports.select_terms_placeholder', { defaultValue: 'اختر الشروط المطلوبة...' })}`
+              }
+            </span>
+            <ChevronDown size={18} style={{ 
+              transform: showTermsDropdown ? 'rotate(180deg)' : 'rotate(0deg)',
+              transition: 'transform 0.2s',
+              marginRight: 'auto',
+              marginLeft: '4px'
+            }} />
+          </button>
+
+          {showTermsDropdown && (
+            <div style={{
+              position: 'absolute',
+              top: 'calc(100% + 6px)',
+              right: 0,
+              left: 0,
+              backgroundColor: 'var(--surface-color)',
+              border: '2px solid var(--accent-color)',
+              borderRadius: 'var(--radius-md)',
+              boxShadow: '0 12px 32px rgba(0,0,0,0.4)',
+              zIndex: 999,
+              padding: '1rem',
+              maxHeight: '350px',
+              overflowY: 'auto',
+              animation: 'fadeIn 0.15s ease'
+            }}>
+              {/* Search filter input inside dropdown */}
+              <div style={{ marginBottom: '0.75rem', position: 'relative' }}>
+                <input
+                  type="text"
+                  placeholder={t('reports.search_terms_placeholder', { defaultValue: 'البحث في الشروط المطلوبة...' })}
+                  value={termsSearchQuery}
+                  onChange={(e) => setTermsSearchQuery(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '0.5rem 2rem 0.5rem 0.75rem',
+                    fontSize: '0.9rem',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: 'var(--radius-sm, 6px)',
+                    backgroundColor: 'var(--bg-color)',
+                    color: 'var(--text-main)',
+                    outline: 'none',
+                    textAlign: 'right',
+                    direction: 'rtl'
+                  }}
+                />
+                <Search size={15} style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }} />
+              </div>
+
+              <div style={{ 
+                maxHeight: '220px', 
+                overflowY: 'auto', 
+                marginBottom: '1rem',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.5rem',
+                paddingRight: '4px'
+              }}>
+                {(() => {
+                  const filtered = (lookups.packagingConditionsList || []).filter(term => {
+                    const termName = typeof term === 'object' ? term.name : term;
+                    return termName.toLowerCase().includes(termsSearchQuery.toLowerCase());
+                  });
+                  if (filtered.length > 0) {
+                    return filtered.map((term, idx) => {
+                      const termName = typeof term === 'object' ? term.name : term;
+                      const isSelected = tempSelectedTerms.includes(termName);
+                      return (
+                        <label 
+                          key={idx}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.75rem',
+                            padding: '0.6rem 0.8rem',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            backgroundColor: isSelected ? 'rgba(212, 175, 55, 0.08)' : 'transparent',
+                            transition: 'background-color 0.2s',
+                            userSelect: 'none'
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!isSelected) e.currentTarget.style.backgroundColor = 'var(--surface-highlight)';
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent';
+                          }}
+                        >
+                          <input 
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => {
+                              setTempSelectedTerms(prev => 
+                                isSelected ? prev.filter(t => t !== termName) : [...prev, termName]
+                              );
+                            }}
+                            style={{
+                              width: '18px',
+                              height: '18px',
+                              accentColor: 'var(--accent-color)',
+                              cursor: 'pointer'
+                            }}
+                          />
+                          <span style={{ 
+                            fontSize: '0.95rem',
+                            color: isSelected ? 'var(--text-strong)' : 'var(--text-main)',
+                            fontWeight: isSelected ? 'bold' : 'normal'
+                          }}>{termName}</span>
+                        </label>
+                      );
+                    });
+                  }
+                  return (
+                    <div style={{ textAlign: 'center', padding: '1rem', color: 'var(--text-muted)' }}>
+                      {t('reports.no_matching_terms', { defaultValue: 'لا توجد شروط مطابقة للبحث' })}
+                    </div>
+                  );
+                })()}
+              </div>
+              
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'flex-end', 
+                gap: '0.5rem', 
+                borderTop: '1px solid var(--border-color)', 
+                paddingTop: '0.75rem' 
+              }}>
+                <button 
+                  type="button"
+                  onClick={() => setTempSelectedTerms([])}
+                  className="btn btn-outline"
+                  style={{ padding: '0.4rem 1rem', fontSize: '0.85rem' }}
+                >
+                  {t('reports.clear_all', { defaultValue: 'مسح الكل' })}
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => {
+                    setSelectedTerms(tempSelectedTerms);
+                    setShowTermsDropdown(false);
+                    toast.success(t('reports.terms_updated', { defaultValue: 'تم تحديث الشروط المختارة' }));
+                  }}
+                  className="btn btn-accent"
+                  style={{ 
+                    padding: '0.4rem 1.5rem', 
+                    fontSize: '0.85rem',
+                    backgroundColor: 'var(--accent-color)',
+                    color: '#000',
+                    fontWeight: 'bold'
+                  }}
+                >
+                  {t('reports.ok_btn', { defaultValue: 'موافق' })}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Selected Terms Badges Display for immediate visual feedback */}
+        {selectedTerms.length > 0 && (
+          <div style={{ 
+            display: 'flex', 
+            flexWrap: 'wrap', 
+            gap: '0.5rem', 
+            marginTop: '1rem',
+            paddingTop: '0.75rem',
+            borderTop: '1px dashed var(--border-color)'
+          }}>
+            {selectedTerms.map((term, i) => (
               <div 
-                key={idx} 
-                onClick={() => {
-                  setSelectedTerms(prev => isSelected ? prev.filter(t => t !== termName) : [...prev, termName]);
-                }}
+                key={i}
                 style={{
-                  padding: '0.6rem 1rem',
-                  border: isSelected ? '2px solid var(--accent-color)' : '1px solid var(--border-color)',
-                  borderRadius: '8px',
-                  backgroundColor: isSelected ? 'rgba(212, 175, 55, 0.1)' : 'var(--surface-color)',
-                  cursor: 'pointer',
-                  display: 'flex',
+                  display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '0.5rem',
-                  transition: 'all 0.2s',
-                  fontWeight: isSelected ? 'bold' : 'normal'
+                  gap: '0.4rem',
+                  backgroundColor: 'rgba(212, 175, 55, 0.1)',
+                  border: '1px solid rgba(212, 175, 55, 0.3)',
+                  borderRadius: '6px',
+                  padding: '0.3rem 0.6rem',
+                  fontSize: '0.85rem',
+                  color: 'var(--text-strong)'
                 }}
               >
-                <div style={{ width: '18px', height: '18px', borderRadius: '4px', border: '1px solid ' + (isSelected ? 'var(--accent-color)' : 'var(--text-muted)'), display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: isSelected ? 'var(--accent-color)' : 'transparent' }}>
-                  {isSelected && <CheckCircle2 size={14} color="#000" />}
-                </div>
-                <span>{termName}</span>
+                <span>{term}</span>
+                <button 
+                  type="button"
+                  onClick={() => setSelectedTerms(prev => prev.filter(t => t !== term))}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    cursor: 'pointer',
+                    color: '#ef4444',
+                    display: 'inline-flex',
+                    alignItems: 'center'
+                  }}
+                >
+                  <X size={14} />
+                </button>
               </div>
-            );
-          }) : <span style={{ color: 'var(--text-muted)' }}>{t('reports.no_terms_available', { defaultValue: 'لا توجد شروط مضافة حالياً. يمكنك إضافتها من الإعدادات.' })}</span>}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Active Filter Pills (Upgraded UX) */}
@@ -941,7 +1233,7 @@ const OrderReports = () => {
                         <td style={{ padding: '1rem', textAlign: 'center' }}>
                           {actSummary.last ? (
                             <div title={formatActivityTime(actSummary.last.at)} style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                              <span style={{ color: actSummary.last.color || 'var(--accent-color)', fontWeight: 800, fontSize: '0.78rem' }}>{t(actSummary.last.actionLabel) || t(`activity.${actSummary.last.action}`) || actSummary.last.actionLabel}</span>
+                              <span style={{ color: actSummary.last.color || 'var(--accent-color)', fontWeight: 800, fontSize: '0.78rem' }}>{getActivityActionLabel(actSummary.last, t)}</span>
                               <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>{actSummary.last.actor}</span>
                             </div>
                           ) : (
@@ -1021,10 +1313,10 @@ const OrderReports = () => {
                                            </div>
                                            <div style={{ padding: '0.75rem 0.85rem', borderRadius: 12, background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.06)' }}>
                                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.7rem', marginBottom: 4 }}>
-                                               <strong style={{ color: item.color || 'var(--text-strong)' }}>{t(item.actionLabel) || t(`activity.${item.action}`) || item.actionLabel || item.action}</strong>
+                                               <strong style={{ color: item.color || 'var(--text-strong)' }}>{getActivityActionLabel(item, t)}</strong>
                                                <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{formatActivityTime(item.at)}</span>
                                              </div>
-                                             <div style={{ color: 'var(--text-strong)', fontSize: '0.86rem' }}>{item.note}</div>
+                                             <div style={{ color: 'var(--text-strong)', fontSize: '0.86rem' }}>{getActivityNote(item, t)}</div>
                                              <div style={{ color: 'var(--text-muted)', fontSize: '0.76rem', marginTop: 4 }}>{t('reports.activity.by', { actor: item.actor || 'system' })}</div>
                                              {item.changes?.length > 0 && (
                                                <div style={{ marginTop: '0.6rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.35rem' }}>

@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { useAppData } from '../context/AppDataContext';
 import { supabase } from '../supabaseClient';
 import { Search, Save, Factory, AlertCircle, Info, Palette, CheckCircle2, X, Box } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -7,6 +8,7 @@ import { extractColorCSS } from '../utils/textUtils';
 
 const FactoryOwnerPortal = () => {
   const { t } = useTranslation();
+  const { lookups } = useAppData();
   const [modelNo, setModelNo] = useState('');
   const [isFetched, setIsFetched] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
@@ -251,7 +253,7 @@ const FactoryOwnerPortal = () => {
   );
 
   return (
-    <div className="fade-in" style={{ paddingBottom: '16rem' }}>
+    <div className="fade-in" style={{ paddingBottom: '2rem' }}>
       {/* ─── HEADER ─── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
@@ -582,7 +584,7 @@ const FactoryOwnerPortal = () => {
               {colors.filter(c => c.colorName).map((c, i) => (
                 <div key={i} style={{ background: 'var(--surface-highlight)', border: '1px solid var(--border-color)', borderRadius: '10px', overflow: 'hidden' }}>
                   <div style={{ background: 'var(--surface-color)', padding: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontSize: '0.85rem', fontWeight: 'bold', borderBottom: '1px solid var(--border-color)' }}>
-                    <div style={{ width: '16px', height: '16px', borderRadius: '50%', border: '1px solid rgba(255,255,255,0.2)', backgroundColor: extractColorCSS(c.colorName), flexShrink: 0 }}></div>
+                    <div style={{ width: '16px', height: '16px', borderRadius: '50%', border: '1px solid rgba(255,255,255,0.2)', backgroundColor: extractColorCSS(c.colorName, lookups?.colors || []), flexShrink: 0 }}></div>
                     {c.colorName}
                   </div>
                   <div style={{ padding: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -612,11 +614,10 @@ const FactoryOwnerPortal = () => {
         </div>
       )}
 
-      {/* ─── FLOATING ACTION BAR ─── */}
+      {/* ─── ACTION BAR (NON-FIXED) ─── */}
       {isFetched && (
-        <div className="fade-in" style={{ 
-          position: 'fixed', bottom: '2rem', left: '50%', transform: 'translateX(-50%)', 
-          width: '90%', maxWidth: '1200px', zIndex: 100, 
+        <div className="fade-in card" style={{ 
+          marginTop: '2rem',
           background: 'linear-gradient(135deg, var(--surface-color) 0%, rgba(30, 41, 59, 0.95) 100%)', 
           border: '2px solid var(--accent-color)', borderRadius: '16px', 
           padding: '1.25rem 2rem', boxShadow: '0 10px 40px rgba(0,0,0,0.5)',

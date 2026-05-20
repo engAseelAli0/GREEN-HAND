@@ -257,7 +257,7 @@
       "select_company": "? Select Company ?",
       "date_label": "Date",
       "fetch_serial_label": "Item No (Retrieve)",
-      "fetch_placeholder": "Enter number... (F9)",
+      "fetch_placeholder": "Enter Number Or Press (F9)",
       "fetch_btn": "Fetch",
       "clear_btn": "Clear & Start New",
       "select_company_placeholder": "Click to select company",
@@ -566,7 +566,7 @@
     "back_btn": "Back to Portal",
     "search": {
       "label": "Enter Model No to extract batch data",
-      "placeholder": "e.g. 22890 (F9)",
+      "placeholder": "Press (F9)",
       "generate_btn": "Generate Table",
       "loading": "Fetching...",
       "setup_btn": "Page Setup",
@@ -685,7 +685,7 @@
         "items_count": "{{count}} Items"
       }
     },
-    "detailed_terms": "Additional Packing Terms for Invoice",
+    "detailed_terms": "Required Terms for Invoice",
     "no_terms_available": "No additional terms available at the moment. You can add them in Settings.",
     "activity": {
       "smart_log": "Smart Activity Log",
@@ -800,7 +800,8 @@
       "remove_invalid": "Remove Invalid Rows",
       "reasons": {
         "not_found": "Not found in database",
-        "not_received": "Not received from factory"
+        "not_received": "Not received from factory",
+        "duplicate": "Duplicate item"
       }
     },
     "clear_confirm": {
@@ -1089,7 +1090,7 @@
       "plasticBagSizes": "Plastic Bag Sizes",
       "tradeMarks": "Trademarks",
       "measurements": "Sizes List",
-      "packagingConditionsList": "Additional Packaging Conditions",
+      "packagingConditionsList": "Required Conditions",
       "buyerCodes": "Buyer Codes",
       "system_users": "User Management"
     },
@@ -1165,13 +1166,18 @@
     "edit_mode_desc": "Update the user's details and permissions below.",
     "add_new_user_desc": "Fill in the details to create a new system user.",
     "no_users": "No users found",
+    "copy_permissions_label": "Copy user permissions",
+    "copy_permissions_placeholder": "— Select a user to copy from —",
+    "allowed_admin_tabs": "Allowed Admin Dashboard Sections",
+    "allowed_admin_tabs_desc": "Select which sections are visible to the user in the strategic admin dashboard. If none are selected, all sections will be visible by default.",
     "messages": {
       "suspend_success": "Account suspended successfully",
       "activate_success": "Account activated successfully",
       "status_error": "Error changing account status",
       "username_required": "Username is required",
       "password_required": "Password is required for new users",
-      "save_error": "Error saving user"
+      "save_error": "Error saving user",
+      "permissions_copied": "Permissions copied successfully!"
     }
   },
   "image_editor": {

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useAppData } from '../context/AppDataContext';
 import { Plus, Trash2, Edit, Edit2, Check, X, ImagePlus, ShoppingBag, Banknote, Scissors, Palette, Factory, Ruler, Package, Box, ShoppingCart, Stamp, SlidersHorizontal, ListChecks, Search, Sparkles, GripVertical, Tag, Layers, Puzzle, ChevronDown, Building, User, Shield } from 'lucide-react';
 import { supabase } from '../supabaseClient';
@@ -6,11 +6,54 @@ import toast from 'react-hot-toast';
 import UserManagement from '../components/UserManagement';
 import { compressImage } from '../utils/imageUtils';
 import { useTranslation } from 'react-i18next';
+import { useAuth } from '../context/AuthContext';
 
 const AdminDashboard = () => {
   const { t } = useTranslation();
+  const { user, hasPermission } = useAuth();
   const { lookups, updateLookup } = useAppData();
-  const [activeTab, setActiveTab] = useState('products');
+  
+  const allowedAdminTabs = user?.permissions?.allowed_admin_tabs || [];
+
+  const tabs = [
+    { id: 'products', name: t('admin.tabs.products'), icon: ShoppingBag },
+    { id: 'componentParts', name: t('admin.tabs.componentParts'), icon: Puzzle },
+    { id: 'currencies', name: t('admin.tabs.currencies'), icon: Banknote },
+    { id: 'fabrics', name: t('admin.tabs.fabrics'), icon: Scissors },
+    { id: 'materials', name: t('admin.tabs.materials'), icon: Layers },
+    { id: 'colors', name: t('admin.tabs.colors'), icon: Palette },
+    { id: 'factories', name: t('admin.tabs.factories'), icon: Factory },
+    { id: 'companies', name: t('admin.tabs.companies'), icon: Building },
+    { id: 'sizes', name: t('admin.tabs.sizes'), icon: Ruler },
+    { id: 'cartonPackages', name: t('admin.tabs.cartonPackages'), icon: Package },
+    { id: 'cartonSizes', name: t('admin.tabs.cartonSizes'), icon: Box },
+    { id: 'plasticBagSizes', name: t('admin.tabs.plasticBagSizes'), icon: ShoppingCart },
+    { id: 'tradeMarks', name: t('admin.tabs.tradeMarks'), icon: Stamp },
+    { id: 'measurements', name: t('admin.tabs.measurements'), icon: SlidersHorizontal },
+    { id: 'packagingConditionsList', name: t('admin.tabs.packagingConditionsList'), icon: ListChecks },
+    { id: 'buyerCodes', name: t('admin.tabs.buyerCodes'), icon: Tag },
+    { id: 'system_users', name: t('admin.tabs.system_users'), icon: Shield }
+  ];
+
+  const filteredTabs = tabs.filter(tab => {
+    if (user?.role === 'admin') return true;
+    if (allowedAdminTabs.length === 0) {
+      if (tab.id === 'system_users') return false;
+      return true;
+    }
+    return allowedAdminTabs.includes(tab.id);
+  });
+
+  const [activeTab, setActiveTab] = useState(() => {
+    return filteredTabs.length > 0 ? filteredTabs[0].id : 'products';
+  });
+
+  useEffect(() => {
+    if (filteredTabs.length > 0 && !filteredTabs.some(t => t.id === activeTab)) {
+      setActiveTab(filteredTabs[0].id);
+    }
+  }, [filteredTabs, activeTab]);
+
   const [newValue, setNewValue] = useState('');
   const [newValuePrefix, setNewValuePrefix] = useState('');
   const [newValuePartAssignment, setNewValuePartAssignment] = useState('');
@@ -40,27 +83,14 @@ const AdminDashboard = () => {
 
   const allParts = (lookups.componentParts || []).map(p => typeof p === 'object' ? p.name : p).filter(Boolean);
 
-  const tabs = [
-    { id: 'products', name: t('admin.tabs.products'), icon: ShoppingBag },
-    { id: 'componentParts', name: t('admin.tabs.componentParts'), icon: Puzzle },
-    { id: 'currencies', name: t('admin.tabs.currencies'), icon: Banknote },
-    { id: 'fabrics', name: t('admin.tabs.fabrics'), icon: Scissors },
-    { id: 'materials', name: t('admin.tabs.materials'), icon: Layers },
-    { id: 'colors', name: t('admin.tabs.colors'), icon: Palette },
-    { id: 'factories', name: t('admin.tabs.factories'), icon: Factory },
-    { id: 'companies', name: t('admin.tabs.companies'), icon: Building },
-    { id: 'sizes', name: t('admin.tabs.sizes'), icon: Ruler },
-    { id: 'cartonPackages', name: t('admin.tabs.cartonPackages'), icon: Package },
-    { id: 'cartonSizes', name: t('admin.tabs.cartonSizes'), icon: Box },
-    { id: 'plasticBagSizes', name: t('admin.tabs.plasticBagSizes'), icon: ShoppingCart },
-    { id: 'tradeMarks', name: t('admin.tabs.tradeMarks'), icon: Stamp },
-    { id: 'measurements', name: t('admin.tabs.measurements'), icon: SlidersHorizontal },
-    { id: 'packagingConditionsList', name: t('admin.tabs.packagingConditionsList'), icon: ListChecks },
-    { id: 'buyerCodes', name: t('admin.tabs.buyerCodes'), icon: Tag },
-    { id: 'system_users', name: t('admin.tabs.system_users'), icon: Shield }
-  ];
-
   const handleAddOrEdit = () => {
+    const isEditingMode = editIndex !== null;
+    const requiredAction = isEditingMode ? 'edit' : 'add';
+    if (!hasPermission('admin', requiredAction)) {
+      toast.error(t('auth.unauthorized_desc') || 'You do not have permission to perform this action.');
+      return;
+    }
+
     if (!newValue.trim()) {
       toast.error(t('admin.messages.valid_name_required'));
       return;
@@ -209,6 +239,11 @@ const AdminDashboard = () => {
   };
 
   const handleTradeMarkImageUpload = async (e) => {
+    const requiredAction = editIndex !== null ? 'edit' : 'add';
+    if (!hasPermission('admin', requiredAction)) {
+      toast.error(t('auth.unauthorized_desc') || 'You do not have permission to perform this action.');
+      return;
+    }
     const originalFile = e.target.files[0];
     if (!originalFile) return;
     if (!newValue.trim()) {
@@ -245,6 +280,10 @@ const AdminDashboard = () => {
   };
 
   const handleDelete = (indexToDelete) => {
+    if (!hasPermission('admin', 'delete')) {
+      toast.error(t('auth.unauthorized_desc') || 'You do not have permission to perform this action.');
+      return;
+    }
     const currentList = lookups[activeTab] || [];
     const newList = currentList.filter((_, i) => i !== indexToDelete);
     updateLookup(activeTab, newList);
@@ -254,6 +293,11 @@ const AdminDashboard = () => {
 
   // ─── Drag & Drop Reorder Handlers ──────────────────────
   const handleDragStart = (e, index) => {
+    if (!hasPermission('admin', 'edit')) {
+      e.preventDefault();
+      toast.error(t('auth.unauthorized_desc') || 'You do not have permission to perform this action.');
+      return;
+    }
     setDragIndex(index);
     e.dataTransfer.effectAllowed = 'move';
     // Make the drag image slightly transparent
@@ -313,7 +357,7 @@ const AdminDashboard = () => {
       })
     : currentItems;
 
-  const activeTabInfo = tabs.find(t => t.id === activeTab);
+  const activeTabInfo = filteredTabs.find(t => t.id === activeTab);
   const ActiveIcon = activeTabInfo?.icon || Edit;
 
   // ─── Inline Styles ───────────────────────────────────────
@@ -687,7 +731,7 @@ const AdminDashboard = () => {
           {t('admin.title')}
         </div>
         <span style={styles.badge}>
-          {t('admin.active_categories', { count: tabs.length })}
+          {t('admin.active_categories', { count: filteredTabs.length })}
         </span>
       </div>
 
@@ -697,7 +741,7 @@ const AdminDashboard = () => {
         {/* ─── Sidebar ─── */}
         <nav style={styles.sidebar} className="admin-sidebar">
           <div style={styles.sidebarLabel}>{t('admin.categories_and_lists')}</div>
-          {tabs.map(tab => {
+          {filteredTabs.map(tab => {
             const isActive = activeTab === tab.id;
             const TabIcon = tab.icon;
             const count = (lookups[tab.id] || []).length;
@@ -746,7 +790,8 @@ const AdminDashboard = () => {
           ) : (
             <>
               {/* ─── Add / Edit Form ─── */}
-              <div ref={formCardRef} style={styles.formCard}>
+              {((editIndex !== null && hasPermission('admin', 'edit')) || (editIndex === null && hasPermission('admin', 'add'))) && (
+                <div ref={formCardRef} style={styles.formCard}>
             <div style={styles.formTitle}>
               {editIndex !== null ? (
                 <><Edit2 size={16} /> {t('admin.edit_item')}</>
@@ -1138,6 +1183,7 @@ const AdminDashboard = () => {
               )}
             </div>
           </div>
+              )}
 
           {/* ─── Search Bar ─── */}
           {currentItems.length > 4 && (
@@ -1168,7 +1214,7 @@ const AdminDashboard = () => {
               const isEditing = editIndex === realIndex;
               const isDragging = dragIndex === realIndex;
               const isDragOver = dragOverIndex === realIndex && dragIndex !== realIndex;
-              const canDrag = !searchQuery.trim();
+              const canDrag = !searchQuery.trim() && hasPermission('admin', 'edit');
               return (
                 <React.Fragment key={realIndex}>
                   {/* Drop indicator ABOVE this item */}
@@ -1290,7 +1336,7 @@ const AdminDashboard = () => {
                   </div>
 
                   <div style={{ display: 'flex', gap: '0.25rem', flexShrink: 0 }}>
-                    {activeTab === 'measurements' && (
+                    {activeTab === 'measurements' && hasPermission('admin', 'edit') && (
                       <button
                         onClick={() => {
                           setAssignMeasurementIndex(realIndex);
@@ -1306,24 +1352,28 @@ const AdminDashboard = () => {
                         <Tag size={16} />
                       </button>
                     )}
-                    <button
-                      onClick={() => startEdit(realIndex, item)}
-                      title={t('admin.actions.edit')}
-                      style={styles.actionBtn}
-                      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(212, 175, 55, 0.1)'; e.currentTarget.style.color = 'var(--accent-color)'; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text-muted)'; }}
-                    >
-                      <Edit2 size={16} />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(realIndex)}
-                      title={t('admin.actions.delete')}
-                      style={styles.actionBtn}
-                      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'; e.currentTarget.style.color = '#ef4444'; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text-muted)'; }}
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                    {hasPermission('admin', 'edit') && (
+                      <button
+                        onClick={() => startEdit(realIndex, item)}
+                        title={t('admin.actions.edit')}
+                        style={styles.actionBtn}
+                        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(212, 175, 55, 0.1)'; e.currentTarget.style.color = 'var(--accent-color)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+                      >
+                        <Edit2 size={16} />
+                      </button>
+                    )}
+                    {hasPermission('admin', 'delete') && (
+                      <button
+                        onClick={() => handleDelete(realIndex)}
+                        title={t('admin.actions.delete')}
+                        style={styles.actionBtn}
+                        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'; e.currentTarget.style.color = '#ef4444'; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
                   </div>
                   </div>
                   {/* Drop indicator BELOW this item */}
@@ -1428,9 +1478,13 @@ const AdminDashboard = () => {
               >
                 {t('admin.cancel_edit')}
               </button>
-              <button
+               <button
                 className="btn btn-accent"
                 onClick={() => {
+                  if (!hasPermission('admin', 'edit')) {
+                    toast.error(t('auth.unauthorized_desc') || 'You do not have permission to perform this action.');
+                    return;
+                  }
                   const currentList = [...(lookups.measurements || [])];
                   const item = currentList[assignMeasurementIndex];
                   const newItem = {

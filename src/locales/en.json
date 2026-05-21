@@ -9,6 +9,10 @@
   "you_are_here": "(You are here)",
   "switch_light": "Light Mode",
   "switch_dark": "Dark Mode",
+  "customize_colors": "Customize Colors",
+  "preset_colors": "Preset Colors",
+  "custom_color": "Custom Color",
+  "reset_to_default": "Reset to Default",
   "portal_welcome": "Welcome to the Strategic Dashboard. Choose the interface you wish to work on today from the dedicated portals below.",
   "groups": {
     "orders": {
@@ -452,7 +456,7 @@
       "doz": "Doz",
       "carton_status": "Carton Status",
       "full": "Full",
-      "not_full": "Not Full",
+      "not_full": "Mixed",
       "from": "From",
       "to": "To",
       "pcs_per_ctn": "Pcs per Carton",
@@ -525,7 +529,7 @@
       "doz": "Doz",
       "carton_status": "Carton Status",
       "full": "Full",
-      "not_full": "Not Full",
+      "not_full": "Mixed",
       "from": "From",
       "to": "To",
       "pcs_per_ctn": "Pcs per Carton",

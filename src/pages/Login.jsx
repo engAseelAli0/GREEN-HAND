@@ -6,6 +6,9 @@ import { Lock, User, ShieldCheck, Eye, EyeOff, Fingerprint, ArrowLeft } from 'lu
 import LanguageSelector from '../components/LanguageSelector';
 import ThemeToggle from '../components/ThemeToggle';
 import { Toaster } from 'react-hot-toast';
+import { useTheme } from '../context/ThemeContext';
+import logoLight from '../assets/light.jpg';
+import logoDark from '../assets/dark.jpg';
 
 /* ═══════════════════════════════════════════════════
    Animated floating particles canvas
@@ -119,6 +122,7 @@ const Login = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const { theme } = useTheme();
 
   useEffect(() => {
     const timer = setTimeout(() => setMounted(true), 100);
@@ -190,6 +194,10 @@ const Login = () => {
         @keyframes ringRotate {
           from { transform: translate(-50%, -50%) rotate(0deg); }
           to { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+        @keyframes logoRingRotate {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
         }
         @keyframes loginSpinner {
           to { transform: rotate(360deg); }
@@ -449,20 +457,35 @@ const Login = () => {
             }}>
               <div style={{
                 display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                width: '88px', height: '88px', borderRadius: '50%',
-                background: 'linear-gradient(135deg, rgba(212, 175, 55, 0.2) 0%, rgba(212, 175, 55, 0.05) 100%)',
+                width: '100px', height: '100px', borderRadius: '16px',
+                background: theme === 'light' ? '#ffffff' : '#000000',
                 border: '2px solid rgba(212, 175, 55, 0.4)',
                 boxShadow: '0 0 30px rgba(212, 175, 55, 0.15), inset 0 0 20px rgba(212, 175, 55, 0.05)',
                 marginBottom: '1.25rem', position: 'relative'
               }}>
                 {/* Rotating ring around logo */}
                 <div style={{
-                  position: 'absolute', inset: '-6px',
+                  position: 'absolute',
+                  top: '50%',
+                  left: '50%',
+                  width: '138px',
+                  height: '138px',
                   borderRadius: '50%',
-                  border: '1px dashed rgba(212, 175, 55, 0.2)',
-                  animation: 'ringRotate 20s linear infinite'
+                  border: '1px dashed rgba(212, 175, 55, 0.25)',
+                  animation: 'ringRotate 20s linear infinite',
+                  zIndex: 0
                 }} />
-                <Fingerprint size={42} color="#d4af37" strokeWidth={1.5} />
+                <img 
+                  src={theme === 'light' ? logoLight : logoDark} 
+                  alt="Green Hand Logo" 
+                  style={{ 
+                    width: '100%', 
+                    height: '100%', 
+                    borderRadius: '14px', 
+                    objectFit: 'contain',
+                    zIndex: 1
+                  }} 
+                />
               </div>
             </div>
 

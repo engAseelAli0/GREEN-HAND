@@ -380,10 +380,25 @@ const OrderReports = () => {
        const custMobile = firstData.buyerNumber || firstData.buyerMobile || '-';
        const reqDate = firstData.requestDate || new Date().toISOString().split('T')[0];
        const delDate = firstData.deliveryDate || '-';
-       let lastCN = parseInt(localStorage.getItem('gh_pdf_contract_counter') || '0', 10);
-       lastCN += 1;
-       localStorage.setItem('gh_pdf_contract_counter', String(lastCN));
-       const contNo = String(lastCN).padStart(5, '0');
+       let contNo = '00001';
+       try {
+         const { data: counterVal, error: rpcError } = await supabase.rpc('increment_contract_counter');
+         if (rpcError) {
+           console.error("RPC error incrementing contract counter, falling back to local storage:", rpcError);
+           let lastCN = parseInt(localStorage.getItem('gh_pdf_contract_counter') || '0', 10);
+           lastCN += 1;
+           localStorage.setItem('gh_pdf_contract_counter', String(lastCN));
+           contNo = String(lastCN).padStart(5, '0');
+         } else {
+           contNo = String(counterVal).padStart(5, '0');
+         }
+       } catch (err) {
+         console.error("Exception calling increment_contract_counter RPC, falling back to local storage:", err);
+         let lastCN = parseInt(localStorage.getItem('gh_pdf_contract_counter') || '0', 10);
+         lastCN += 1;
+         localStorage.setItem('gh_pdf_contract_counter', String(lastCN));
+         contNo = String(lastCN).padStart(5, '0');
+       }
        const fD = (d) => { if (!d || d === '-') return '-'; const p = d.split('-'); return p.length === 3 ? p[2]+'/'+p[1]+'/'+p[0] : d; };
        let gQty = 0, gAmt = 0;
        const cur = firstData.currency || 'RMB';

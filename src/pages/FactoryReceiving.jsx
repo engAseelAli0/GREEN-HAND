@@ -372,7 +372,7 @@ const FactoryReceiving = () => {
     const pkgsData = packages.filter(p => p.kind).map(p => ({
         [t('receiving.packages.id') || 'ID']: p.id,
         [t('receiving.packages.kind')]: p.kind,
-        [t('receiving.packages.carton_status')]: p.status,
+        [t('receiving.packages.carton_status')]: p.status === 'Full' ? t('receiving.packages.full') : (p.status === 'Not Full' ? t('receiving.packages.not_full') : p.status),
         [t('receiving.packages.from')]: p.fromCtn,
         [t('receiving.packages.to')]: p.toCtn,
         [t('receiving.packages.pcs_per_ctn')]: p.pcsPerCtn,
@@ -703,7 +703,7 @@ const FactoryReceiving = () => {
                       <div key={idx} style={{ background: 'var(--surface-color)', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '0.85rem' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
                           <span style={{ fontWeight: 'bold' }}>{pkg.id}</span>
-                          <span style={{ color: 'var(--text-muted)' }}>{pkg.kind} • {pkg.status}</span>
+                          <span style={{ color: 'var(--text-muted)' }}>{pkg.kind} • {pkg.status === 'Full' ? t('receiving.packages.full') : (pkg.status === 'Not Full' ? t('receiving.packages.not_full') : pkg.status)}</span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-main)' }}>
                           <span>{t('receiving.packages.cartons')}: {from} - {to} ({totalCtn})</span>

@@ -5,9 +5,13 @@ import { Toaster, toast } from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
 import LanguageSelector from './components/LanguageSelector';
 import ThemeToggle from './components/ThemeToggle';
+import ColorCustomizer from './components/ColorCustomizer';
 import { useAuth } from './context/AuthContext';
 import { LogOut, User, Key } from 'lucide-react';
 import ChangePasswordModal from './components/ChangePasswordModal';
+import { useTheme } from './context/ThemeContext';
+import logoLight from './assets/light.jpg';
+import logoDark from './assets/dark.jpg';
 
 const NAV_GROUPS = [
   {
@@ -49,6 +53,7 @@ const NAV_PAGES = NAV_GROUPS.flatMap(g => g.pages);
 
 const AppLayout = () => {
   const { t } = useTranslation();
+  const { theme } = useTheme();
   const location = useLocation();
   const navigate = useNavigate();
   const [showNavDropdown, setShowNavDropdown] = useState(false);
@@ -76,15 +81,28 @@ const AppLayout = () => {
     <div className="app-container">
       <header className="glass-panel hide-on-print" style={{ margin: '1rem 2rem', padding: '1rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: '1rem', zIndex: 50 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <div style={{ 
-            background: 'var(--accent-color)', 
-            color: 'white', 
-            padding: '0.75rem', 
-            borderRadius: 'var(--radius-md)',
-            boxShadow: 'var(--shadow-gold)'
-          }}>
-            <Edit3 size={24} />
-          </div>
+          <Link to="/" style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: '46px',
+            transition: 'transform 0.2s ease',
+            cursor: 'pointer'
+          }}
+            onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+          >
+            <img
+              src={theme === 'light' ? logoLight : logoDark}
+              alt="Green Hand Logo"
+              style={{
+                height: '100%',
+                width: 'auto',
+                borderRadius: '8px',
+                objectFit: 'contain'
+              }}
+            />
+          </Link>
           <div>
             <h1 style={{ fontSize: '1.5rem', marginBottom: '0.2rem' }} className="text-gradient">
               {t('app_title')}
@@ -96,16 +114,17 @@ const AppLayout = () => {
         </div>
 
         <nav className="no-print" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+          <ColorCustomizer />
           <ThemeToggle />
           <LanguageSelector />
-          
+
           {user && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: '0.5rem', paddingLeft: '0.5rem', borderLeft: '1px solid var(--border-color)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', color: 'var(--text-muted)' }}>
                 <User size={16} />
                 <span style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>{user.username}</span>
               </div>
-              <button onClick={() => setShowChangePassword(true)} className="btn btn-outline" style={{ padding: '0.4rem 0.6rem', color: 'var(--accent-color)', borderColor: 'rgba(212, 175, 55, 0.3)' }} title={t('auth.change_password')}>
+              <button onClick={() => setShowChangePassword(true)} className="btn btn-outline" style={{ padding: '0.4rem 0.6rem', color: 'var(--accent-color)', borderColor: 'rgba(var(--accent-rgb), 0.3)' }} title={t('auth.change_password')}>
                 <Key size={16} />
               </button>
               <button onClick={() => { logout(); navigate('/login'); }} className="btn btn-outline" style={{ padding: '0.4rem 0.6rem', color: '#ef4444', borderColor: '#ef4444' }} title={t('auth.logout')}>
@@ -126,16 +145,16 @@ const AppLayout = () => {
                     padding: '0.5rem 1rem', fontSize: '0.9rem',
                     transition: 'all 0.2s',
                     borderWidth: showNavDropdown ? '2px' : '1px',
-                    borderColor: showNavDropdown ? 'var(--accent-color)' : 'rgba(212, 175, 55, 0.3)',
+                    borderColor: showNavDropdown ? 'var(--accent-color)' : 'rgba(var(--accent-rgb), 0.3)',
                     color: showNavDropdown ? 'var(--accent-color)' : 'var(--text-muted)',
                   }}
                 >
                   <span style={{ fontSize: '1rem' }}>📌</span>
                   {t('go_to')}
-                  <ChevronDown size={15} style={{ 
-                    transform: showNavDropdown ? 'rotate(180deg)' : 'rotate(0deg)', 
-                    transition: 'transform 0.2s', 
-                    opacity: 0.7 
+                  <ChevronDown size={15} style={{
+                    transform: showNavDropdown ? 'rotate(180deg)' : 'rotate(0deg)',
+                    transition: 'transform 0.2s',
+                    opacity: 0.7
                   }} />
                 </button>
                 {showNavDropdown && (
@@ -160,7 +179,7 @@ const AppLayout = () => {
                       if (groupPages.length === 0) return null;
                       return (
                         <div key={gi}>
-                          <div style={{ padding: '0.45rem 1rem', fontSize: '0.7rem', fontWeight: '700', color: 'var(--accent-color)', textTransform: 'uppercase', letterSpacing: '0.05em', backgroundColor: 'rgba(212, 175, 55, 0.04)', borderTop: gi > 0 ? '1px solid var(--border-color)' : 'none' }}>
+                          <div style={{ padding: '0.45rem 1rem', fontSize: '0.7rem', fontWeight: '700', color: 'var(--accent-color)', textTransform: 'uppercase', letterSpacing: '0.05em', backgroundColor: 'rgba(var(--accent-rgb), 0.04)', borderTop: gi > 0 ? '1px solid var(--border-color)' : 'none' }}>
                             {t(group.labelKey)}
                           </div>
                           {groupPages.map((page) => {
@@ -177,7 +196,7 @@ const AppLayout = () => {
                                   display: 'flex', alignItems: 'center', gap: '0.7rem',
                                   padding: '0.55rem 1rem 0.55rem 1.4rem', cursor: 'pointer',
                                   transition: 'background-color 0.15s',
-                                  backgroundColor: isActive ? 'rgba(212, 175, 55, 0.1)' : 'transparent',
+                                  backgroundColor: isActive ? 'rgba(var(--accent-rgb), 0.1)' : 'transparent',
                                   borderRight: isActive ? '3px solid var(--accent-color)' : '3px solid transparent',
                                   opacity: isActive ? 0.6 : 1,
                                   pointerEvents: isActive ? 'none' : 'auto'
@@ -194,9 +213,9 @@ const AppLayout = () => {
                                 }}>
                                   <Icon size={14} color={page.color} />
                                 </div>
-                                <span style={{ 
-                                  fontSize: '0.84rem', fontWeight: isActive ? 'bold' : '500', 
-                                  color: isActive ? 'var(--accent-color)' : 'var(--text-main)' 
+                                <span style={{
+                                  fontSize: '0.84rem', fontWeight: isActive ? 'bold' : '500',
+                                  color: isActive ? 'var(--accent-color)' : 'var(--text-main)'
                                 }}>
                                   {t(page.labelKey)}
                                   {isActive && <span style={{ fontSize: '0.72rem', marginRight: '0.4rem', opacity: 0.7 }}> {t('you_are_here')}</span>}
@@ -212,8 +231,8 @@ const AppLayout = () => {
               </div>
 
               {/* Home Button */}
-              <Link 
-                to="/" 
+              <Link
+                to="/"
                 className="btn btn-outline"
                 style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', borderColor: 'var(--accent-color)', color: 'var(--accent-color)' }}
               >
@@ -229,7 +248,7 @@ const AppLayout = () => {
         <Outlet />
       </main>
 
-      <Toaster 
+      <Toaster
         containerClassName="hide-on-print"
         position="top-center"
         toastOptions={{

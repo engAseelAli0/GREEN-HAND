@@ -9,6 +9,10 @@
   "you_are_here": "(أنت هنا حالياً)",
   "switch_light": "الوضع الفاتح",
   "switch_dark": "الوضع الليلي",
+  "customize_colors": "تخصيص الألوان",
+  "preset_colors": "ألوان جاهزة",
+  "custom_color": "لون مخصص",
+  "reset_to_default": "استعادة الافتراضي",
   "portal_welcome": "مرحباً بك في لوحة القيادة الاستراتيجية. اختر الواجهة التي ترغب في العمل عليها اليوم من خلال بوابات النظام المخصصة أدناه.",
   "groups": {
     "orders": {
@@ -443,7 +447,7 @@
       "doz": "درزن (Doz)",
       "carton_status": "حالة الكرتون",
       "full": "Full (ممتلئ)",
-      "not_full": "Not Full (ناقص)",
+      "not_full": "Mixed (مختلط)",
       "from": "من (From)",
       "to": "إلى (To)",
       "pcs_per_ctn": "الكمية بالكرتون",
@@ -516,7 +520,7 @@
       "doz": "درزن (Doz)",
       "carton_status": "حالة الكرتون",
       "full": "Full (ممتلئ)",
-      "not_full": "Not Full (ناقص)",
+      "not_full": "Mixed (مختلط)",
       "from": "من (From)",
       "to": "إلى (To)",
       "pcs_per_ctn": "الكمية بالكرتون",

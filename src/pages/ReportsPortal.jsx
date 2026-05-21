@@ -28,6 +28,38 @@ const calculateTotalPiecesCount = (orderData) => {
   return total;
 };
 
+const getSizeRange = (orderData) => {
+  if (!orderData) return '-';
+  if (orderData.manualSizes && Array.isArray(orderData.manualSizes) && orderData.manualSizes.length > 0) {
+    const validSizes = orderData.manualSizes
+      .map(s => s !== null && s !== undefined ? String(s).trim() : '')
+      .filter(s => s !== '');
+    if (validSizes.length > 0) {
+      const sizeOrderArr = ['XXS', 'XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', '2XL', '3XL', '4XL', '5XL', 'F', 'FREE'];
+      const sortedSizes = [...validSizes].sort((a, b) => {
+        const ai = sizeOrderArr.indexOf(a.toUpperCase());
+        const bi = sizeOrderArr.indexOf(b.toUpperCase());
+        if (ai !== -1 && bi !== -1) return ai - bi;
+        if (ai !== -1) return -1;
+        if (bi !== -1) return 1;
+        const numA = parseFloat(a);
+        const numB = parseFloat(b);
+        if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+        return a.localeCompare(b);
+      });
+      const minSize = sortedSizes[0];
+      const maxSize = sortedSizes[sortedSizes.length - 1];
+      return minSize === maxSize ? minSize : `${minSize} - ${maxSize}`;
+    }
+  }
+  if (orderData.sizeFrom && orderData.sizeTo) {
+    return `${orderData.sizeFrom} - ${orderData.sizeTo}`;
+  }
+  if (orderData.sizeFrom) return orderData.sizeFrom;
+  if (orderData.sizeTo) return orderData.sizeTo;
+  return '-';
+};
+
 const ReportsPortal = () => {
   const { t } = useTranslation();
   const { lookups } = useAppData();
@@ -333,7 +365,7 @@ const ReportsPortal = () => {
         [t('reports.excel_headers.factory')]: d.factoryId || '-',
         [t('reports.excel_headers.factory_code')]: getFactoryCode(d.factoryId) || '-',
         [t('reports.excel_headers.brand')]: d.tradeMark || '-',
-        [t('reports.excel_headers.sizes')]: `${d.sizeFrom || '-'} ⟵ ${d.sizeTo || '-'}`,
+        [t('reports.excel_headers.sizes')]: getSizeRange(d).replace(' - ', ' ⟵ '),
         [t('reports.excel_headers.total_qty')]: computedTotal > 0 ? computedTotal : (d.totalQuantity || 0),
         [t('reports.excel_headers.unit_price')]: d.productPrice || 0,
         [t('reports.excel_headers.currency')]: d.currency || '-',
@@ -383,7 +415,7 @@ const ReportsPortal = () => {
           const companyName = d.buyerCompany || '-';
           const factoryId = d.factoryId || '-';
           const factoryCode = getFactoryCode(d.factoryId) || '-';
-          const sizes = `${d.sizeFrom || '-'} - ${d.sizeTo || '-'}`;
+          const sizes = getSizeRange(d);
           const orderDate = d.requestDate || order.created_at?.split('T')[0] || '-';
           const deliveryDate = d.deliveryDate || '-';
           const currency = d.currency || 'RMB';
@@ -1001,11 +1033,23 @@ const ReportsPortal = () => {
                                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem', padding: '1.5rem', background: 'rgba(255,255,255,0.03)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(255,255,255,0.05)' }}>
                                     <div>
                                        <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem', display: 'block', marginBottom: '0.4rem' }}>{t('reports.details.sizes')}</span>
-                                       <div style={{ fontWeight: 'bold', color: '#fff', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                          <span>{d.sizeFrom || '-'}</span>
-                                          <span style={{ color: 'var(--accent-color)' }}>⟵</span>
-                                          <span>{d.sizeTo || '-'}</span>
-                                       </div>
+                                       {(() => {
+                                         const range = getSizeRange(d);
+                                         if (range && range !== '-') {
+                                           const parts = range.split(' - ');
+                                           if (parts.length === 2) {
+                                             return (
+                                               <div style={{ fontWeight: 'bold', color: '#fff', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                 <span>{parts[0]}</span>
+                                                 <span style={{ color: 'var(--accent-color)' }}>⟵</span>
+                                                 <span>{parts[1]}</span>
+                                               </div>
+                                             );
+                                           }
+                                           return <div style={{ fontWeight: 'bold', color: '#fff' }}>{range}</div>;
+                                         }
+                                         return <div style={{ fontWeight: 'bold', color: '#fff' }}>-</div>;
+                                       })()}
                                     </div>
                                     <div>
                                        <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem', display: 'block', marginBottom: '0.2rem' }}>{t('reports.details.delivery_date')}</span>

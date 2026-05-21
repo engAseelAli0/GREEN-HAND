@@ -91,6 +91,9 @@ const DataEntryWizard = () => {
     try { return localStorage.getItem('gh_viewMode') || 'tabs'; } catch { return 'tabs'; }
   });
 
+  const [isSaving, setIsSaving] = useState(false);
+  const [autoFocusLastSize, setAutoFocusLastSize] = useState(false);
+
   // ─── Image Editor States ───
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [imageToEdit, setImageToEdit] = useState(null);
@@ -542,14 +545,15 @@ const DataEntryWizard = () => {
   const handleSaveNew = async () => {
     if (!validateForm()) return;
 
-    const { data: existing } = await supabase.from('orders').select('id').eq('serial_number', currentOrder.serialNumber).single();
-    if (existing) {
-       toast.error(t('entry.messages.serial_used_error'));
-       return;
-    }
-
+    setIsSaving(true);
     const toastId = toast.loading(t('entry.messages.saving'));
     try {
+      const { data: existing } = await supabase.from('orders').select('id').eq('serial_number', currentOrder.serialNumber).single();
+      if (existing) {
+         toast.error(t('entry.messages.serial_used_error'), { id: toastId });
+         return;
+      }
+
       const orderWithActivity = appendActivity(currentOrder, createActivityItem({
         action: 'create',
         user,
@@ -563,14 +567,18 @@ const DataEntryWizard = () => {
       const { error } = await supabase.from('orders').insert([payload]);
       if (error) throw error;
       toast.success(t('entry.messages.save_success', { serial: currentOrder.serialNumber }), { id: toastId });
-      handleClear();
-    } catch {
+      await handleClear();
+    } catch (err) {
+      console.error(err);
       toast.error(t('entry.messages.save_error'), { id: toastId });
+    } finally {
+      setIsSaving(false);
     }
   };
 
   const handleUpdate = async () => {
     if (!validateForm()) return;
+    setIsSaving(true);
     const toastId = toast.loading(t('entry.messages.updating'));
     try {
       const { data: previous } = await supabase
@@ -592,9 +600,12 @@ const DataEntryWizard = () => {
       const { error } = await supabase.from('orders').update(payload).eq('serial_number', originalSerial);
       if (error) throw error;
       toast.success(t('entry.messages.update_success', { serial: currentOrder.serialNumber }), { id: toastId });
-      handleClear();
-    } catch {
+      await handleClear();
+    } catch (err) {
+      console.error(err);
       toast.error(t('entry.messages.save_error'), { id: toastId });
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -604,6 +615,7 @@ const DataEntryWizard = () => {
      const newSerial = window.prompt(t('entry.messages.serial_required'), currentOrder.serialNumber + "-COPY");
      if (!newSerial) return;
 
+     setIsSaving(true);
      const toastId = toast.loading(t('entry.messages.saving'));
      try {
        const { data: existing } = await supabase.from('orders').select('id').eq('serial_number', newSerial).single();
@@ -631,15 +643,20 @@ const DataEntryWizard = () => {
        setCurrentOrder(newOrderData);
        setOriginalSerial(newSerial);
        setIsEditMode(true);
+       setAutoFocusLastSize(false);
        window.scrollTo({ top: 0, behavior: 'smooth' });
-     } catch {
+     } catch (err) {
+       console.error(err);
        toast.error(t('entry.messages.save_error'), { id: toastId });
+     } finally {
+       setIsSaving(false);
      }
   };
 
   const handleDeleteOrder = async () => {
     if (!window.confirm(t('entry.messages.confirm_delete', { serial: originalSerial }))) return;
     
+    setIsSaving(true);
     const toastId = toast.loading(t('entry.messages.deleting'));
     try {
       const { data: previous } = await supabase
@@ -661,9 +678,12 @@ const DataEntryWizard = () => {
         ...deletedArchive,
       ].slice(0, 100)));
       toast.success(t('entry.messages.delete_success', { serial: originalSerial }), { id: toastId });
-      handleClear();
-    } catch {
+      await handleClear();
+    } catch (err) {
+      console.error(err);
       toast.error(t('entry.messages.save_error'), { id: toastId });
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -742,6 +762,7 @@ const DataEntryWizard = () => {
 
       const finalOrder = { ...defaultOrderState, ...fetchedOrder, serialNumber: data.serial_number || fetchedOrder.serialNumber };
       setCurrentOrder(finalOrder);
+      setAutoFocusLastSize(false);
       setSelectedColorsArr(Object.keys(finalOrder.colorDistribution || {}));
       setProductImages(finalOrder.productImages?.map(img => ({ ...img, preview: img.preview || img.url })) || []);
       setIsEditMode(true);
@@ -766,6 +787,7 @@ const DataEntryWizard = () => {
     const nextOrder = await fetchNextOrderNumber();
     
     setCurrentOrder({ ...defaultOrderState, serialNumber: nextSerial, orderNumber: nextOrder });
+    setAutoFocusLastSize(false);
     setSerialStatus('available');
     
     toast.success(t('entry.messages.cleared_success'));
@@ -834,14 +856,22 @@ const DataEntryWizard = () => {
       if (!isSilent) toast.error(t('entry.messages.select_color_error'));
       return;
     }
-    let sizes = lookups.sizes || [];
-    if (currentOrder.sizeFrom && currentOrder.sizeTo) {
-      const idx1 = sizes.indexOf(currentOrder.sizeFrom);
-      const idx2 = sizes.indexOf(currentOrder.sizeTo);
-      if (idx1 !== -1 && idx2 !== -1) {
-        sizes = sizes.slice(Math.min(idx1, idx2), Math.max(idx1, idx2) + 1);
+    
+    let sizes = [];
+    const hasManual = currentOrder.manualSizes && currentOrder.manualSizes.length > 0;
+    if (hasManual) {
+      sizes = currentOrder.manualSizes.filter(s => s && s.trim() !== '');
+    } else {
+      sizes = lookups.sizes || [];
+      if (currentOrder.sizeFrom && currentOrder.sizeTo) {
+        const idx1 = sizes.indexOf(currentOrder.sizeFrom);
+        const idx2 = sizes.indexOf(currentOrder.sizeTo);
+        if (idx1 !== -1 && idx2 !== -1) {
+          sizes = sizes.slice(Math.min(idx1, idx2), Math.max(idx1, idx2) + 1);
+        }
       }
     }
+
     if (sizes.length === 0) {
       if (!isSilent) toast.error(t('entry.messages.no_sizes_error'));
       return;
@@ -1297,6 +1327,7 @@ const DataEntryWizard = () => {
                         <ClearableSelect className="form-control" value={currentOrder.sizeFrom || ''} onChange={(e) => {
                           const newVal = e.target.value;
                           if (newVal === 'MANUAL_TRIGGER') {
+                             setAutoFocusLastSize(true);
                              updateOrder('manualSizes', [...(currentOrder.manualSizes || []), '']);
                              return;
                           }
@@ -1320,6 +1351,7 @@ const DataEntryWizard = () => {
                         <ClearableSelect className="form-control" value={currentOrder.sizeTo || ''} onChange={(e) => {
                           const newVal = e.target.value;
                           if (newVal === 'MANUAL_TRIGGER') {
+                             setAutoFocusLastSize(true);
                              updateOrder('manualSizes', [...(currentOrder.manualSizes || []), '']);
                              return;
                           }
@@ -1386,7 +1418,8 @@ const DataEntryWizard = () => {
                             className="form-control" 
                             style={{ width: '100px', textAlign: 'center', border: '1px solid var(--accent-color)' }}
                             value={s}
-                            autoFocus={idx === (currentOrder.manualSizes?.length - 1)}
+                            autoFocus={autoFocusLastSize && idx === (currentOrder.manualSizes?.length - 1)}
+                            onFocus={() => setAutoFocusLastSize(false)}
                             placeholder={t('entry.dates.size_placeholder')}
                             onChange={(e) => {
                               const newManual = [...(currentOrder.manualSizes || [])];
@@ -1418,6 +1451,7 @@ const DataEntryWizard = () => {
                           color: 'var(--accent-color)'
                         }}
                         onClick={() => {
+                          setAutoFocusLastSize(true);
                           updateOrder('manualSizes', [...(currentOrder.manualSizes || []), '']);
                         }}
                       >
@@ -2560,12 +2594,15 @@ const DataEntryWizard = () => {
       <div className="wizard-bottom-bar">
         <button
           className="btn"
+          disabled={isSaving}
           style={{
             flex: 1, maxWidth: '200px', fontSize: '0.95rem', padding: '0.9rem',
             background: 'linear-gradient(135deg, #ef4444, #dc2626)',
             border: 'none', color: '#fff', fontWeight: 'bold',
             boxShadow: '0 2px 8px rgba(239, 68, 68, 0.3)',
-            transition: 'all 0.2s'
+            transition: 'all 0.2s',
+            opacity: isSaving ? 0.5 : 1,
+            cursor: isSaving ? 'not-allowed' : 'pointer'
           }}
           onClick={() => {
             if (window.confirm(t('entry.messages.confirm_clear'))) {
@@ -2573,11 +2610,13 @@ const DataEntryWizard = () => {
             }
           }}
           onMouseEnter={(e) => {
+            if (isSaving) return;
             e.currentTarget.style.background = 'linear-gradient(135deg, #dc2626, #b91c1c)';
             e.currentTarget.style.boxShadow = '0 4px 16px rgba(239, 68, 68, 0.4)';
             e.currentTarget.style.transform = 'translateY(-1px)';
           }}
           onMouseLeave={(e) => {
+            if (isSaving) return;
             e.currentTarget.style.background = 'linear-gradient(135deg, #ef4444, #dc2626)';
             e.currentTarget.style.boxShadow = '0 2px 8px rgba(239, 68, 68, 0.3)';
             e.currentTarget.style.transform = 'translateY(0)';
@@ -2591,7 +2630,8 @@ const DataEntryWizard = () => {
             {hasPermission('entry', 'delete') && (
               <button
                 className="btn btn-outline"
-                style={{ flex: 1, maxWidth: '180px', fontSize: '0.95rem', padding: '0.9rem', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.4)' }}
+                disabled={isSaving}
+                style={{ flex: 1, maxWidth: '180px', fontSize: '0.95rem', padding: '0.9rem', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.4)', opacity: isSaving ? 0.5 : 1, cursor: isSaving ? 'not-allowed' : 'pointer' }}
                 onClick={handleDeleteOrder}
               >
                 <Trash2 size={18} /> {t('entry.actions.delete_btn')}
@@ -2601,7 +2641,8 @@ const DataEntryWizard = () => {
             {hasPermission('entry', 'add') && (
               <button
                 className="btn"
-                style={{ flex: 1.5, maxWidth: '250px', fontSize: '1rem', padding: '0.9rem', backgroundColor: '#3b82f6', color: '#fff', fontWeight: 'bold' }}
+                disabled={isSaving}
+                style={{ flex: 1.5, maxWidth: '250px', fontSize: '1rem', padding: '0.9rem', backgroundColor: '#3b82f6', color: '#fff', fontWeight: 'bold', opacity: isSaving ? 0.5 : 1, cursor: isSaving ? 'not-allowed' : 'pointer' }}
                 onClick={handleSaveAsCopy}
               >
                 <Copy size={18} /> {t('entry.actions.save_as_copy')}
@@ -2611,7 +2652,8 @@ const DataEntryWizard = () => {
             {hasPermission('entry', 'edit') && (
               <button
                 className="btn btn-primary"
-                style={{ flex: 2, maxWidth: '350px', fontSize: '1.1rem', padding: '0.9rem', fontWeight: 'bold' }}
+                disabled={isSaving}
+                style={{ flex: 2, maxWidth: '350px', fontSize: '1.1rem', padding: '0.9rem', fontWeight: 'bold', opacity: isSaving ? 0.5 : 1, cursor: isSaving ? 'not-allowed' : 'pointer' }}
                 onClick={handleUpdate}
               >
                 <Save size={20} /> {t('entry.actions.update_btn', { serial: originalSerial })}
@@ -2622,7 +2664,8 @@ const DataEntryWizard = () => {
           hasPermission('entry', 'add') && (
             <button
               className="btn btn-primary"
-              style={{ flex: 3, maxWidth: '600px', fontSize: '1.15rem', padding: '1rem', fontWeight: 'bold', boxShadow: '0 4px 15px rgba(212, 175, 55, 0.3)' }}
+              disabled={isSaving}
+              style={{ flex: 3, maxWidth: '600px', fontSize: '1.15rem', padding: '1rem', fontWeight: 'bold', boxShadow: '0 4px 15px rgba(212, 175, 55, 0.3)', opacity: isSaving ? 0.5 : 1, cursor: isSaving ? 'not-allowed' : 'pointer' }}
               onClick={handleSaveNew}
             >
               <Save size={22} /> {t('entry.actions.save_btn')}

@@ -7,6 +7,38 @@ import { useAppData } from '../context/AppDataContext';
 import { useAuth } from '../context/AuthContext';
 import { englishOnly, chineseOnly } from '../utils/textUtils';
 
+const getSizeRange = (orderData) => {
+  if (!orderData) return '-';
+  if (orderData.manualSizes && Array.isArray(orderData.manualSizes) && orderData.manualSizes.length > 0) {
+    const validSizes = orderData.manualSizes
+      .map(s => s !== null && s !== undefined ? String(s).trim() : '')
+      .filter(s => s !== '');
+    if (validSizes.length > 0) {
+      const sizeOrderArr = ['XXS', 'XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', '2XL', '3XL', '4XL', '5XL', 'F', 'FREE'];
+      const sortedSizes = [...validSizes].sort((a, b) => {
+        const ai = sizeOrderArr.indexOf(a.toUpperCase());
+        const bi = sizeOrderArr.indexOf(b.toUpperCase());
+        if (ai !== -1 && bi !== -1) return ai - bi;
+        if (ai !== -1) return -1;
+        if (bi !== -1) return 1;
+        const numA = parseFloat(a);
+        const numB = parseFloat(b);
+        if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+        return a.localeCompare(b);
+      });
+      const minSize = sortedSizes[0];
+      const maxSize = sortedSizes[sortedSizes.length - 1];
+      return minSize === maxSize ? minSize : `${minSize} - ${maxSize}`;
+    }
+  }
+  if (orderData.sizeFrom && orderData.sizeTo) {
+    return `${orderData.sizeFrom} - ${orderData.sizeTo}`;
+  }
+  if (orderData.sizeFrom) return orderData.sizeFrom;
+  if (orderData.sizeTo) return orderData.sizeTo;
+  return '-';
+};
+
 const ExportOrder = () => {
   const { t } = useTranslation();
   const { lookups } = useAppData();
@@ -544,7 +576,17 @@ const ExportOrder = () => {
                 <td className="val-center val-bold">¥ {order.productPrice || '-'}</td>
                 <td className="val-center val-bold bg-light-blue">¥ {order.productPrice && order.totalQuantity ? (parseFloat(order.productPrice) * parseFloat(order.totalQuantity)).toFixed(2) : '-'}</td>
                 <td className="val-center val-bold">{sizesToRender.length || '-'}</td>
-                <td className="val-center val-bold">From {order.sizeFrom || '-'} - To {order.sizeTo || '-'}</td>
+                <td className="val-center val-bold">
+                  {(() => {
+                    const range = getSizeRange(order);
+                    if (range && range !== '-') {
+                      const parts = range.split(' - ');
+                      if (parts.length === 2) return `From ${parts[0]} - To ${parts[1]}`;
+                      return range;
+                    }
+                    return '-';
+                  })()}
+                </td>
                 <td className="val-center val-bold">{order.cartonSize || '-'}</td>
                 <td className="val-center val-bold">{order.plasticBagSize || '-'}</td>
                 <td className="val-center val-bold">

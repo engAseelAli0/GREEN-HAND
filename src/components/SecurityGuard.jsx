@@ -53,24 +53,33 @@ const SecurityGuard = ({ children }) => {
 
     // 3. Active DevTools Detection Loop (Debugger timing + Window dimension checks)
     const checkDevTools = () => {
+      // Skip all checks on mobile/tablet devices (including iPads requesting Desktop Sites)
+      // to prevent false positives from zoom, browser chrome, safe areas, virtual keyboards, and CPU throttling.
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 
+                       (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) ||
+                       (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+
+      if (isMobile) {
+        if (isBlockedRef.current) {
+          setIsBlocked(false);
+        }
+        return;
+      }
+
       let isDevToolsOpen = false;
 
       // Method A: Dimension Check (Works when DevTools is docked to the window)
-      // Skip this check on mobile devices to prevent false positives from browser bars, safe areas, virtual keyboards, and zoom.
-      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-      if (!isMobile) {
-        const threshold = 160;
-        const widthDifference = window.outerWidth - window.innerWidth;
-        const heightDifference = window.outerHeight - window.innerHeight;
+      const threshold = 160;
+      const widthDifference = window.outerWidth - window.innerWidth;
+      const heightDifference = window.outerHeight - window.innerHeight;
 
-        // If DevTools is docked on the right/left or bottom
-        const isDockedSide = widthDifference > threshold;
-        const isDockedBottom = heightDifference > threshold;
+      // If DevTools is docked on the right/left or bottom
+      const isDockedSide = widthDifference > threshold;
+      const isDockedBottom = heightDifference > threshold;
 
-        // Verify it's not just a standard window resize/maximize by checking typical browser chrome borders (usually < 50px)
-        if (isDockedSide || isDockedBottom) {
-          isDevToolsOpen = true;
-        }
+      // Verify it's not just a standard window resize/maximize by checking typical browser chrome borders (usually < 50px)
+      if (isDockedSide || isDockedBottom) {
+        isDevToolsOpen = true;
       }
 
       // Method B: Debugger timing check (Works for docked, undocked/floating, or separate window DevTools)
@@ -114,17 +123,22 @@ const SecurityGuard = ({ children }) => {
   }, []);
 
   const handleRetry = () => {
-    // Immediate force-check
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    
+    // Skip checking on mobile/tablet devices
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 
+                     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) ||
+                     (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+
+    if (isMobile) {
+      setIsBlocked(false);
+      return;
+    }
+
     let isDimensionDetect = false;
-    if (!isMobile) {
-      const threshold = 160;
-      const widthDifference = window.outerWidth - window.innerWidth;
-      const heightDifference = window.outerHeight - window.innerHeight;
-      if (widthDifference > threshold || heightDifference > threshold) {
-        isDimensionDetect = true;
-      }
+    const threshold = 160;
+    const widthDifference = window.outerWidth - window.innerWidth;
+    const heightDifference = window.outerHeight - window.innerHeight;
+    if (widthDifference > threshold || heightDifference > threshold) {
+      isDimensionDetect = true;
     }
     
     const startTime = performance.now();

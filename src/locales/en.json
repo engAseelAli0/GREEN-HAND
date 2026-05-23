@@ -1205,7 +1205,10 @@
     "contrast": "Contrast",
     "loading": "Loading editor...",
     "save": "Save Changes",
-    "type_here": "Type here..."
+    "type_here": "Type here...",
+    "shapes": "Geometric Shapes",
+    "arrow": "Arrow",
+    "line": "Line"
   },
   "activity": {
     "create": "Create Order",

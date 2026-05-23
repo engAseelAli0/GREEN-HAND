@@ -1190,7 +1190,10 @@
     "contrast": "对比度",
     "loading": "正在加载编辑器...",
     "save": "保存更改",
-    "type_here": "在此输入..."
+    "type_here": "在此输入...",
+    "shapes": "几何图形",
+    "arrow": "箭头",
+    "line": "直线"
   },
   "activity": {
     "create": "创建订单",

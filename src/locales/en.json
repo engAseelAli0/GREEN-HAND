@@ -148,6 +148,7 @@
       "serial_placeholder": "Enter number and press Enter to fetch...",
       "checking": "Checking...",
       "used": "⚠️ Already Used!",
+      "used_in_old": "⚠️ Exists in Old Items List!",
       "available": "✅ Number available for use.",
       "fetch_hint": "Press Enter to fetch product data",
       "generated_barcode": "Generated Barcode:",
@@ -321,6 +322,7 @@
       "field_required": "Please fill field: {{label}}",
       "packaging_error": "Packaging error: Carton packaging ({{package}}) cannot exceed total quantity ({{total}}).",
       "serial_used_error": "This serial number is already in use! Retrieve it for editing or use a new number.",
+      "serial_used_in_old_error": "This model number already exists in the Old Items List (as Product Code or Barcode) and cannot be duplicated!",
       "saving": "Saving new order...",
       "save_success": "New order ({{serial}}) saved successfully!",
       "save_error": "An error occurred while saving!",
@@ -1097,6 +1099,7 @@
       "measurements": "Sizes List",
       "packagingConditionsList": "Required Conditions",
       "buyerCodes": "Buyer Codes",
+      "oldItems": "Old Items List",
       "system_users": "User Management"
     },
     "messages": {

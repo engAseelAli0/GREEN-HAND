@@ -508,10 +508,23 @@ const DataEntryWizard = () => {
         .single();
       if (data) {
         setSerialStatus('used');
+        return;
+      }
+
+      // Check if it exists in old_items as item_code or barcode
+      const { data: oldItem } = await supabase
+        .from('old_items')
+        .select('id')
+        .or(`item_code.eq.${val},barcode.eq.${val}`)
+        .limit(1);
+
+      if (oldItem && oldItem.length > 0) {
+        setSerialStatus('used_in_old');
       } else {
         setSerialStatus('available');
       }
-    } catch {
+    } catch (err) {
+       console.error("Error verifying serial change duplicate:", err);
        setSerialStatus('available');
     }
   };
@@ -554,6 +567,18 @@ const DataEntryWizard = () => {
          return;
       }
 
+      // Verify in old system items to prevent duplicates
+      const { data: oldItem } = await supabase
+        .from('old_items')
+        .select('id')
+        .or(`item_code.eq.${currentOrder.serialNumber},barcode.eq.${currentOrder.serialNumber}`)
+        .limit(1);
+
+      if (oldItem && oldItem.length > 0) {
+         toast.error(t('entry.messages.serial_used_in_old_error', { defaultValue: 'رقم الموديل هذا موجود في الأصناف القديمة (رقم الصنف أو الباركود) ولا يمكن تكراره!' }), { id: toastId });
+         return;
+      }
+
       const orderWithActivity = appendActivity(currentOrder, createActivityItem({
         action: 'create',
         user,
@@ -581,6 +606,29 @@ const DataEntryWizard = () => {
     setIsSaving(true);
     const toastId = toast.loading(t('entry.messages.updating'));
     try {
+      if (currentOrder.serialNumber !== originalSerial) {
+         // Verify in orders
+         const { data: existing } = await supabase.from('orders').select('id').eq('serial_number', currentOrder.serialNumber).single();
+         if (existing) {
+            toast.error(t('entry.messages.serial_used_error'), { id: toastId });
+            setIsSaving(false);
+            return;
+         }
+
+         // Verify in old system items
+         const { data: oldItem } = await supabase
+           .from('old_items')
+           .select('id')
+           .or(`item_code.eq.${currentOrder.serialNumber},barcode.eq.${currentOrder.serialNumber}`)
+           .limit(1);
+
+         if (oldItem && oldItem.length > 0) {
+            toast.error(t('entry.messages.serial_used_in_old_error', { defaultValue: 'رقم الموديل هذا موجود في الأصناف القديمة (رقم الصنف أو الباركود) ولا يمكن تكراره!' }), { id: toastId });
+            setIsSaving(false);
+            return;
+         }
+      }
+
       const { data: previous } = await supabase
         .from('orders')
         .select('order_data')
@@ -612,8 +660,7 @@ const DataEntryWizard = () => {
   const handleSaveAsCopy = async () => {
      if (!validateForm()) return;
      
-     const newSerial = window.prompt(t('entry.messages.serial_required'), currentOrder.serialNumber + "-COPY");
-     if (!newSerial) return;
+     const newSerial = currentOrder.serialNumber;
 
      setIsSaving(true);
      const toastId = toast.loading(t('entry.messages.saving'));
@@ -621,6 +668,20 @@ const DataEntryWizard = () => {
        const { data: existing } = await supabase.from('orders').select('id').eq('serial_number', newSerial).single();
        if (existing) {
           toast.error(t('entry.messages.serial_used_error'), { id: toastId });
+          setIsSaving(false);
+          return;
+       }
+
+       // Verify in old system items
+       const { data: oldItem } = await supabase
+         .from('old_items')
+         .select('id')
+         .or(`item_code.eq.${newSerial},barcode.eq.${newSerial}`)
+         .limit(1);
+
+       if (oldItem && oldItem.length > 0) {
+          toast.error(t('entry.messages.serial_used_in_old_error', { defaultValue: 'رقم الموديل هذا موجود في الأصناف القديمة (رقم الصنف أو الباركود) ولا يمكن تكراره!' }), { id: toastId });
+          setIsSaving(false);
           return;
        }
 
@@ -951,6 +1012,7 @@ const DataEntryWizard = () => {
                     <span>
                       {serialStatus === 'checking' && <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('entry.buyer.checking')}</span>}
                       {serialStatus === 'used' && <span style={{ fontSize: '0.8rem', color: '#ef4444', fontWeight: 'bold' }}>{t('entry.buyer.used')}</span>}
+                      {serialStatus === 'used_in_old' && <span style={{ fontSize: '0.8rem', color: '#f59e0b', fontWeight: 'bold' }}>{t('entry.buyer.used_in_old', { defaultValue: '⚠️ موجود في الأصناف القديمة!' })}</span>}
                       {serialStatus === 'available' && <span style={{ fontSize: '0.8rem', color: '#22c55e', fontWeight: 'bold' }}>{t('entry.buyer.available')}</span>}
                     </span>
                     {serialStatus === 'used' && <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{t('entry.buyer.fetch_hint')}</span>}

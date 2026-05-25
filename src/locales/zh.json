@@ -148,6 +148,7 @@
       "serial_placeholder": "输入编号并按回车键读取...",
       "checking": "正在核对...",
       "used": "⚠️ 该编号已被占用！",
+      "used_in_old": "⚠️ 已存在于历史商品列表中！",
       "available": "✅ 编号可用。",
       "fetch_hint": "按回车键读取产品数据",
       "generated_barcode": "生成的条形码:",
@@ -298,6 +299,7 @@
       "field_required": "请填写必填项: {{label}}",
       "packaging_error": "包装错误: 装箱数量 ({{package}}) 不能超过总数量 ({{total}})。",
       "serial_used_error": "此编号已被使用！请读取它进行编辑或使用新编号。",
+      "serial_used_in_old_error": "此款号已存在于历史商品列表中（款号或条形码匹配），无法重复使用！",
       "saving": "正在保存新订单...",
       "save_success": "新订单 ({{serial}}) 保存成功！",
       "save_error": "保存过程中发生错误！",
@@ -1083,6 +1085,7 @@
       "measurements": "尺码列表",
       "packagingConditionsList": "所需条件",
       "buyerCodes": "买家代码",
+      "oldItems": "历史商品列表",
       "system_users": "用户管理"
     },
     "messages": {

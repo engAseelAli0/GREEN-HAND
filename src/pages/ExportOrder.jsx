@@ -133,8 +133,8 @@ const ExportOrder = () => {
       } catch (err) {
         console.error(err);
       } finally {
-         setFetchingSerials(false);
-         setTimeout(() => serialSearchRef.current?.focus(), 100);
+          setFetchingSerials(false);
+          setTimeout(() => serialSearchRef.current?.focus(), 100);
       }
     } else if (e.key === 'Escape') {
       setShowSerialsList(false);
@@ -142,41 +142,60 @@ const ExportOrder = () => {
     }
   };
 
+  // ─── الدالة المحدثة لحل مشكلة الشاشات الصغيرة والهواتف ───
   const handleDownloadPDF = async () => {
     if (!order) return;
     const element = document.getElementById('export-doc');
     const toastId = toast.loading(t('export.messages.preparing_pdf'));
     
-    // Backup and normalize element styles for a clean, flat PDF capture
-    const originalShadow = element.style.boxShadow;
-    element.style.boxShadow = 'none';
-
     const filename = `Order_${order.serialNumber || 'Export'}.pdf`;
 
     try {
-       // Capture entire element as a single canvas image
        const { default: html2canvas } = await import('html2canvas');
        const { default: jsPDF } = await import('jspdf');
 
-       const canvas = await html2canvas(element, {
+       // 1. استنساخ العنصر لإنشاء نسخة معزولة في الذاكرة تماماً
+       const clonedElement = element.cloneNode(true);
+       
+       // 2. إجبار النسخة المستنسخة على اتخاذ أبعاد شاشة عرض عريضة وثابتة (Desktop View)
+       // ونقلها خارج منطقة الرؤية للمستخدم
+       clonedElement.style.cssText = `
+         position: fixed;
+         left: -9999px;
+         top: 0;
+         width: 1350px; /* العرض المثالي لاستيعاب الجدول الأفقي بالكامل بدون قص */
+         max-width: none !important;
+         background: #ffffff !important;
+         box-shadow: none !important;
+         padding: 15px !important;
+         margin: 0 !important;
+       `;
+       
+       // 3. حقن العنصر المستنسخ في الـ DOM مؤقتاً لكي تتمكن المكتبة من قراءته وتصويره
+       document.body.appendChild(clonedElement);
+
+       // 4. التقاط صورة العنصر المستنسخ عريض الأبعاد بدلاً من الأصلي المتأثر بحجم الشاشة
+       const canvas = await html2canvas(clonedElement, {
          scale: 2,
          useCORS: true,
          logging: false,
+         backgroundColor: '#ffffff',
        });
+
+       // 5. تفكيك وإزالة العنصر المستنسخ فوراً بعد التقاط اللقطة
+       document.body.removeChild(clonedElement);
 
        const imgData = canvas.toDataURL('image/jpeg', 1.0);
        const imgWidthPx = canvas.width;
        const imgHeightPx = canvas.height;
 
-       // A4 width in mm = 297 (landscape)
+       // حساب الأبعاد والنسب الرياضية لـ PDF أفقي (Landscape) متناسق مع ورقة A4
        const pdfWidthMM = 297;
-       const margin = 8; // mm margin on each side
+       const margin = 8; 
        const contentWidthMM = pdfWidthMM - margin * 2;
-       // Calculate height proportionally to fit all content on one page
        const contentHeightMM = (imgHeightPx * contentWidthMM) / imgWidthPx;
        const pdfHeightMM = contentHeightMM + margin * 2;
 
-       // Create PDF with custom page size that fits all content
        const pdf = new jsPDF({
          orientation: 'landscape',
          unit: 'mm',
@@ -199,8 +218,6 @@ const ExportOrder = () => {
     } catch (err) {
        toast.error(t('export.messages.download_error'), { id: toastId });
        console.error(err);
-    } finally {
-       element.style.boxShadow = originalShadow;
     }
   };
 
@@ -230,18 +247,15 @@ const ExportOrder = () => {
       if (ai !== -1) return -1;
       if (bi !== -1) return 1;
       
-      // Attempt numeric sort
       const numA = parseFloat(a);
       const numB = parseFloat(b);
       if (!isNaN(numA) && !isNaN(numB)) {
           return numA - numB;
       }
       
-      // Fallback to string sort
       return a.localeCompare(b);
   });
 
-  // Find Trademark Image
   const tmObj = order ? lookups.tradeMarks?.find(t => (typeof t === 'object' ? t.name : t) === order.tradeMark) : null;
   const tmImage = tmObj?.imageUrl || null;
 
@@ -289,7 +303,6 @@ const ExportOrder = () => {
           line-height: 1.3;
         }
         
-        /* Headers */
         .hdr-blue {
           background-color: #1a5276 !important;
           color: #fff !important;
@@ -318,7 +331,6 @@ const ExportOrder = () => {
           vertical-align: middle;
         }
         
-        /* Values */
         .val-center {
           text-align: center;
           font-size: 15px;
@@ -392,7 +404,6 @@ const ExportOrder = () => {
                          <X size={16} />
                       </button>
                   </div>
-                  {/* Search Field */}
                   <div style={{ padding: '0.5rem', borderBottom: '1px solid var(--border-color)', backgroundColor: 'var(--bg-color)' }}>
                     <input
                       ref={serialSearchRef}
@@ -435,47 +446,47 @@ const ExportOrder = () => {
                   {fetchingSerials ? (
                       <div style={{ padding: '1rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)' }}>{t('entry.actions.loading')}</div>
                   ) : (
-                     (() => {
-                       const filteredSerials = serialSearchQuery.trim()
-                         ? availableSerials.filter(s => s.toString().includes(serialSearchQuery.trim()))
-                         : availableSerials;
-                       return filteredSerials.length === 0 ? (
-                         <div style={{ padding: '1rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                           {availableSerials.length === 0 ? t('entry.actions.no_saved_models') : t('entry.actions.no_match')}
-                         </div>
-                       ) : (
-                        <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-                            {filteredSerials.map(serial => {
-                                const query = serialSearchQuery.trim();
-                                const serialStr = serial.toString();
-                                const matchIdx = query ? serialStr.indexOf(query) : -1;
-                                return (
-                                <li 
-                                    key={serial} 
-                                    onClick={() => {
-                                        setShowSerialsList(false);
-                                        setSerialSearchQuery('');
-                                        handleFetch(serial);
-                                    }}
-                                    style={{ padding: '0.6rem 1rem', cursor: 'pointer', borderBottom: '1px solid var(--border-color)', transition: 'background-color 0.2s', fontSize: '0.9rem', color: 'var(--text-color)' }}
-                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--surface-highlight)'}
-                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                                >
-                                    {matchIdx !== -1 ? (
-                                      <strong>
-                                        {serialStr.substring(0, matchIdx)}
-                                        <span style={{ color: 'var(--accent-color)', textDecoration: 'underline' }}>{serialStr.substring(matchIdx, matchIdx + query.length)}</span>
-                                        {serialStr.substring(matchIdx + query.length)}
-                                      </strong>
-                                    ) : (
-                                      <strong>{serialStr}</strong>
-                                    )}
-                                </li>
-                                );
-                            })}
-                        </ul>
-                       );
-                     })()
+                      (() => {
+                        const filteredSerials = serialSearchQuery.trim()
+                          ? availableSerials.filter(s => s.toString().includes(serialSearchQuery.trim()))
+                          : availableSerials;
+                        return filteredSerials.length === 0 ? (
+                          <div style={{ padding: '1rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                            {availableSerials.length === 0 ? t('entry.actions.no_saved_models') : t('entry.actions.no_match')}
+                          </div>
+                        ) : (
+                         <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                             {filteredSerials.map(serial => {
+                                 const query = serialSearchQuery.trim();
+                                 const serialStr = serial.toString();
+                                 const matchIdx = query ? serialStr.indexOf(query) : -1;
+                                 return (
+                                 <li 
+                                     key={serial} 
+                                     onClick={() => {
+                                         setShowSerialsList(false);
+                                         setSerialSearchQuery('');
+                                         handleFetch(serial);
+                                     }}
+                                     style={{ padding: '0.6rem 1rem', cursor: 'pointer', borderBottom: '1px solid var(--border-color)', transition: 'background-color 0.2s', fontSize: '0.9rem', color: 'var(--text-color)' }}
+                                     onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--surface-highlight)'}
+                                     onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                 >
+                                     {matchIdx !== -1 ? (
+                                       <strong>
+                                         {serialStr.substring(0, matchIdx)}
+                                         <span style={{ color: 'var(--accent-color)', textDecoration: 'underline' }}>{serialStr.substring(matchIdx, matchIdx + query.length)}</span>
+                                         {serialStr.substring(matchIdx + query.length)}
+                                       </strong>
+                                     ) : (
+                                       <strong>{serialStr}</strong>
+                                     )}
+                                 </li>
+                                 );
+                             })}
+                         </ul>
+                        );
+                      })()
                   )}
                 </div>
               )}
@@ -692,8 +703,8 @@ const ExportOrder = () => {
               {(() => {
                 const numMaterials = [0, 1, 2].filter(i => order.materials && order.materials[i] && order.materials[i].name).length;
                 const actualMaterials = Math.max(1, numMaterials);
-                const fabricColSpan = 2 + 2 + (actualMaterials - 1); // 2 for header, 2 for first material, 1 for each additional
-                const conditionsColSpan = 11 - 2 - fabricColSpan; // 11 total columns, 2 for Order Remarks
+                const fabricColSpan = 2 + 2 + (actualMaterials - 1); 
+                const conditionsColSpan = 11 - 2 - fabricColSpan; 
 
                 return (
                   <React.Fragment>
@@ -748,7 +759,6 @@ const ExportOrder = () => {
               {(() => {
                 if (activeColors.length === 0) return null;
                 
-                // Determine number of chunks (each chunk is 9 colors)
                 const CHUNK_SIZE = 9;
                 const numChunks = Math.ceil(activeColors.length / CHUNK_SIZE);
                 const chunks = [];

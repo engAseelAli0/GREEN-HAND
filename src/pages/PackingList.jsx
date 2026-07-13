@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { useTranslation } from 'react-i18next';
 import { Printer, Plus, Trash2, Search, Package, Layers, AlertCircle, X, FileSpreadsheet } from 'lucide-react';
 import { englishOnly } from '../utils/textUtils';
+import { normalizeImageUrl } from '../utils/imageUtils';
 import toast from 'react-hot-toast';
 import { CustomDateInput } from '../components/CustomDateInput';
 import { useFilteredLookups } from '../hooks/useFilteredLookups';
@@ -305,7 +306,7 @@ const PackingList = () => {
 
                 if (withImage && d.productImages && Array.isArray(d.productImages) && d.productImages.length > 0) {
                     const firstImage = d.productImages[0];
-                    imageUrl = typeof firstImage === 'object' ? firstImage.url : firstImage;
+                    imageUrl = normalizeImageUrl(typeof firstImage === 'object' ? firstImage.url : firstImage);
                 }
                 if (!newBuyer && d.buyerCompany) newBuyer = d.buyerCompany;
                 if (!desc) desc = englishOnly(d.productName) || '';

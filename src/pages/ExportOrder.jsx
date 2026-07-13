@@ -6,6 +6,7 @@ import { Search, Printer, FileText, CheckCircle2, DownloadCloud, X } from 'lucid
 import { useAppData } from '../context/AppDataContext';
 import { useAuth } from '../context/AuthContext';
 import { englishOnly, chineseOnly } from '../utils/textUtils';
+import { normalizeImageUrl } from '../utils/imageUtils';
 
 const getSizeRange = (orderData) => {
   if (!orderData) return '-';
@@ -644,7 +645,7 @@ const ExportOrder = () => {
                       <td colSpan={8} style={{ border: 'none', background: '#fff' }}></td>
                       <td colSpan={2} rowSpan={2} style={{ textAlign: 'center', verticalAlign: 'middle', padding: '4px', borderLeft: '3px solid #000' }}>
                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'center' }}>
-                             {order.productImages?.slice(0, 2).map((img, idx) => <img key={idx} src={img.url} alt="product" crossOrigin="anonymous" style={{ maxHeight: '130px', objectFit: 'contain' }} />)}
+                             {order.productImages?.slice(0, 2).map((img, idx) => <img key={idx} src={normalizeImageUrl(img)} alt="product" crossOrigin="anonymous" style={{ maxHeight: '130px', objectFit: 'contain' }} />)}
                              {tmImage && <img src={tmImage} alt="trademark" crossOrigin="anonymous" style={{ maxHeight: '60px', objectFit: 'contain', marginTop: order.productImages?.length > 0 ? '10px' : '0' }} />}
                            </div>
                       </td>
@@ -672,7 +673,7 @@ const ExportOrder = () => {
                       {isFirstRow && (
                         <td colSpan={2} rowSpan={totalRows} style={{ textAlign: 'center', verticalAlign: 'middle', padding: '4px', borderLeft: '3px solid #000' }}>
                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'center' }}>
-                             {order.productImages?.slice(0, 2).map((img, idx) => <img key={idx} src={img.url} alt="product" crossOrigin="anonymous" style={{ maxHeight: '130px', objectFit: 'contain' }} />)}
+                             {order.productImages?.slice(0, 2).map((img, idx) => <img key={idx} src={normalizeImageUrl(img)} alt="product" crossOrigin="anonymous" style={{ maxHeight: '130px', objectFit: 'contain' }} />)}
                              {tmImage && <img src={tmImage} alt="trademark" crossOrigin="anonymous" style={{ maxHeight: '60px', objectFit: 'contain', marginTop: order.productImages?.length > 0 ? '10px' : '0' }} />}
                            </div>
                         </td>

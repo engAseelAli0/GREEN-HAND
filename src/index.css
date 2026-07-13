@@ -100,7 +100,6 @@ body {
   background: var(--body-bg);
   background-attachment: fixed;
   color: var(--text-main);
-  direction: rtl; /* Arabic support */
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   transition: background-color var(--transition-normal), color var(--transition-normal), border-color var(--transition-normal);

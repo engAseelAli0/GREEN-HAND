@@ -59,8 +59,16 @@ const myTheme = {
 };
 
 const ImageEditorModal = ({ isOpen, imageFile, onSave, onCancel }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const editorRef = useRef();
+  
+  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
+  
+  const getLangString = (arStr, enStr, zhStr) => {
+    if (i18n.language === 'ar') return arStr;
+    if (i18n.language === 'zh') return zhStr;
+    return enStr;
+  };
 
   const TuiImageEditor = ImageEditor.default || ImageEditor;
 
@@ -99,10 +107,13 @@ const ImageEditorModal = ({ isOpen, imageFile, onSave, onCancel }) => {
       {/* شريط علوي مخصص لأننا سنخفي الأزرار الافتراضية للمكتبة عبر CSS لاحقاً إذا لزم الأمر، لكننا نعتمد على أزرارها حالياً، أو يمكننا إضافة أزرارنا */}
       <div style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        padding: '1rem 2rem', background: '#111', borderBottom: '1px solid #333'
+        padding: '1rem 2rem', background: '#111', borderBottom: '1px solid #333',
+        flexWrap: 'wrap', gap: '10px'
       }}>
-        <h3 style={{ margin: 0, color: '#fff' }}>{t('image_editor.title') || 'محرر الصور الاحترافي'}</h3>
-        <div style={{ display: 'flex', gap: '1rem' }}>
+        <h3 style={{ margin: 0, color: '#fff', fontSize: isMobile ? '1.1rem' : '1.5rem' }}>
+          {getLangString('محرر الصور', 'Image Editor', '图片编辑器')}
+        </h3>
+        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
           <button 
             onClick={onCancel}
             style={{
@@ -110,7 +121,7 @@ const ImageEditorModal = ({ isOpen, imageFile, onSave, onCancel }) => {
               background: 'transparent', color: '#fff', border: '1px solid #555', borderRadius: '6px', cursor: 'pointer'
             }}
           >
-            <X size={18} /> إلغاء
+            <X size={18} /> {getLangString('إلغاء', 'Cancel', '取消')}
           </button>
           
           <input type="file" id="overlay-upload" accept="image/*" onChange={handleAddImage} style={{ display: 'none' }} />
@@ -121,7 +132,7 @@ const ImageEditorModal = ({ isOpen, imageFile, onSave, onCancel }) => {
               background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold'
             }}
           >
-            <ImagePlus size={18} /> إضافة صورة
+            <ImagePlus size={18} /> {getLangString('إضافة صورة', 'Add Image', '添加图片')}
           </button>
 
           <button 
@@ -131,7 +142,7 @@ const ImageEditorModal = ({ isOpen, imageFile, onSave, onCancel }) => {
               background: '#10b981', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold'
             }}
           >
-            <Check size={18} /> حفظ التعديلات
+            <Check size={18} /> {getLangString('حفظ التعديلات', 'Save Changes', '保存修改')}
           </button>
         </div>
       </div>
@@ -139,6 +150,43 @@ const ImageEditorModal = ({ isOpen, imageFile, onSave, onCancel }) => {
       <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
         <TuiImageEditor
           ref={editorRef}
+          onAddText={() => {
+            if (editorRef.current) {
+              setTimeout(() => {
+                const editorInstance = editorRef.current.getInstance();
+                
+                let canvas = null;
+                if (editorInstance._graphics && typeof editorInstance._graphics.getCanvas === 'function') {
+                  canvas = editorInstance._graphics.getCanvas();
+                }
+
+                editorInstance.stopDrawingMode();
+
+                if (canvas && typeof canvas.getObjects === 'function') {
+                  const objects = canvas.getObjects();
+                  if (objects.length > 0) {
+                    const lastObj = objects[objects.length - 1];
+                    if (lastObj.type === 'i-text' || lastObj.type === 'text') {
+                      // تكبير حجم الخط تلقائياً ليناسب الصور الملتقطة بكاميرا الجوال
+                      if (lastObj.fontSize) {
+                        lastObj.set('fontSize', lastObj.fontSize * 2);
+                      } else {
+                        lastObj.set('fontSize', 80);
+                      }
+                      
+                      // التأكد من تحديث أبعاد كائن النص بعد تكبير الخط
+                      lastObj.setCoords();
+
+                      canvas.setActiveObject(lastObj);
+                      if (typeof canvas.requestRenderAll === 'function') {
+                        canvas.requestRenderAll();
+                      }
+                    }
+                  }
+                }
+              }, 50);
+            }
+          }}
           includeUI={{
             loadImage: {
               path: URL.createObjectURL(imageFile),
@@ -146,18 +194,20 @@ const ImageEditorModal = ({ isOpen, imageFile, onSave, onCancel }) => {
             },
             theme: myTheme,
             menu: ['crop', 'flip', 'rotate', 'draw', 'shape', 'icon', 'text', 'mask', 'filter'],
-            initMenu: 'filter',
             uiSize: {
               width: '100%',
               height: '100%'
             },
-            menuBarPosition: 'right'
+            menuBarPosition: isMobile ? 'bottom' : 'right'
           }}
-          cssMaxHeight={typeof window !== 'undefined' ? window.innerHeight - 150 : 800}
-          cssMaxWidth={typeof window !== 'undefined' ? window.innerWidth - 350 : 1000}
+          cssMaxHeight={isMobile ? window.innerHeight - 150 : window.innerHeight - 150}
+          cssMaxWidth={isMobile ? window.innerWidth - 20 : window.innerWidth - 350}
           selectionStyle={{
-            cornerSize: 20,
-            rotatingPointOffset: 70
+            cornerSize: isMobile ? 40 : 20,
+            rotatingPointOffset: isMobile ? 50 : 70,
+            borderColor: '#3b82f6',
+            cornerColor: '#3b82f6',
+            transparentCorners: false
           }}
           usageStatistics={false}
         />
@@ -169,6 +219,27 @@ const ImageEditorModal = ({ isOpen, imageFile, onSave, onCancel }) => {
         .tui-image-editor-header-logo { display: none !important; }
         .tui-image-editor-container { background-color: transparent !important; }
         .tui-image-editor-canvas-container { margin: 0 auto !important; }
+        @media (max-width: 768px) {
+          .tui-image-editor-container .tui-image-editor-menu {
+            height: auto !important;
+            padding: 10px 0 !important;
+            white-space: nowrap;
+            overflow-x: auto;
+          }
+          .tui-image-editor-container .tui-image-editor-submenu {
+            height: auto !important;
+            padding-bottom: 20px;
+          }
+          .tui-image-editor-range-wrap {
+            transform: scale(1.3);
+            transform-origin: left center;
+            margin-bottom: 15px;
+          }
+          .tui-image-editor-container .tui-image-editor-submenu .tui-image-editor-button > div,
+          .tui-image-editor-container .tui-image-editor-submenu .tui-image-editor-button > label {
+             transform: scale(1.2);
+          }
+        }
       `}</style>
     </div>
   );

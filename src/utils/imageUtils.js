@@ -1,3 +1,5 @@
+import { supabase } from '../supabaseClient';
+
 export const compressImage = (file, maxWidth = 1000, quality = 0.75) => {
   return new Promise((resolve, reject) => {
     // Don't compress non-images or SVGs
@@ -52,4 +54,21 @@ export const compressImage = (file, maxWidth = 1000, quality = 0.75) => {
     
     reader.onerror = (error) => reject(error);
   });
+};
+
+export const normalizeImageUrl = (img) => {
+  if (!img) return '';
+  // Provide a fallback property if preview or url are missing
+  const url = typeof img === 'string' ? img : (img.preview || img.url || img.name);
+  if (!url) return '';
+  
+  // If the string already looks like a valid absolute URL or data URI, return it
+  if (url.startsWith('http') || url.startsWith('blob:') || url.startsWith('data:')) {
+    return url;
+  }
+  
+  // Construct the correct Supabase public URL
+  // Defaulting to "product-images/" folder inside the "product_images" bucket as used in uploads
+  const path = img.path || `product-images/${url}`;
+  return supabase.storage.from('product_images').getPublicUrl(path).data.publicUrl;
 };

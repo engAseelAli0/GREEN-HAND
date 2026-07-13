@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef } from 'react';
+import { normalizeImageUrl } from '../utils/imageUtils';
 import { supabase } from '../supabaseClient';
 import { useAppData } from '../context/AppDataContext';
 import { useAuth } from '../context/AuthContext';
@@ -399,9 +400,9 @@ const ReportsPortal = () => {
         const totalCount = filteredOrders.length;
         
         let gQty = 0, gAmt = 0;
-        let tableRowsHtml = '';
         
-        filteredOrders.forEach((order, idx) => {
+        // Build all rows data first
+        const allRowsData = filteredOrders.map((order, idx) => {
           const d = order.order_data || {};
           const computedTotal = calculateTotalPiecesCount(d);
           const qty = computedTotal > 0 ? computedTotal : (parseInt(d.totalQuantity) || 0);
@@ -410,102 +411,133 @@ const ReportsPortal = () => {
           gQty += qty;
           gAmt += tp;
           
-          const modelNo = order.serial_number || '-';
-          const productName = d.productName || '-';
-          const companyName = d.buyerCompany || '-';
-          const factoryId = d.factoryId || '-';
-          const factoryCode = getFactoryCode(d.factoryId) || '-';
-          const sizes = getSizeRange(d);
-          const orderDate = d.requestDate || order.created_at?.split('T')[0] || '-';
-          const deliveryDate = d.deliveryDate || '-';
-          const currency = d.currency || 'RMB';
-          
-          tableRowsHtml += `
-            <tr style="background-color: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
-              <td style="border: 1px solid #cbd5e1; padding: 10px 8px; text-align: center; font-size: 11px; font-family: sans-serif;">${idx + 1}</td>
-              <td style="border: 1px solid #cbd5e1; padding: 10px 8px; text-align: center; font-size: 11px; font-weight: bold; font-family: sans-serif;">${modelNo}</td>
-              <td style="border: 1px solid #cbd5e1; padding: 10px 8px; text-align: left; font-size: 11px; word-break: break-word; white-space: normal; max-width: 140px; font-family: sans-serif;">${productName}</td>
-              <td style="border: 1px solid #cbd5e1; padding: 10px 8px; text-align: left; font-size: 11px; word-break: break-word; white-space: normal; max-width: 140px; font-family: sans-serif;">${companyName}</td>
-              <td style="border: 1px solid #cbd5e1; padding: 10px 8px; text-align: center; font-size: 11px; font-family: sans-serif;">${factoryId}</td>
-              <td style="border: 1px solid #cbd5e1; padding: 10px 8px; text-align: center; font-size: 11px; font-family: sans-serif;">${factoryCode}</td>
-              <td style="border: 1px solid #cbd5e1; padding: 10px 8px; text-align: center; font-size: 11px; white-space: nowrap; font-family: sans-serif;">${sizes}</td>
-              <td style="border: 1px solid #cbd5e1; padding: 10px 8px; text-align: center; font-size: 11px; font-weight: bold; font-family: sans-serif;">${qty.toLocaleString()}</td>
-              <td style="border: 1px solid #cbd5e1; padding: 10px 8px; text-align: center; font-size: 11px; font-family: sans-serif;">${pr > 0 ? pr.toFixed(2) : '0.00'}</td>
-              <td style="border: 1px solid #cbd5e1; padding: 10px 8px; text-align: center; font-size: 11px; font-family: sans-serif;">${currency}</td>
-              <td style="border: 1px solid #cbd5e1; padding: 10px 8px; text-align: center; font-size: 11px; font-weight: bold; font-family: sans-serif;">${tp > 0 ? tp.toLocaleString(undefined, {minimumFractionDigits: 2}) : '0.00'}</td>
-              <td style="border: 1px solid #cbd5e1; padding: 10px 8px; text-align: center; font-size: 11px; white-space: nowrap; font-family: sans-serif;">${orderDate}</td>
-              <td style="border: 1px solid #cbd5e1; padding: 10px 8px; text-align: center; font-size: 11px; white-space: nowrap; font-family: sans-serif;">${deliveryDate}</td>
-            </tr>
-          `;
+          return {
+            idx: idx + 1,
+            modelNo: order.serial_number || '-',
+            productName: d.productName || '-',
+            companyName: d.buyerCompany || '-',
+            factoryId: d.factoryId || '-',
+            factoryCode: getFactoryCode(d.factoryId) || '-',
+            sizes: getSizeRange(d),
+            qty,
+            pr,
+            tp,
+            currency: d.currency || 'RMB',
+            orderDate: d.requestDate || order.created_at?.split('T')[0] || '-',
+            deliveryDate: d.deliveryDate || '-',
+          };
         });
-        
-        const el = document.createElement('div');
-        el.style.cssText = 'position:fixed;left:-9999px;top:0;width:1200px;background:#fff;padding:30px 40px;font-family:sans-serif;color:#000;box-sizing:border-box;direction:ltr;';
-        el.innerHTML = `
-          <div style="text-align: center; margin-bottom: 20px;">
-            <h1 style="font-size: 34px; font-weight: 800; margin: 0; color: #000; letter-spacing: 0.5px; font-family: sans-serif;">Orders Report</h1>
-            <p style="font-size: 15px; color: #475569; margin: 8px 0 0 0; font-weight: 500; font-family: sans-serif;">
-              Generated: ${today} &nbsp;|&nbsp; Total: ${totalCount} orders
-            </p>
-          </div>
-          <div style="border-bottom: 2px solid #0f172a; margin-bottom: 25px; width: 100%;"></div>
-          
-          <table style="width: 100%; border-collapse: collapse; border: 1px solid #cbd5e1;">
-            <thead>
-              <tr style="background-color: #f1f5f9; color: #0f172a;">
-                <th style="border: 1px solid #cbd5e1; padding: 12px 8px; font-weight: 700; font-size: 12px; text-align: center; width: 3%; font-family: sans-serif;">#</th>
-                <th style="border: 1px solid #cbd5e1; padding: 12px 8px; font-weight: 700; font-size: 12px; text-align: center; width: 7%; font-family: sans-serif;">Model NO.</th>
-                <th style="border: 1px solid #cbd5e1; padding: 12px 8px; font-weight: 700; font-size: 12px; text-align: left; width: 14%; font-family: sans-serif;">Product</th>
-                <th style="border: 1px solid #cbd5e1; padding: 12px 8px; font-weight: 700; font-size: 12px; text-align: left; width: 14%; font-family: sans-serif;">Company (Buyer)</th>
-                <th style="border: 1px solid #cbd5e1; padding: 12px 8px; font-weight: 700; font-size: 12px; text-align: center; width: 10%; font-family: sans-serif;">Received Factory</th>
-                <th style="border: 1px solid #cbd5e1; padding: 12px 8px; font-weight: 700; font-size: 12px; text-align: center; width: 7%; font-family: sans-serif;">Factory Code</th>
-                <th style="border: 1px solid #cbd5e1; padding: 12px 8px; font-weight: 700; font-size: 12px; text-align: center; width: 8%; font-family: sans-serif;">Sizes</th>
-                <th style="border: 1px solid #cbd5e1; padding: 12px 8px; font-weight: 700; font-size: 12px; text-align: center; width: 7%; font-family: sans-serif;">Total Quantity</th>
-                <th style="border: 1px solid #cbd5e1; padding: 12px 8px; font-weight: 700; font-size: 12px; text-align: center; width: 7%; font-family: sans-serif;">Unit Price</th>
-                <th style="border: 1px solid #cbd5e1; padding: 12px 8px; font-weight: 700; font-size: 12px; text-align: center; width: 5%; font-family: sans-serif;">Currency</th>
-                <th style="border: 1px solid #cbd5e1; padding: 12px 8px; font-weight: 700; font-size: 12px; text-align: center; width: 9%; font-family: sans-serif;">Total Price</th>
-                <th style="border: 1px solid #cbd5e1; padding: 12px 8px; font-weight: 700; font-size: 12px; text-align: center; width: 8%; font-family: sans-serif;">Order Date</th>
-                <th style="border: 1px solid #cbd5e1; padding: 12px 8px; font-weight: 700; font-size: 12px; text-align: center; width: 8%; font-family: sans-serif;">Delivery Date</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${tableRowsHtml}
-              <tr style="background-color: #e2e8f0; font-weight: bold; color: #0f172a;">
-                <td style="border: 1px solid #cbd5e1; padding: 12px 8px; text-align: center; font-size: 12px; font-family: sans-serif;" colspan="2">${t('reports.table.total_sum')}</td>
-                <td style="border: 1px solid #cbd5e1; padding: 12px 8px; text-align: left; font-size: 12px; font-family: sans-serif;" colspan="5">${t('reports.table.items_count', { count: totalCount })}</td>
-                <td style="border: 1px solid #cbd5e1; padding: 12px 8px; text-align: center; font-size: 12px; font-weight: 800; font-family: sans-serif;">${gQty.toLocaleString()} PCS</td>
-                <td style="border: 1px solid #cbd5e1; padding: 12px 8px; font-family: sans-serif;" colspan="2"></td>
-                <td style="border: 1px solid #cbd5e1; padding: 12px 8px; text-align: center; font-size: 12px; font-weight: 800; font-family: sans-serif;">${gAmt.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
-                <td style="border: 1px solid #cbd5e1; padding: 12px 8px; font-family: sans-serif;" colspan="2"></td>
-              </tr>
-            </tbody>
-          </table>
-        `;
-        
-        document.body.appendChild(el);
+
+        // ─── PAGINATION: Split rows into pages ───
+        const ROWS_PER_PAGE = 20;
+        const totalPages = Math.ceil(allRowsData.length / ROWS_PER_PAGE);
         const { default: html2canvas } = await import('html2canvas');
-        const canvas = await html2canvas(el, { scale: 2, useCORS: true, logging: false, backgroundColor: '#ffffff' });
-        document.body.removeChild(el);
-        const imgData = canvas.toDataURL('image/jpeg', 0.95);
-        const pW = 297;
-        const pH = 210;
+        
+        const pW = 297; // A4 landscape width in mm
+        const pH = 210; // A4 landscape height in mm
         const pM = 8;
         const cW = pW - pM * 2;
-        const cH = (canvas.height * cW) / canvas.width;
-        
-        const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-        
-        let position = pM;
-        let leftHeight = cH;
-        const pageHeight = pH - pM * 2;
-        
-        pdf.addImage(imgData, 'JPEG', pM, position, cW, cH);
-        
-        while (leftHeight > pageHeight) {
-          pdf.addPage();
-          position -= pageHeight;
-          pdf.addImage(imgData, 'JPEG', pM, position, cW, cH);
-          leftHeight -= pageHeight;
+        let pdf = null;
+
+        // Table header HTML (reused on each page)
+        const tableHeaderHtml = `
+          <thead>
+            <tr style="background-color: #f1f5f9; color: #0f172a;">
+              <th style="border: 1px solid #cbd5e1; padding: 12px 8px; font-weight: 700; font-size: 12px; text-align: center; width: 3%; font-family: sans-serif;">#</th>
+              <th style="border: 1px solid #cbd5e1; padding: 12px 8px; font-weight: 700; font-size: 12px; text-align: center; width: 7%; font-family: sans-serif;">Model NO.</th>
+              <th style="border: 1px solid #cbd5e1; padding: 12px 8px; font-weight: 700; font-size: 12px; text-align: left; width: 14%; font-family: sans-serif;">Product</th>
+              <th style="border: 1px solid #cbd5e1; padding: 12px 8px; font-weight: 700; font-size: 12px; text-align: left; width: 14%; font-family: sans-serif;">Company (Buyer)</th>
+              <th style="border: 1px solid #cbd5e1; padding: 12px 8px; font-weight: 700; font-size: 12px; text-align: center; width: 10%; font-family: sans-serif;">Received Factory</th>
+              <th style="border: 1px solid #cbd5e1; padding: 12px 8px; font-weight: 700; font-size: 12px; text-align: center; width: 7%; font-family: sans-serif;">Factory Code</th>
+              <th style="border: 1px solid #cbd5e1; padding: 12px 8px; font-weight: 700; font-size: 12px; text-align: center; width: 8%; font-family: sans-serif;">Sizes</th>
+              <th style="border: 1px solid #cbd5e1; padding: 12px 8px; font-weight: 700; font-size: 12px; text-align: center; width: 7%; font-family: sans-serif;">Total Quantity</th>
+              <th style="border: 1px solid #cbd5e1; padding: 12px 8px; font-weight: 700; font-size: 12px; text-align: center; width: 7%; font-family: sans-serif;">Unit Price</th>
+              <th style="border: 1px solid #cbd5e1; padding: 12px 8px; font-weight: 700; font-size: 12px; text-align: center; width: 5%; font-family: sans-serif;">Currency</th>
+              <th style="border: 1px solid #cbd5e1; padding: 12px 8px; font-weight: 700; font-size: 12px; text-align: center; width: 9%; font-family: sans-serif;">Total Price</th>
+              <th style="border: 1px solid #cbd5e1; padding: 12px 8px; font-weight: 700; font-size: 12px; text-align: center; width: 8%; font-family: sans-serif;">Order Date</th>
+              <th style="border: 1px solid #cbd5e1; padding: 12px 8px; font-weight: 700; font-size: 12px; text-align: center; width: 8%; font-family: sans-serif;">Delivery Date</th>
+            </tr>
+          </thead>
+        `;
+
+        // Total row HTML
+        const totalRowHtml = `
+          <tr style="background-color: #e2e8f0; font-weight: bold; color: #0f172a;">
+            <td style="border: 1px solid #cbd5e1; padding: 12px 8px; text-align: center; font-size: 12px; font-family: sans-serif;" colspan="2">${t('reports.table.total_sum')}</td>
+            <td style="border: 1px solid #cbd5e1; padding: 12px 8px; text-align: left; font-size: 12px; font-family: sans-serif;" colspan="5">${t('reports.table.items_count', { count: totalCount })}</td>
+            <td style="border: 1px solid #cbd5e1; padding: 12px 8px; text-align: center; font-size: 12px; font-weight: 800; font-family: sans-serif;">${gQty.toLocaleString()} PCS</td>
+            <td style="border: 1px solid #cbd5e1; padding: 12px 8px; font-family: sans-serif;" colspan="2"></td>
+            <td style="border: 1px solid #cbd5e1; padding: 12px 8px; text-align: center; font-size: 12px; font-weight: 800; font-family: sans-serif;">${gAmt.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+            <td style="border: 1px solid #cbd5e1; padding: 12px 8px; font-family: sans-serif;" colspan="2"></td>
+          </tr>
+        `;
+
+        for (let pageIdx = 0; pageIdx < totalPages; pageIdx++) {
+          const startRow = pageIdx * ROWS_PER_PAGE;
+          const endRow = Math.min(startRow + ROWS_PER_PAGE, allRowsData.length);
+          const pageRows = allRowsData.slice(startRow, endRow);
+          const isLastPage = pageIdx === totalPages - 1;
+
+          // Build row HTML for this page
+          let pageRowsHtml = '';
+          pageRows.forEach((r, localIdx) => {
+            const globalIdx = startRow + localIdx;
+            pageRowsHtml += `
+              <tr style="background-color: ${globalIdx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
+                <td style="border: 1px solid #cbd5e1; padding: 10px 8px; text-align: center; font-size: 11px; font-family: sans-serif;">${r.idx}</td>
+                <td style="border: 1px solid #cbd5e1; padding: 10px 8px; text-align: center; font-size: 11px; font-weight: bold; font-family: sans-serif;">${r.modelNo}</td>
+                <td style="border: 1px solid #cbd5e1; padding: 10px 8px; text-align: left; font-size: 11px; word-break: break-word; white-space: normal; max-width: 140px; font-family: sans-serif;">${r.productName}</td>
+                <td style="border: 1px solid #cbd5e1; padding: 10px 8px; text-align: left; font-size: 11px; word-break: break-word; white-space: normal; max-width: 140px; font-family: sans-serif;">${r.companyName}</td>
+                <td style="border: 1px solid #cbd5e1; padding: 10px 8px; text-align: center; font-size: 11px; font-family: sans-serif;">${r.factoryId}</td>
+                <td style="border: 1px solid #cbd5e1; padding: 10px 8px; text-align: center; font-size: 11px; font-family: sans-serif;">${r.factoryCode}</td>
+                <td style="border: 1px solid #cbd5e1; padding: 10px 8px; text-align: center; font-size: 11px; white-space: nowrap; font-family: sans-serif;">${r.sizes}</td>
+                <td style="border: 1px solid #cbd5e1; padding: 10px 8px; text-align: center; font-size: 11px; font-weight: bold; font-family: sans-serif;">${r.qty.toLocaleString()}</td>
+                <td style="border: 1px solid #cbd5e1; padding: 10px 8px; text-align: center; font-size: 11px; font-family: sans-serif;">${r.pr > 0 ? r.pr.toFixed(2) : '0.00'}</td>
+                <td style="border: 1px solid #cbd5e1; padding: 10px 8px; text-align: center; font-size: 11px; font-family: sans-serif;">${r.currency}</td>
+                <td style="border: 1px solid #cbd5e1; padding: 10px 8px; text-align: center; font-size: 11px; font-weight: bold; font-family: sans-serif;">${r.tp > 0 ? r.tp.toLocaleString(undefined, {minimumFractionDigits: 2}) : '0.00'}</td>
+                <td style="border: 1px solid #cbd5e1; padding: 10px 8px; text-align: center; font-size: 11px; white-space: nowrap; font-family: sans-serif;">${r.orderDate}</td>
+                <td style="border: 1px solid #cbd5e1; padding: 10px 8px; text-align: center; font-size: 11px; white-space: nowrap; font-family: sans-serif;">${r.deliveryDate}</td>
+              </tr>
+            `;
+          });
+
+          // Build full page HTML
+          const pageEl = document.createElement('div');
+          pageEl.style.cssText = 'position:fixed;left:-9999px;top:0;width:1200px;background:#fff;padding:30px 40px;font-family:sans-serif;color:#000;box-sizing:border-box;direction:ltr;';
+          
+          let pageHtml = `
+            <div style="text-align: center; margin-bottom: 20px;">
+              <h1 style="font-size: 34px; font-weight: 800; margin: 0; color: #000; letter-spacing: 0.5px; font-family: sans-serif;">Orders Report</h1>
+              <p style="font-size: 15px; color: #475569; margin: 8px 0 0 0; font-weight: 500; font-family: sans-serif;">
+                Generated: ${today} &nbsp;|&nbsp; Total: ${totalCount} orders${totalPages > 1 ? ` &nbsp;|&nbsp; Page ${pageIdx + 1} / ${totalPages}` : ''}
+              </p>
+            </div>
+            <div style="border-bottom: 2px solid #0f172a; margin-bottom: 25px; width: 100%;"></div>
+            
+            <table style="width: 100%; border-collapse: collapse; border: 1px solid #cbd5e1;">
+              ${tableHeaderHtml}
+              <tbody>
+                ${pageRowsHtml}
+                ${isLastPage ? totalRowHtml : ''}
+              </tbody>
+            </table>
+          `;
+
+          pageEl.innerHTML = pageHtml;
+          document.body.appendChild(pageEl);
+
+          const canvas = await html2canvas(pageEl, { scale: 2, useCORS: true, logging: false, backgroundColor: '#ffffff' });
+          document.body.removeChild(pageEl);
+
+          const imgData = canvas.toDataURL('image/jpeg', 0.95);
+          const cH = (canvas.height * cW) / canvas.width;
+
+          if (pageIdx === 0) {
+            pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+          } else {
+            pdf.addPage('a4', 'landscape');
+          }
+          pdf.addImage(imgData, 'JPEG', pM, pM, cW, cH);
         }
         
         pdf.save('Orders_Report_' + new Date().toISOString().split('T')[0] + '.pdf');
@@ -1107,7 +1139,7 @@ const ReportsPortal = () => {
                                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '1rem' }}>
                                        {d.productImages.map((img, idx) => (
                                          <div key={idx} style={{ borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border-color)', backgroundColor: 'var(--surface-color)', transition: 'transform 0.2s', cursor: 'pointer' }} onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.02)'} onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}>
-                                           <img src={img.url} alt={img.name} style={{ width: '100%', height: '150px', objectFit: 'cover', display: 'block' }} crossOrigin="anonymous"/>
+                                           <img src={normalizeImageUrl(img)} alt={img.name} style={{ width: '100%', height: '150px', objectFit: 'cover', display: 'block' }} crossOrigin="anonymous"/>
                                            <div style={{ padding: '0.4rem', fontSize: '0.75rem', textAlign: 'center', color: 'var(--text-muted)' }}>{img.name}</div>
                                          </div>
                                        ))}

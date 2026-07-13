@@ -6,7 +6,7 @@ import { useFilteredLookups } from '../hooks/useFilteredLookups';
 import { Save, RefreshCw, Hash, Calendar, Box, Scissors, Palette, LayoutGrid, ChevronRight, ChevronLeft, MessageSquare, CheckSquare, Square, Ruler, Camera, X, ImagePlus, Edit3, Copy, Trash2, Layers, PanelTop, Search } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import toast from 'react-hot-toast';
-import { compressImage } from '../utils/imageUtils';
+import { compressImage, normalizeImageUrl } from '../utils/imageUtils';
 import { CustomDateInput } from '../components/CustomDateInput';
 import ImageEditorModal from '../components/ImageEditorModal';
 import { appendActivity, createActivityItem, summarizeOrderChanges } from '../utils/activityLog';
@@ -266,14 +266,58 @@ const DataEntryWizard = () => {
       return;
     }
 
-    // Put images in queue and start with the first one
-    setPendingImages(originalFiles);
-    setImageToEdit(originalFiles[0]);
-    setIsEditorOpen(true);
-    
-    // Clear inputs so they can be triggered again
-    if (fileInputRef.current) fileInputRef.current.value = '';
-    if (cameraInputRef.current) cameraInputRef.current.value = '';
+    setUploadingImage(true);
+    const toastId = toast.loading(t('entry.messages.uploading_images'));
+
+    try {
+      let currentCount = productImages.length;
+      const newImagesToAdd = [];
+
+      for (let i = 0; i < originalFiles.length; i++) {
+        const file = await compressImage(originalFiles[i], 1200, 0.75);
+        const ext = file.name.split('.').pop() || 'jpg';
+        const fileName = currentCount === 0 ? `${modelNum}.${ext}` : `${modelNum}#${currentCount}.${ext}`;
+        const filePath = `product-images/${fileName}`;
+
+        const { error } = await supabase.storage
+          .from('product_images')
+          .upload(filePath, file, { upsert: true });
+
+        if (error) {
+          console.error('Upload error:', error);
+          toast.error(t('entry.messages.upload_error', { error: error.message }));
+        } else {
+          const { data: urlData } = supabase.storage
+            .from('product_images')
+            .getPublicUrl(filePath);
+
+          const newImage = {
+            name: fileName,
+            path: filePath,
+            url: urlData.publicUrl,
+            preview: URL.createObjectURL(file)
+          };
+          newImagesToAdd.push(newImage);
+          currentCount++;
+        }
+      }
+
+      if (newImagesToAdd.length > 0) {
+        setProductImages(prev => [...prev, ...newImagesToAdd]);
+        const updatedImages = [...(currentOrder.productImages || []), ...newImagesToAdd.map(img => ({ name: img.name, path: img.path, url: img.url }))];
+        updateOrder('productImages', updatedImages);
+        toast.success(t('entry.messages.upload_success'), { id: toastId });
+      } else {
+        toast.dismiss(toastId);
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error(t('entry.messages.upload_error', { error: err.message }), { id: toastId });
+    } finally {
+      setUploadingImage(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      if (cameraInputRef.current) cameraInputRef.current.value = '';
+    }
   };
 
   const onSaveEditedImage = async (editedFile) => {
@@ -284,9 +328,7 @@ const DataEntryWizard = () => {
     const toastId = toast.loading(t('entry.messages.uploading_images'));
 
     try {
-      const modelNum = currentOrder.serialNumber?.trim();
       const file = await compressImage(editedFile, 1200, 0.75);
-      const ext = file.name.split('.').pop() || 'jpg';
       
       if (editingExistingImageIndex !== null) {
         const idx = editingExistingImageIndex;
@@ -320,52 +362,12 @@ const DataEntryWizard = () => {
           toast.success(t('entry.messages.upload_success'), { id: toastId });
         }
         setEditingExistingImageIndex(null);
-        setUploadingImage(false);
-        return;
-      }
-
-      const currentCount = productImages.length;
-      const fileName = currentCount === 0 ? `${modelNum}.${ext}` : `${modelNum}#${currentCount}.${ext}`;
-      const filePath = `product-images/${fileName}`;
-
-      const { error } = await supabase.storage
-        .from('product_images')
-        .upload(filePath, file, { upsert: true });
-
-      if (error) {
-        console.error('Upload error:', error);
-        toast.error(t('entry.messages.upload_error', { error: error.message }), { id: toastId });
-      } else {
-        const { data: urlData } = supabase.storage
-          .from('product_images')
-          .getPublicUrl(filePath);
-
-        const newImage = {
-          name: fileName,
-          path: filePath,
-          url: urlData.publicUrl,
-          preview: URL.createObjectURL(file)
-        };
-
-        setProductImages(prev => [...prev, newImage]);
-        const updatedImages = [...(currentOrder.productImages || []), { name: newImage.name, path: newImage.path, url: newImage.url }];
-        updateOrder('productImages', updatedImages);
-        toast.success(t('entry.messages.upload_success'), { id: toastId });
       }
     } catch (err) {
       console.error(err);
       toast.error(t('entry.messages.upload_error', { error: err.message }), { id: toastId });
     } finally {
       setUploadingImage(false);
-      
-      const remaining = pendingImages.slice(1);
-      if (remaining.length > 0) {
-        setPendingImages(remaining);
-        setImageToEdit(remaining[0]);
-        setTimeout(() => setIsEditorOpen(true), 500); 
-      } else {
-        setPendingImages([]);
-      }
     }
   };
 
@@ -373,15 +375,6 @@ const DataEntryWizard = () => {
     setIsEditorOpen(false);
     setImageToEdit(null);
     setEditingExistingImageIndex(null);
-    
-    const remaining = pendingImages.slice(1);
-    if (remaining.length > 0) {
-      setPendingImages(remaining);
-      setImageToEdit(remaining[0]);
-      setTimeout(() => setIsEditorOpen(true), 500);
-    } else {
-      setPendingImages([]);
-    }
   };
 
   const handleEditExistingImage = async (index, imgObj) => {
@@ -822,10 +815,13 @@ const DataEntryWizard = () => {
       }
 
       const finalOrder = { ...defaultOrderState, ...fetchedOrder, serialNumber: data.serial_number || fetchedOrder.serialNumber };
+      if (finalOrder.productImages) {
+        finalOrder.productImages = finalOrder.productImages.map(img => ({ ...img, url: normalizeImageUrl(img) }));
+      }
       setCurrentOrder(finalOrder);
       setAutoFocusLastSize(false);
       setSelectedColorsArr(Object.keys(finalOrder.colorDistribution || {}));
-      setProductImages(finalOrder.productImages?.map(img => ({ ...img, preview: img.preview || img.url })) || []);
+      setProductImages(finalOrder.productImages?.map(img => ({ ...img, preview: normalizeImageUrl(img) })) || []);
       setIsEditMode(true);
       setOriginalSerial(finalOrder.serialNumber);
       toast.success(t('entry.messages.fetch_success', { serial: finalOrder.serialNumber }), { id: toastId });
@@ -1086,7 +1082,7 @@ const DataEntryWizard = () => {
                 <div className="form-group">
                    <label className="form-label">{t('entry.buyer.price_currency')}</label>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
-                     <input type="text" inputMode="decimal" dir="rtl" className="form-control" placeholder={t('entry.buyer.price_placeholder')} style={{ flex: 2, textAlign: 'right' }} value={currentOrder.productPrice || ''} onChange={(e) => updateOrder('productPrice', e.target.value.replace(/[^0-9.]/g, ''))} />
+                     <input type="text" inputMode="decimal" className="form-control" placeholder={t('entry.buyer.price_placeholder')} style={{ flex: 2, textAlign: 'right' }} value={currentOrder.productPrice || ''} onChange={(e) => updateOrder('productPrice', e.target.value.replace(/[^0-9.]/g, ''))} />
                      <ClearableSelect className="form-control" style={{ flex: 1 }} value={currentOrder.currency || ''} onChange={(e) => updateOrder('currency', e.target.value)} clearTitle={t('entry.actions.clear_btn')}>
                        <option value="">{t('entry.buyer.currency_placeholder')}</option>
                       {lookups.currencies?.map((c, i) => <option key={i} value={c}>{c}</option>)}
@@ -1234,7 +1230,7 @@ const DataEntryWizard = () => {
                           boxShadow: '0 2px 8px rgba(0,0,0,0.3)'
                         }}>
                           <img
-                            src={img.preview || img.url}
+                            src={normalizeImageUrl(img)}
                             alt={img.name}
                             style={{ width: '100%', height: '180px', objectFit: 'cover', display: 'block' }}
                           />
@@ -1360,7 +1356,7 @@ const DataEntryWizard = () => {
                 />
                 <div className="form-group" style={{ gridColumn: '1 / -1' }}>
                   <label className="form-label">{t('entry.dates.total_quantity')}</label>
-                  <input type="text" inputMode="numeric" dir="rtl" className="form-control" style={{ textAlign: 'right' }} value={currentOrder.totalQuantity || ''} onChange={(e) => updateOrder('totalQuantity', e.target.value.replace(/[^0-9]/g, ''))} />
+                  <input type="text" inputMode="numeric" className="form-control" style={{ textAlign: 'right' }} value={currentOrder.totalQuantity || ''} onChange={(e) => updateOrder('totalQuantity', e.target.value.replace(/[^0-9]/g, ''))} />
                 </div>
                 <div className="form-group" style={{ gridColumn: '1 / -1' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>

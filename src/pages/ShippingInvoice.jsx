@@ -3,6 +3,7 @@ import { supabase } from '../supabaseClient';
 import { useAppData } from '../context/AppDataContext';
 import { useAuth } from '../context/AuthContext';
 import { englishOnly } from '../utils/textUtils';
+import { normalizeImageUrl } from '../utils/imageUtils';
 import { Printer, Plus, Trash2, Search, FileText, Settings, LayoutGrid, AlertCircle, X, FileSpreadsheet } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
@@ -309,7 +310,7 @@ const ShippingInvoice = () => {
                     let imageUrl = '';
                     if (withImage && d.productImages && Array.isArray(d.productImages) && d.productImages.length > 0) {
                         const firstImage = d.productImages[0];
-                        imageUrl = typeof firstImage === 'object' ? firstImage.url : firstImage;
+                        imageUrl = normalizeImageUrl(typeof firstImage === 'object' ? firstImage.url : firstImage);
                     }
 
                     const factName = d.factoryId || '';

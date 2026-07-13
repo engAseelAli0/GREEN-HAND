@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { normalizeImageUrl } from '../utils/imageUtils';
 import { supabase } from '../supabaseClient';
 import { useAppData } from '../context/AppDataContext';
 import { useAuth } from '../context/AuthContext';
@@ -455,8 +456,6 @@ const OrderReports = () => {
           }
           return { n: idx+1, sn: order.serial_number||'-', bc: bc||'-', pn: pnDisplay, clrs, sc, sr, qty, cur: d.currency||'RMB', pr, tp, cn: d.contractNotes||'' };
        });
-       const el = document.createElement('div');
-       el.style.cssText = 'position:fixed;left:-9999px;top:0;width:1050px;background:#fff;padding:22px 26px;font-family:"Microsoft YaHei",SimHei,SimSun,Inter,sans-serif;color:#000;font-size:15px;line-height:1.4;direction:ltr;text-align:left;-webkit-font-smoothing:antialiased;';
        const b = 'border:1px solid #000;padding:7px 6px;font-weight:600;';
        const tc = b+'text-align:center;font-size:14px;';
        const bl = b+'text-align:left;font-size:14px;';
@@ -480,9 +479,7 @@ const OrderReports = () => {
        ];
 
        const activeCols = columns.filter(col => {
-         // Core columns that should always show
          if (['n', 'sn', 'pn', 'qty', 'cur', 'pr', 'tp'].includes(col.id)) return true;
-         // Check if at least one row has data for this column
          return rows.some(r => {
            const val = r[col.id];
            if (col.id === 'clrs' || col.id === 'sc') {
@@ -502,25 +499,96 @@ const OrderReports = () => {
        });
        headerHtml += '</tr>';
 
-       // Generate Rows HTML dynamically (No empty row padding as per user request)
-       let dH = '';
-       rows.forEach(r => {
-         dH += '<tr>';
-         activeCols.forEach(col => {
-           let val = '';
-           if (col.id === 'pr') {
-             val = r.pr ? r.pr.toFixed(2) : '0.00';
-           } else if (col.id === 'tp') {
-             val = r.tp > 0 ? r.tp.toLocaleString(undefined, { minimumFractionDigits: 2 }) : '0.00';
-           } else if (col.id === 'sc') {
-             val = r.sc > 0 ? r.sc : '-';
-           } else {
-             val = r[col.id] || '-';
+       const tbs = 'border-collapse:collapse;width:100%;border:2px solid #000;';
+        
+       // Define metadata fields dynamically to hide empty ones
+       const metaFields = [
+         { label: 'Fact. Name 工厂名字', value: fDet.name },
+         { label: 'Cont No.', value: contNo, isHeader: true },
+         { label: 'Fact. Mobile 工厂电话', value: fDet.mobile },
+         { label: 'Cust. Code 客户代码', value: custCode },
+         { label: 'Fact. Address 工厂地址', value: fDet.address },
+         { label: 'Cust. Mobile 客户手机', value: custMobile }
+       ].filter(item => item.value && item.value !== '-' && item.value !== '');
+
+       let metaHtml = '';
+       if (metaFields.length > 0) {
+         metaHtml += `<table style="${tbs}"><tbody>`;
+         for (let i = 0; i < metaFields.length; i += 2) {
+           const item1 = metaFields[i];
+           const item2 = metaFields[i + 1];
+           metaHtml += '<tr>';
+           if (item1) {
+             const bgStyle = item1.isHeader ? 'background:#b41e1e;color:#fff;font-weight:900;' : '';
+             metaHtml += `<td style="${bl}white-space:nowrap;width:1%;${bgStyle}"><b>${item1.label}：</b></td>`;
+             metaHtml += `<td style="${tc}font-weight:800;font-size:14px;${bgStyle}">${item1.value}</td>`;
            }
-           dH += `<td style="${col.style}">${val}</td>`;
-         });
-         dH += '</tr>';
-       });
+           if (item2) {
+             const bgStyle = item2.isHeader ? 'background:#b41e1e;color:#fff;font-weight:900;' : '';
+             metaHtml += `<td style="${bl}white-space:nowrap;width:1%;${bgStyle}"><b>${item2.label}：</b></td>`;
+             metaHtml += `<td style="${tc}font-weight:800;font-size:14px;${bgStyle}">${item2.value}</td>`;
+           } else if (metaFields.length > 1) {
+             metaHtml += `<td style="${bl}width:1%;"></td><td style="${tc}"></td>`;
+           }
+           metaHtml += '</tr>';
+         }
+         metaHtml += '</tbody></table>';
+       }
+
+       // Define date fields dynamically to hide empty ones
+       let dateHtml = '';
+       const hasReqDate = reqDate && reqDate !== '-' && reqDate !== '';
+       const hasDelDate = delDate && delDate !== '-' && delDate !== '';
+       if (hasReqDate || hasDelDate) {
+         dateHtml += `<table style="${tbs}border-top:none;"><tbody><tr>`;
+         if (hasReqDate) {
+           dateHtml += `<td style="${hg}width:25%;">Request Date 订单日期</td>`;
+           dateHtml += `<td style="${tc}font-weight:800;font-size:14px;width:25%;">${fD(reqDate)}</td>`;
+         }
+         if (hasDelDate) {
+           dateHtml += `<td style="${hg}width:25%;">Delivery Date 交货日期</td>`;
+           dateHtml += `<td style="${tc}font-weight:800;font-size:14px;width:25%;">${fD(delDate)}</td>`;
+         }
+         if (hasReqDate !== hasDelDate) {
+           dateHtml += `<td style="${hg}width:25%;"></td><td style="${tc}width:25%;"></td>`;
+         }
+         dateHtml += `</tr></tbody></table>`;
+       }
+
+       // Define conditions block dynamically to hide it when empty
+       let conditionsHtml = '';
+       if (selectedTerms.length > 0) {
+         conditionsHtml += 
+           `<table style="border-collapse:collapse;width:100%;border:2px solid #000;border-top:none;"><tbody>
+             <tr><td style="${bl}background:#e6e6e6;font-weight:800;font-size:14px;">Conditions 状况：</td></tr>
+             <tr><td style="${bl}height:${Math.max(90, selectedTerms.length * 22)}px;vertical-align:top;padding:8px;">
+               <ul style="margin:0;padding-left:20px;font-size:13px;font-weight:bold;">
+                 ${selectedTerms.map(t => `<li style="margin-bottom:6px;">${t}</li>`).join('')}
+               </ul>
+             </td></tr>
+           </tbody></table>`;
+       }
+
+       // Signature block HTML
+       const signatureHtml = 
+         '<table style="border-collapse:collapse;width:100%;border:2px solid #000;border-top:none;"><tbody><tr>'+
+           '<td style="'+bl+'width:25%;padding:14px 10px;">'+
+             '<div style="font-weight:800;font-size:13px;margin-bottom:20px;">Name 名字</div>'+
+             '<div style="font-weight:800;font-size:13px;">Signature 签名</div>'+
+           '</td>'+
+           '<td style="'+tc+'width:25%;padding:14px 10px;vertical-align:top;">'+
+             '<div style="color:#b41e1e;font-weight:800;font-size:13px;margin-bottom:20px;">Buyer 买方</div>'+
+             '<div style="border-bottom:2px solid #000;width:80%;margin:0 auto;height:22px;"></div>'+
+           '</td>'+
+           '<td style="'+tc+'width:25%;padding:14px 10px;vertical-align:top;">'+
+             '<div style="color:#b41e1e;font-weight:800;font-size:13px;margin-bottom:20px;">Coordinator 协调员</div>'+
+             '<div style="border-bottom:2px solid #000;width:80%;margin:0 auto;height:22px;"></div>'+
+           '</td>'+
+           '<td style="'+tc+'width:25%;padding:14px 10px;vertical-align:top;">'+
+             '<div style="color:#b41e1e;font-weight:800;font-size:13px;margin-bottom:20px;">Factory 工厂</div>'+
+             '<div style="border-bottom:2px solid #000;width:80%;margin:0 auto;height:22px;"></div>'+
+           '</td>'+
+         '</tr></tbody></table>';
 
        // Generate Total Row HTML dynamically
        let totalRowHtml = '<tr style="background:#e6e6e6;">';
@@ -539,119 +607,89 @@ const OrderReports = () => {
        });
        totalRowHtml += '</tr>';
 
-        const tbs = 'border-collapse:collapse;width:100%;border:2px solid #000;';
-        
-        // Define metadata fields dynamically to hide empty ones
-        const metaFields = [
-          { label: 'Fact. Name 工厂名字', value: fDet.name },
-          { label: 'Cont No.', value: contNo, isHeader: true },
-          { label: 'Fact. Mobile 工厂电话', value: fDet.mobile },
-          { label: 'Cust. Code 客户代码', value: custCode },
-          { label: 'Fact. Address 工厂地址', value: fDet.address },
-          { label: 'Cust. Mobile 客户手机', value: custMobile }
-        ].filter(item => item.value && item.value !== '-' && item.value !== '');
-
-        let metaHtml = '';
-        if (metaFields.length > 0) {
-          metaHtml += `<table style="${tbs}"><tbody>`;
-          for (let i = 0; i < metaFields.length; i += 2) {
-            const item1 = metaFields[i];
-            const item2 = metaFields[i + 1];
-            metaHtml += '<tr>';
-            
-            if (item1) {
-              const bgStyle = item1.isHeader ? 'background:#b41e1e;color:#fff;font-weight:900;' : '';
-              metaHtml += `<td style="${bl}white-space:nowrap;width:1%;${bgStyle}"><b>${item1.label}：</b></td>`;
-              metaHtml += `<td style="${tc}font-weight:800;font-size:14px;${bgStyle}">${item1.value}</td>`;
-            }
-            
-            if (item2) {
-              const bgStyle = item2.isHeader ? 'background:#b41e1e;color:#fff;font-weight:900;' : '';
-              metaHtml += `<td style="${bl}white-space:nowrap;width:1%;${bgStyle}"><b>${item2.label}：</b></td>`;
-              metaHtml += `<td style="${tc}font-weight:800;font-size:14px;${bgStyle}">${item2.value}</td>`;
-            } else if (metaFields.length > 1) {
-              metaHtml += `<td style="${bl}width:1%;"></td><td style="${tc}"></td>`;
-            }
-            metaHtml += '</tr>';
-          }
-          metaHtml += '</tbody></table>';
-        }
-
-        // Define date fields dynamically to hide empty ones
-        let dateHtml = '';
-        const hasReqDate = reqDate && reqDate !== '-' && reqDate !== '';
-        const hasDelDate = delDate && delDate !== '-' && delDate !== '';
-        if (hasReqDate || hasDelDate) {
-          dateHtml += `<table style="${tbs}border-top:none;"><tbody><tr>`;
-          if (hasReqDate) {
-            dateHtml += `<td style="${hg}width:25%;">Request Date 订单日期</td>`;
-            dateHtml += `<td style="${tc}font-weight:800;font-size:14px;width:25%;">${fD(reqDate)}</td>`;
-          }
-          if (hasDelDate) {
-            dateHtml += `<td style="${hg}width:25%;">Delivery Date 交货日期</td>`;
-            dateHtml += `<td style="${tc}font-weight:800;font-size:14px;width:25%;">${fD(delDate)}</td>`;
-          }
-          if (hasReqDate !== hasDelDate) {
-            dateHtml += `<td style="${hg}width:25%;"></td><td style="${tc}width:25%;"></td>`;
-          }
-          dateHtml += `</tr></tbody></table>`;
-        }
-
-        // Define conditions block dynamically to hide it when empty
-        let conditionsHtml = '';
-        if (selectedTerms.length > 0) {
-          conditionsHtml += 
-            `<table style="border-collapse:collapse;width:100%;border:2px solid #000;border-top:none;"><tbody>
-              <tr><td style="${bl}background:#e6e6e6;font-weight:800;font-size:14px;">Conditions 状况：</td></tr>
-              <tr><td style="${bl}height:${Math.max(90, selectedTerms.length * 22)}px;vertical-align:top;padding:8px;">
-                <ul style="margin:0;padding-left:20px;font-size:13px;font-weight:bold;">
-                  ${selectedTerms.map(t => `<li style="margin-bottom:6px;">${t}</li>`).join('')}
-                </ul>
-              </td></tr>
-            </tbody></table>`;
-        }
-
-        el.innerHTML =
-          '<div style="text-align:center;margin-bottom:12px;">'+
-            '<span style="font-size:36px;font-weight:900;color:#b41e1e;letter-spacing:1px;">Order Contract 订单合同</span>'+
-          '</div>'+
-          metaHtml +
-          dateHtml +
-          '<table style="'+tbs+'border-top:none;"><tbody>'+
-            headerHtml +
-            dH +
-            totalRowHtml +
-          '</tbody></table>'+
-          conditionsHtml +
-          '<table style="border-collapse:collapse;width:100%;border:2px solid #000;border-top:none;"><tbody><tr>'+
-            '<td style="'+bl+'width:25%;padding:14px 10px;">'+
-              '<div style="font-weight:800;font-size:13px;margin-bottom:20px;">Name 名字</div>'+
-              '<div style="font-weight:800;font-size:13px;">Signature 签名</div>'+
-            '</td>'+
-            '<td style="'+tc+'width:25%;padding:14px 10px;vertical-align:top;">'+
-              '<div style="color:#b41e1e;font-weight:800;font-size:13px;margin-bottom:20px;">Buyer 买方</div>'+
-              '<div style="border-bottom:2px solid #000;width:80%;margin:0 auto;height:22px;"></div>'+
-            '</td>'+
-            '<td style="'+tc+'width:25%;padding:14px 10px;vertical-align:top;">'+
-              '<div style="color:#b41e1e;font-weight:800;font-size:13px;margin-bottom:20px;">Coordinator 协调员</div>'+
-              '<div style="border-bottom:2px solid #000;width:80%;margin:0 auto;height:22px;"></div>'+
-            '</td>'+
-            '<td style="'+tc+'width:25%;padding:14px 10px;vertical-align:top;">'+
-              '<div style="color:#b41e1e;font-weight:800;font-size:13px;margin-bottom:20px;">Factory 工厂</div>'+
-              '<div style="border-bottom:2px solid #000;width:80%;margin:0 auto;height:22px;"></div>'+
-            '</td>'+
-          '</tr></tbody></table>';
-       document.body.appendChild(el);
+       // ─── PAGINATION: Split rows into pages ───
+       const ROWS_PER_PAGE = 25;
+       const totalPages = Math.ceil(rows.length / ROWS_PER_PAGE);
        const { default: html2canvas } = await import('html2canvas');
-       const canvas = await html2canvas(el, { scale: 3, useCORS: true, logging: false, backgroundColor: '#ffffff' });
-       document.body.removeChild(el);
-       const imgData = canvas.toDataURL('image/jpeg', 1.0);
        const pW = 210;
        const pM = 5;
        const cW = pW - pM * 2;
-       const cH = (canvas.height * cW) / canvas.width;
-       const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [pW, Math.max(cH + pM * 2, 297)] });
-       pdf.addImage(imgData, 'JPEG', pM, pM, cW, cH);
+       let pdf = null;
+
+       for (let pageIdx = 0; pageIdx < totalPages; pageIdx++) {
+         const startRow = pageIdx * ROWS_PER_PAGE;
+         const endRow = Math.min(startRow + ROWS_PER_PAGE, rows.length);
+         const pageRows = rows.slice(startRow, endRow);
+         const isLastPage = pageIdx === totalPages - 1;
+
+         // Build row HTML for this page chunk
+         let pageRowsHtml = '';
+         pageRows.forEach(r => {
+           pageRowsHtml += '<tr>';
+           activeCols.forEach(col => {
+             let val = '';
+             if (col.id === 'pr') {
+               val = r.pr ? r.pr.toFixed(2) : '0.00';
+             } else if (col.id === 'tp') {
+               val = r.tp > 0 ? r.tp.toLocaleString(undefined, { minimumFractionDigits: 2 }) : '0.00';
+             } else if (col.id === 'sc') {
+               val = r.sc > 0 ? r.sc : '-';
+             } else {
+               val = r[col.id] || '-';
+             }
+             pageRowsHtml += `<td style="${col.style}">${val}</td>`;
+           });
+           pageRowsHtml += '</tr>';
+         });
+
+         // Build full page HTML
+         const pageEl = document.createElement('div');
+         pageEl.style.cssText = 'position:fixed;left:-9999px;top:0;width:1050px;background:#fff;padding:22px 26px;font-family:"Microsoft YaHei",SimHei,SimSun,Inter,sans-serif;color:#000;font-size:15px;line-height:1.4;direction:ltr;text-align:left;-webkit-font-smoothing:antialiased;';
+
+         let pageHtml = '';
+         // Title
+         pageHtml += '<div style="text-align:center;margin-bottom:12px;">';
+         pageHtml += '<span style="font-size:36px;font-weight:900;color:#b41e1e;letter-spacing:1px;">Order Contract 订单合同</span>';
+         if (totalPages > 1) {
+           pageHtml += `<span style="font-size:14px;color:#666;margin-right:10px;display:block;margin-top:4px;">Page ${pageIdx + 1} / ${totalPages}</span>`;
+         }
+         pageHtml += '</div>';
+         // Meta + Date
+         pageHtml += metaHtml;
+         pageHtml += dateHtml;
+         // Table with header + page rows
+         pageHtml += `<table style="${tbs}border-top:none;"><tbody>`;
+         pageHtml += headerHtml;
+         pageHtml += pageRowsHtml;
+         // Total row on last page only
+         if (isLastPage) {
+           pageHtml += totalRowHtml;
+         }
+         pageHtml += '</tbody></table>';
+         // Conditions on last page only
+         if (isLastPage) {
+           pageHtml += conditionsHtml;
+         }
+         // Signature on every page
+         pageHtml += signatureHtml;
+
+         pageEl.innerHTML = pageHtml;
+         document.body.appendChild(pageEl);
+
+         const canvas = await html2canvas(pageEl, { scale: 3, useCORS: true, logging: false, backgroundColor: '#ffffff' });
+         document.body.removeChild(pageEl);
+
+         const imgData = canvas.toDataURL('image/jpeg', 1.0);
+         const cH = (canvas.height * cW) / canvas.width;
+
+         if (pageIdx === 0) {
+           pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [pW, Math.max(cH + pM * 2, 297)] });
+         } else {
+           pdf.addPage([pW, Math.max(cH + pM * 2, 297)]);
+         }
+         pdf.addImage(imgData, 'JPEG', pM, pM, cW, cH);
+       }
+
        pdf.save('Order_Contract_' + contNo + '_' + new Date().toISOString().split('T')[0] + '.pdf');
        toast.success(t('reports.messages.pdf_success'), { id: toastId });
     } catch (err) {
@@ -1459,7 +1497,7 @@ const OrderReports = () => {
                                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '1rem' }}>
                                        {d.productImages.map((img, idx) => (
                                          <div key={idx} style={{ borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border-color)', backgroundColor: 'var(--surface-color)', transition: 'transform 0.2s', cursor: 'pointer' }} onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.02)'} onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}>
-                                           <img src={img.url} alt={img.name} style={{ width: '100%', height: '150px', objectFit: 'cover', display: 'block' }} crossOrigin="anonymous"/>
+                                           <img src={normalizeImageUrl(img)} alt={img.name} style={{ width: '100%', height: '150px', objectFit: 'cover', display: 'block' }} crossOrigin="anonymous"/>
                                            <div style={{ padding: '0.4rem', fontSize: '0.75rem', textAlign: 'center', color: 'var(--text-muted)' }}>{img.name}</div>
                                          </div>
                                        ))}

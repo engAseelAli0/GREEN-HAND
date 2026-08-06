@@ -1497,7 +1497,16 @@ const OrderReports = () => {
                                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '1rem' }}>
                                        {d.productImages.map((img, idx) => (
                                          <div key={idx} style={{ borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border-color)', backgroundColor: 'var(--surface-color)', transition: 'transform 0.2s', cursor: 'pointer' }} onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.02)'} onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}>
-                                           <img src={normalizeImageUrl(img)} alt={img.name} style={{ width: '100%', height: '150px', objectFit: 'cover', display: 'block' }} crossOrigin="anonymous"/>
+                                           <img
+                                             src={normalizeImageUrl(img)}
+                                             alt={img.name || 'product'}
+                                             onError={(e) => {
+                                               e.target.onerror = null;
+                                               e.target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 24 24" fill="none" stroke="%2394a3b8" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>';
+                                             }}
+                                             style={{ width: '100%', height: '150px', objectFit: 'cover', display: 'block' }}
+                                             crossOrigin="anonymous"
+                                           />
                                            <div style={{ padding: '0.4rem', fontSize: '0.75rem', textAlign: 'center', color: 'var(--text-muted)' }}>{img.name}</div>
                                          </div>
                                        ))}

@@ -273,10 +273,11 @@ const DataEntryWizard = () => {
       let currentCount = productImages.length;
       const newImagesToAdd = [];
 
+      const safeModelNum = modelNum.replace(/[/\\?%*:|"<>]/g, '-');
       for (let i = 0; i < originalFiles.length; i++) {
         const file = await compressImage(originalFiles[i], 1200, 0.75);
         const ext = file.name.split('.').pop() || 'jpg';
-        const fileName = currentCount === 0 ? `${modelNum}.${ext}` : `${modelNum}#${currentCount}.${ext}`;
+        const fileName = currentCount === 0 ? `${safeModelNum}.${ext}` : `${safeModelNum}_${currentCount}.${ext}`;
         const filePath = `product-images/${fileName}`;
 
         const { error } = await supabase.storage
@@ -523,6 +524,11 @@ const DataEntryWizard = () => {
   };
 
   const validateForm = () => {
+    if (uploadingImage) {
+      toast.error(t('entry.messages.upload_in_progress', { defaultValue: 'جاري رفع الصور حالياً، يرجى الانتظار حتى يكتمل الرفع!' }));
+      return false;
+    }
+
     if (!currentOrder.serialNumber) { toast.error(t('entry.messages.serial_required')); return false; }
     
     const required = [
@@ -678,8 +684,50 @@ const DataEntryWizard = () => {
           return;
        }
 
+       // Duplicate existing product images in Supabase storage for the new serial number
+       let copiedProductImages = [];
+       if (currentOrder.productImages && currentOrder.productImages.length > 0) {
+         const safeNewSerial = newSerial.replace(/[/\\?%*:|"<>]/g, '-');
+         for (let idx = 0; idx < currentOrder.productImages.length; idx++) {
+           const origImg = currentOrder.productImages[idx];
+           const ext = (origImg.name || 'jpg').split('.').pop() || 'jpg';
+           const newFileName = idx === 0 ? `${safeNewSerial}.${ext}` : `${safeNewSerial}_${idx}.${ext}`;
+           const newFilePath = `product-images/${newFileName}`;
+           
+           let oldPath = origImg.path;
+           if (!oldPath && origImg.url && !origImg.url.startsWith('http') && !origImg.url.startsWith('blob:')) {
+             oldPath = origImg.url.startsWith('product-images/') ? origImg.url : `product-images/${origImg.url}`;
+           }
+
+           if (oldPath) {
+             const { error: copyErr } = await supabase.storage.from('product_images').copy(oldPath, newFilePath);
+             if (!copyErr) {
+               const { data: urlData } = supabase.storage.from('product_images').getPublicUrl(newFilePath);
+               copiedProductImages.push({
+                 name: newFileName,
+                 path: newFilePath,
+                 url: urlData.publicUrl
+               });
+               continue;
+             }
+           }
+
+           // If copy failed or wasn't possible, preserve original if it's a valid absolute URL
+           if (origImg.url && (origImg.url.startsWith('http') || origImg.url.startsWith('blob:'))) {
+             copiedProductImages.push({ ...origImg });
+           }
+         }
+       }
+
+       const updatedOrderState = {
+         ...currentOrder,
+         serialNumber: newSerial,
+         orderNumber: null,
+         productImages: copiedProductImages
+       };
+
        const newOrderData = appendActivity(
-         { ...currentOrder, serialNumber: newSerial, orderNumber: null },
+         updatedOrderState,
          createActivityItem({
            action: 'copy',
            user,
@@ -695,6 +743,7 @@ const DataEntryWizard = () => {
        if (error) throw error;
        toast.success(t('entry.messages.copy_success', { serial: newSerial }), { id: toastId });
        setCurrentOrder(newOrderData);
+       setProductImages(copiedProductImages.map(img => ({ ...img, preview: normalizeImageUrl(img) })));
        setOriginalSerial(newSerial);
        setIsEditMode(true);
        setAutoFocusLastSize(false);
@@ -1231,7 +1280,11 @@ const DataEntryWizard = () => {
                         }}>
                           <img
                             src={normalizeImageUrl(img)}
-                            alt={img.name}
+                            alt={img.name || 'product'}
+                            onError={(e) => {
+                              e.target.onerror = null;
+                              e.target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 24 24" fill="none" stroke="%2394a3b8" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>';
+                            }}
                             style={{ width: '100%', height: '180px', objectFit: 'cover', display: 'block' }}
                           />
                           <div style={{

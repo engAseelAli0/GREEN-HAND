@@ -310,7 +310,7 @@ const ShippingInvoice = () => {
                     let imageUrl = '';
                     if (withImage && d.productImages && Array.isArray(d.productImages) && d.productImages.length > 0) {
                         const firstImage = d.productImages[0];
-                        imageUrl = normalizeImageUrl(typeof firstImage === 'object' ? firstImage.url : firstImage);
+                        imageUrl = normalizeImageUrl(firstImage);
                     }
 
                     const factName = d.factoryId || '';

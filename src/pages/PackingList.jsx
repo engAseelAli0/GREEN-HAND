@@ -306,7 +306,7 @@ const PackingList = () => {
 
                 if (withImage && d.productImages && Array.isArray(d.productImages) && d.productImages.length > 0) {
                     const firstImage = d.productImages[0];
-                    imageUrl = normalizeImageUrl(typeof firstImage === 'object' ? firstImage.url : firstImage);
+                    imageUrl = normalizeImageUrl(firstImage);
                 }
                 if (!newBuyer && d.buyerCompany) newBuyer = d.buyerCompany;
                 if (!desc) desc = englishOnly(d.productName) || '';

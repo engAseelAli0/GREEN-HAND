@@ -58,17 +58,47 @@ export const compressImage = (file, maxWidth = 1000, quality = 0.75) => {
 
 export const normalizeImageUrl = (img) => {
   if (!img) return '';
-  // Provide a fallback property if preview or url are missing
-  const url = typeof img === 'string' ? img : (img.preview || img.url || img.name);
-  if (!url) return '';
-  
-  // If the string already looks like a valid absolute URL or data URI, return it
-  if (url.startsWith('http') || url.startsWith('blob:') || url.startsWith('data:')) {
-    return url;
+
+  let rawUrl = '';
+  let imgPath = '';
+
+  if (typeof img === 'string') {
+    rawUrl = img.trim();
+  } else if (typeof img === 'object' && img !== null) {
+    imgPath = (img.path || '').trim();
+    rawUrl = (img.preview || img.url || img.name || '').trim();
   }
-  
-  // Construct the correct Supabase public URL
-  // Defaulting to "product-images/" folder inside the "product_images" bucket as used in uploads
-  const path = img.path || `product-images/${url}`;
-  return supabase.storage.from('product_images').getPublicUrl(path).data.publicUrl;
+
+  if (!rawUrl && !imgPath) return '';
+
+  // If it's a blob: or data: URL, return directly
+  if (rawUrl.startsWith('blob:') || rawUrl.startsWith('data:')) {
+    return rawUrl;
+  }
+
+  // If it's an absolute HTTP/HTTPS URL
+  if (rawUrl.startsWith('http://') || rawUrl.startsWith('https://')) {
+    // Fix unencoded hash characters '#' in Supabase URL paths before query params
+    // e.g. /product-images/24366A#1.jpg -> /product-images/24366A%231.jpg
+    const [baseAndPath, queryStr] = rawUrl.split('?');
+    const fixedPath = baseAndPath.replace(/#/g, '%23');
+    return queryStr ? `${fixedPath}?${queryStr}` : fixedPath;
+  }
+
+  // Determine path from imgPath or rawUrl
+  let path = imgPath || rawUrl;
+
+  // Clean leading slashes
+  if (path.startsWith('/')) path = path.slice(1);
+
+  // If path doesn't start with product-images/ or trademarks/, prepend product-images/
+  if (!path.startsWith('product-images/') && !path.startsWith('trademarks/')) {
+    path = `product-images/${path}`;
+  }
+
+  // Encode hash characters in path for getPublicUrl
+  const safePath = path.replace(/#/g, '%23');
+
+  const publicUrl = supabase.storage.from('product_images').getPublicUrl(safePath).data.publicUrl;
+  return publicUrl;
 };

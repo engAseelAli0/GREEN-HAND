@@ -31,9 +31,20 @@ export const ThemeProvider = ({ children }) => {
   });
 
   // Check if accent color is saved in localStorage, default to Brand Gold (#d4af37)
-  const [accentColor, setAccentColor] = useState(() => {
-    return localStorage.getItem('app-accent-color') || '#d4af37';
+  const [accentColor, setAccentColorState] = useState(() => {
+    const saved = localStorage.getItem('app-accent-color');
+    if (!saved) return '#d4af37';
+    return saved.startsWith('#') ? saved : `#${saved}`;
   });
+
+  const setAccentColor = (newColor) => {
+    if (!newColor) {
+      setAccentColorState('#d4af37');
+      return;
+    }
+    const formatted = String(newColor).trim().startsWith('#') ? String(newColor).trim() : `#${String(newColor).trim()}`;
+    setAccentColorState(formatted);
+  };
 
   useEffect(() => {
     // Apply theme to html element

@@ -125,12 +125,30 @@
   "activity": {
     "create": "创建订单",
     "update": "更新订单",
-    "receive": "收到货物",
+    "copy": "复制订单",
     "delete": "删除订单",
+    "barcode_print": "打印条形码",
+    "barcode_sample": "打印样品条形码",
+    "receive": "工厂入库",
+    "fields": {
+      "productName": "产品名称",
+      "factoryId": "工厂",
+      "totalQuantity": "总数量",
+      "deliveryDate": "交货日期",
+      "productPrice": "单价",
+      "currency": "币种",
+      "cartonPackage": "装箱方式",
+      "cartonQty": "装箱数量",
+      "barcode": "主条形码",
+      "color_count": "颜色数量"
+    },
     "notes": {
-      "created": "系统已注册新订单。",
-      "updated": "订单详情已修改。",
-      "received": "货物已收到并更新状态。"
+      "created": "创建订单 #{{serial}}",
+      "updated": "更新订单 #{{serial}}",
+      "serial_changed": "将序列号从 {{old}} 更改为 {{new}}",
+      "deleted": "删除订单 #{{serial}}",
+      "copied": "从 {{from}} 复制订单到 {{to}}",
+      "received": "已收到的订单总数为 {{count}} 件"
     }
   },
   "entry": {
@@ -240,7 +258,31 @@
       "select_conditions_placeholder": "— 请选择要求 —",
       "conditions_selected_count": "已选 {{count}} 项要求",
       "no_conditions_saved": "暂无保存的包装要求",
-      "no_conditions_hint": "请从上方列表中选择至少一项要求。"
+      "no_conditions_hint": "请从上方列表中选择至少一项要求。",
+      "search_placeholder": "搜索所需包装要求...",
+      "clear_all": "清除选择",
+      "ok_btn": "确定并应用",
+      "no_matching_conditions": "未找到匹配的包装要求",
+      "conditions_updated": "已更新订单包装要求",
+      "toggle_show": "选择 / 编辑要求",
+      "toggle_hide": "收起列表",
+      "save_as_fixed_btn": "将所选保存为永久固定要求",
+      "save_as_fixed_title": "保存所选要求作为所有新订单的默认固定条件",
+      "pin_term_action": "固定",
+      "pinned_term_status": "始终固定",
+      "pin_term_title": "固定为所有新订单的永久默认要求",
+      "unpin_term_title": "永久默认要求（点击取消固定）",
+      "fixed_terms_section_title": "永久固定要求（随每份订单自动记录）：",
+      "additional_terms_section_title": "为此订单选择的附加要求：",
+      "unpin_for_this_order": "仅对本订单取消选择",
+      "remove_extra_term": "删除附加要求",
+      "fixed_status_count": "({{count}} 项始终默认)",
+      "no_conditions_selected": "未选择要求",
+      "messages": {
+        "term_pinned": "📌 已将“{{name}}”固定为所有订单的默认要求！",
+        "term_unpinned": "已取消“{{name}}”的固定要求",
+        "terms_saved_fixed": "📌 已保存 ({{count}}) 条默认固定要求用于所有未来订单！"
+      }
     },
     "measurements": {
       "section_title": "产品详细尺寸规格",
@@ -281,7 +323,9 @@
       "tabs_tooltip": "切换到选项卡视图",
       "prev": "上一步",
       "next": "下一步",
-      "fetching": "正在加载..."
+      "fetching": "正在加载...",
+      "download_pdf": "下载 PDF",
+      "download_pdf_tooltip": "下载导出文档与发票 PDF"
     },
     "messages": {
       "confirm_clear": "⚠️ 您确定要清空所有数据并开始新订单吗？\n\n所有已输入的字段将被清除，表格将完全重置。",
@@ -674,10 +718,13 @@
         "health_score": "健康评分",
         "issues_alerts": "严重问题 / 警报",
         "total_sum": "总计 (Total 合计)",
-        "items_count": "{{count}} 项目 (Items)"
+        "items_count": "{{count}} 项目 (Items)",
+        "review_order": "查看/编辑",
+        "review_tooltip": "在录入向导中查看并编辑此订单",
+        "actions": "操作"
       }
     },
-    "detailed_terms": "发票所需条件",
+    "detailed_terms": "发票所需条件要求",
     "no_terms_available": "目前没有附加条款。您可以在设置中添加。",
     "activity": {
       "smart_log": "智能活动日志",
@@ -703,7 +750,10 @@
       "no_data_export": "没有可导出的数据",
       "preparing_pdf": "正在准备综合报告导出...",
       "pdf_success": "报告下载成功！",
-      "pdf_error": "下载 PDF 时出错"
+      "pdf_error": "下载 PDF 时出错",
+      "term_pinned": "📌 已将“{{name}}”设为默认固定条件！",
+      "term_unpinned": "已取消“{{name}}”的固定条件",
+      "terms_saved_fixed": "📌 已保存 ({{count}}) 条默认固定条件用于所有未来发票！"
     },
     "excel_headers": {
       "serial": "款号 (Serial)",
@@ -721,7 +771,28 @@
       "order_date": "下单日期",
       "delivery_date": "交货日期",
       "system_date": "系统添加日期"
-    }
+    },
+    "selected_terms_count": "已选 {{count}} 项条件",
+    "select_terms_placeholder": "选择所需条件要求...",
+    "search_terms_placeholder": "搜索发票所需条件...",
+    "no_matching_terms": "未找到匹配的条件",
+    "terms_updated": "已成功应用所选发票条件",
+    "clear_all": "清除选择",
+    "ok_btn": "确定并应用",
+    "toggle_terms_show": "选择 / 编辑条件",
+    "toggle_terms_hide": "收起列表",
+    "save_as_fixed_btn": "将所选保存为默认固定条件",
+    "save_as_fixed_title": "保存所选条件，使其自动出现在以后的所有发票中",
+    "pin_term_action": "固定",
+    "pinned_term_status": "始终固定",
+    "pin_term_title": "固定为所有发票的永久默认条件",
+    "unpin_term_title": "永久默认条件（点击取消固定）",
+    "fixed_terms_section_title": "永久固定条件（发票前半部分）：",
+    "additional_terms_section_title": "附加特殊条件（发票后半部分）：",
+    "unpin_for_this_invoice": "仅对本发票取消选择",
+    "remove_extra_term": "删除附加条件",
+    "fixed_status_count": "({{count}} 项始终默认)",
+    "no_conditions_selected": "未选择条件"
   },
   "shipping": {
     "title": "装运发票和综合报告",
@@ -976,13 +1047,12 @@
       "account_deleted_suspended": "此账户已被删除或停用！",
       "login_error": "尝试登录时发生错误"
     },
-    "login_desc": "输入您的凭据以访问系统",
+    "login_desc": "请输入您的凭据以访问系统",
     "logout": "退出登录",
     "username": "用户名",
     "password": "密码",
     "role": "角色/权限",
     "login_btn": "登录",
-    "login_desc": "请输入您的凭据以访问系统",
     "remember_me": "记住我",
     "logging_in": "正在登录...",
     "change_password": "修改密码",
@@ -1197,35 +1267,6 @@
     "shapes": "几何图形",
     "arrow": "箭头",
     "line": "直线"
-  },
-  "activity": {
-    "create": "创建订单",
-    "update": "更新订单",
-    "copy": "复制订单",
-    "delete": "删除订单",
-    "barcode_print": "打印条形码",
-    "barcode_sample": "打印样品条形码",
-    "receive": "工厂入库",
-    "fields": {
-      "productName": "产品名称",
-      "factoryId": "工厂",
-      "totalQuantity": "总数量",
-      "deliveryDate": "交货日期",
-      "productPrice": "单价",
-      "currency": "币种",
-      "cartonPackage": "装箱方式",
-      "cartonQty": "装箱数量",
-      "barcode": "主条形码",
-      "color_count": "颜色数量"
-    },
-    "notes": {
-      "created": "创建订单 #{{serial}}",
-      "updated": "更新订单 #{{serial}}",
-      "serial_changed": "将序列号从 {{old}} 更改为 {{new}}",
-      "deleted": "删除订单 #{{serial}}",
-      "copied": "从 {{from}} 复制订单到 {{to}}",
-      "received": "已收到的订单总数为 {{count}} 件"
-    }
   },
   "intelligence": {
     "stages": {

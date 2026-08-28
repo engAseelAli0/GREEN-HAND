@@ -131,7 +131,7 @@ const ColorCustomizer = () => {
               <div style={{ position: 'relative', width: '28px', height: '28px', borderRadius: '50%', overflow: 'hidden', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-sm)' }}>
                 <input
                   type="color"
-                  value={accentColor}
+                  value={accentColor && accentColor.startsWith('#') ? accentColor : `#${accentColor || 'd4af37'}`}
                   onChange={(e) => setAccentColor(e.target.value)}
                   style={{
                     position: 'absolute',

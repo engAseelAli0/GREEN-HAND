@@ -1,14 +1,16 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useSearchParams, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAppData, defaultOrderState } from '../context/AppDataContext';
 import { useAuth } from '../context/AuthContext';
 import { useFilteredLookups } from '../hooks/useFilteredLookups';
-import { Save, RefreshCw, Hash, Calendar, Box, Scissors, Palette, LayoutGrid, ChevronRight, ChevronLeft, MessageSquare, CheckSquare, Square, Ruler, Camera, X, ImagePlus, Edit3, Copy, Trash2, Layers, PanelTop, Search } from 'lucide-react';
+import { Save, RefreshCw, Hash, Calendar, Box, Scissors, Palette, LayoutGrid, ChevronRight, ChevronLeft, MessageSquare, CheckSquare, Square, Ruler, Camera, X, ImagePlus, Edit3, Copy, Trash2, Layers, PanelTop, Search, DownloadCloud, Pin, Sparkles, CheckCircle2 } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import toast from 'react-hot-toast';
 import { compressImage, normalizeImageUrl } from '../utils/imageUtils';
 import { CustomDateInput } from '../components/CustomDateInput';
 import ImageEditorModal from '../components/ImageEditorModal';
+import ExportOrderDocument, { downloadOrderPDF } from '../components/ExportOrderDocument';
 import { appendActivity, createActivityItem, summarizeOrderChanges } from '../utils/activityLog';
 
 const ClearableSelect = ({ value, onChange, children, className = "form-control", style, disabled, clearTitle }) => {
@@ -43,6 +45,9 @@ const ClearableSelect = ({ value, onChange, children, className = "form-control"
 
 const DataEntryWizard = () => {
   const { t } = useTranslation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+  const fetchedParamSerialRef = useRef(null);
   const { lookups, currentOrder, updateOrder, setCurrentOrder } = useAppData();
   const { user, hasPermission } = useAuth();
   const filteredLookups = useFilteredLookups();
@@ -79,6 +84,54 @@ const DataEntryWizard = () => {
   const [showPackagingPicker, setShowPackagingPicker] = useState(false);
   const [tempPackagingConditions, setTempPackagingConditions] = useState({});
   const [packagingSearchQuery, setPackagingSearchQuery] = useState('');
+  const [fixedPackagingTerms, setFixedPackagingTerms] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('gh_fixed_order_terms') || '[]');
+      return Array.isArray(saved) ? saved : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const toggleFixedPackagingTerm = (termName) => {
+    setFixedPackagingTerms(prev => {
+      const isAlreadyFixed = prev.includes(termName);
+      const next = isAlreadyFixed ? prev.filter(t => t !== termName) : [...prev, termName];
+      localStorage.setItem('gh_fixed_order_terms', JSON.stringify(next));
+      if (!isAlreadyFixed) {
+        updateOrder('packagingConditions', { ...(currentOrder?.packagingConditions || {}), [termName]: true });
+        setTempPackagingConditions(curr => ({ ...curr, [termName]: true }));
+        toast.success(t('entry.packaging.messages.term_pinned', { name: termName, defaultValue: `📌 تم تثبيت "${termName}" كشرط دائم لكل الطلبيات!` }), { id: 'pkg-pin-toast' });
+      } else {
+        toast.success(t('entry.packaging.messages.term_unpinned', { name: termName, defaultValue: `تم إلغاء تثبيت "${termName}" من الشروط الدائمة` }), { id: 'pkg-pin-toast' });
+      }
+      return next;
+    });
+  };
+
+  const handleSaveCurrentPackagingAsFixed = () => {
+    const activeTerms = Object.keys(tempPackagingConditions).filter(k => !!tempPackagingConditions[k]);
+    setFixedPackagingTerms(activeTerms);
+    localStorage.setItem('gh_fixed_order_terms', JSON.stringify(activeTerms));
+    updateOrder('packagingConditions', tempPackagingConditions);
+    setShowPackagingPicker(false);
+    toast.success(t('entry.packaging.messages.terms_saved_fixed', { count: activeTerms.length, defaultValue: `📌 تم حفظ (${activeTerms.length}) شروط ثابتة افتراضياً لكل الطلبيات القادمة!` }), { id: 'fixed-pkg-toast' });
+  };
+
+  useEffect(() => {
+    if (!isEditMode && (!currentOrder?.packagingConditions || Object.keys(currentOrder.packagingConditions).length === 0)) {
+      try {
+        const saved = JSON.parse(localStorage.getItem('gh_fixed_order_terms') || '[]');
+        if (Array.isArray(saved) && saved.length > 0) {
+          const initConditions = {};
+          saved.forEach(t => { initConditions[t] = true; });
+          updateOrder('packagingConditions', initConditions);
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }, [isEditMode]);
   const serialSearchRef = useRef(null);
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
@@ -237,6 +290,10 @@ const DataEntryWizard = () => {
   };
 
   useEffect(() => {
+    const serialParam = searchParams.get('serial') || location.state?.serial;
+    if (serialParam) {
+      return; // Will be loaded by serial watcher
+    }
     if (!currentOrder.serialNumber) {
        fetchNextAvailableSerial().then(nextNum => {
          updateOrder('serialNumber', nextNum);
@@ -249,6 +306,17 @@ const DataEntryWizard = () => {
        });
     }
   }, []); // eslint-disable-line
+
+  useEffect(() => {
+    const serialParam = searchParams.get('serial') || location.state?.serial;
+    if (serialParam && String(serialParam).trim()) {
+      const cleanSerial = String(serialParam).trim();
+      if (fetchedParamSerialRef.current !== cleanSerial) {
+        fetchedParamSerialRef.current = cleanSerial;
+        handleFetch(cleanSerial);
+      }
+    }
+  }, [searchParams, location.state]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const switchTab = (tabId) => {
     setActiveTab(tabId);
@@ -690,31 +758,98 @@ const DataEntryWizard = () => {
          const safeNewSerial = newSerial.replace(/[/\\?%*:|"<>]/g, '-');
          for (let idx = 0; idx < currentOrder.productImages.length; idx++) {
            const origImg = currentOrder.productImages[idx];
-           const ext = (origImg.name || 'jpg').split('.').pop() || 'jpg';
+           if (!origImg) continue;
+
+           const origName = typeof origImg === 'string' ? origImg : (origImg.name || origImg.path || 'image.jpg');
+           const ext = origName.split('.').pop() || 'jpg';
            const newFileName = idx === 0 ? `${safeNewSerial}.${ext}` : `${safeNewSerial}_${idx}.${ext}`;
            const newFilePath = `product-images/${newFileName}`;
            
-           let oldPath = origImg.path;
-           if (!oldPath && origImg.url && !origImg.url.startsWith('http') && !origImg.url.startsWith('blob:')) {
-             oldPath = origImg.url.startsWith('product-images/') ? origImg.url : `product-images/${origImg.url}`;
+           // Get source URL and old storage path
+           const sourceUrl = normalizeImageUrl(origImg);
+           let oldPath = (typeof origImg === 'object' && origImg.path) ? origImg.path : '';
+           if (!oldPath && sourceUrl) {
+             const match = sourceUrl.match(/\/product_images\/(?:product-images\/)?([^\?#]+)/);
+             if (match) {
+               oldPath = `product-images/${decodeURIComponent(match[1])}`;
+             } else if (!sourceUrl.startsWith('http') && !sourceUrl.startsWith('blob:') && !sourceUrl.startsWith('data:')) {
+               oldPath = sourceUrl.startsWith('product-images/') ? sourceUrl : `product-images/${sourceUrl}`;
+             }
            }
+           if (oldPath && oldPath.startsWith('/')) oldPath = oldPath.slice(1);
 
+           let duplicatedSuccessfully = false;
+
+           // Strategy 1: Server-side storage copy
            if (oldPath) {
-             const { error: copyErr } = await supabase.storage.from('product_images').copy(oldPath, newFilePath);
-             if (!copyErr) {
-               const { data: urlData } = supabase.storage.from('product_images').getPublicUrl(newFilePath);
-               copiedProductImages.push({
-                 name: newFileName,
-                 path: newFilePath,
-                 url: urlData.publicUrl
-               });
-               continue;
+             try {
+               const { error: copyErr } = await supabase.storage.from('product_images').copy(oldPath, newFilePath);
+               if (!copyErr) {
+                 const { data: urlData } = supabase.storage.from('product_images').getPublicUrl(newFilePath);
+                 copiedProductImages.push({
+                   name: newFileName,
+                   path: newFilePath,
+                   url: urlData.publicUrl
+                 });
+                 duplicatedSuccessfully = true;
+               } else {
+                 console.warn('Storage server-side copy failed, attempting binary download & upload fallback:', copyErr);
+               }
+             } catch (e) {
+               console.warn('Storage copy error:', e);
              }
            }
 
-           // If copy failed or wasn't possible, preserve original if it's a valid absolute URL
-           if (origImg.url && (origImg.url.startsWith('http') || origImg.url.startsWith('blob:'))) {
-             copiedProductImages.push({ ...origImg });
+           // Strategy 2: Fetch image binary (Blob) and upload directly under new name
+           if (!duplicatedSuccessfully && sourceUrl) {
+             try {
+               let imageBlob = null;
+               // Try storage download if oldPath exists
+               if (oldPath) {
+                 const { data: blobData, error: dlErr } = await supabase.storage.from('product_images').download(oldPath);
+                 if (blobData && !dlErr) {
+                   imageBlob = blobData;
+                 }
+               }
+               // If not downloaded via storage API, fetch from public URL / blob URL
+               if (!imageBlob && (sourceUrl.startsWith('http') || sourceUrl.startsWith('blob:') || sourceUrl.startsWith('data:'))) {
+                 const resp = await fetch(sourceUrl);
+                 if (resp.ok) {
+                   imageBlob = await resp.blob();
+                 }
+               }
+
+               if (imageBlob) {
+                 const uploadFile = new File([imageBlob], newFileName, { type: imageBlob.type || 'image/jpeg' });
+                 const { error: upErr } = await supabase.storage.from('product_images').upload(newFilePath, uploadFile, { upsert: true });
+                 if (!upErr) {
+                   const { data: urlData } = supabase.storage.from('product_images').getPublicUrl(newFilePath);
+                   copiedProductImages.push({
+                     name: newFileName,
+                     path: newFilePath,
+                     url: urlData.publicUrl
+                   });
+                   duplicatedSuccessfully = true;
+                 } else {
+                   console.error('Storage binary upload fallback failed:', upErr);
+                 }
+               }
+             } catch (fallbackErr) {
+               console.error('Image binary fallback failed:', fallbackErr);
+             }
+           }
+
+           // Strategy 3: Ultimate fallback - keep existing valid public URL so link doesn't break
+           if (!duplicatedSuccessfully) {
+             if (sourceUrl && (sourceUrl.startsWith('http://') || sourceUrl.startsWith('https://'))) {
+               copiedProductImages.push({
+                 name: origName,
+                 path: oldPath || origName,
+                 url: sourceUrl
+               });
+             } else if (typeof origImg === 'object') {
+               copiedProductImages.push({ ...origImg });
+             }
            }
          }
        }
@@ -836,7 +971,7 @@ const DataEntryWizard = () => {
         return;
       }
       
-      const { data: recData } = await supabase.from('receivings').select('receive_data').ilike('serial_number', searchVal).single();
+      const { data: recData } = await supabase.from('receivings').select('receive_data').ilike('serial_number', searchVal).maybeSingle();
       const isReceived = recData && recData.receive_data && recData.receive_data.status && typeof recData.receive_data.status === 'string' && (
         recData.receive_data.status.includes('Received') ||
         recData.receive_data.status === 'مستلمة' ||
@@ -873,6 +1008,8 @@ const DataEntryWizard = () => {
       setProductImages(finalOrder.productImages?.map(img => ({ ...img, preview: normalizeImageUrl(img) })) || []);
       setIsEditMode(true);
       setOriginalSerial(finalOrder.serialNumber);
+      setActiveTab('basic');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       toast.success(t('entry.messages.fetch_success', { serial: finalOrder.serialNumber }), { id: toastId });
       if (document.getElementById('fetchSerialInput')) document.getElementById('fetchSerialInput').value = '';
     } catch {
@@ -881,6 +1018,10 @@ const DataEntryWizard = () => {
   };
 
   const handleClear = async () => {
+    fetchedParamSerialRef.current = null;
+    if (searchParams.get('serial')) {
+      setSearchParams({}, { replace: true });
+    }
     setProductImages([]);
     setSelectedColorsArr([]);
     setIsEditMode(false);
@@ -892,11 +1033,34 @@ const DataEntryWizard = () => {
     const nextSerial = await fetchNextAvailableSerial();
     const nextOrder = await fetchNextOrderNumber();
     
-    setCurrentOrder({ ...defaultOrderState, serialNumber: nextSerial, orderNumber: nextOrder });
+    let initConditions = {};
+    try {
+      const saved = JSON.parse(localStorage.getItem('gh_fixed_order_terms') || '[]');
+      if (Array.isArray(saved) && saved.length > 0) {
+        saved.forEach(t => { initConditions[t] = true; });
+      }
+    } catch {
+      // ignore
+    }
+    setCurrentOrder({ ...defaultOrderState, packagingConditions: initConditions, serialNumber: nextSerial, orderNumber: nextOrder });
     setAutoFocusLastSize(false);
     setSerialStatus('available');
     
     toast.success(t('entry.messages.cleared_success'));
+  };
+
+  const handleDownloadOrderPDF = async () => {
+    const orderToExport = {
+      ...currentOrder,
+      productImages: productImages.length > 0 ? productImages : currentOrder.productImages
+    };
+
+    if (!orderToExport.serialNumber && !orderToExport.productName && !orderToExport.buyerCompany) {
+      toast.error(t('entry.messages.missing_serial', { defaultValue: 'يرجى إدخال أو جلب بيانات الطلبية أولاً' }));
+      return;
+    }
+
+    await downloadOrderPDF({ order: orderToExport, elementId: 'entry-export-doc', t });
   };
 
   const handleColorChange = (color, size, qty) => {
@@ -2071,206 +2235,339 @@ const DataEntryWizard = () => {
     }
 
       case 'packaging': {
-        const selectedConditions = lookups.packagingConditionsList?.filter(cond => !!currentOrder.packagingConditions?.[cond]) || [];
+        const selectedConditions = (lookups.packagingConditionsList || [])
+          .map(c => (typeof c === 'object' ? c.name : c))
+          .filter(cond => !!currentOrder?.packagingConditions?.[cond]);
+        const fixedSelected = selectedConditions.filter(c => fixedPackagingTerms.includes(c));
+        const extraSelected = selectedConditions.filter(c => !fixedPackagingTerms.includes(c));
+
         return (
           <div className="tab-panel" key={tabKey}>
             <div className="card">
-              <div className="tab-section-header">
-                <h3><CheckSquare size={22} /> {t('entry.packaging.section_title')}</h3>
+              <div className="tab-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <CheckSquare size={22} color="var(--accent-color)" />
+                  <span>{t('entry.packaging.section_title')}</span>
+                  <span style={{ 
+                    fontSize: '0.8rem', 
+                    backgroundColor: 'rgba(212, 175, 55, 0.12)', 
+                    color: 'var(--accent-color)', 
+                    border: '1px solid rgba(212, 175, 55, 0.3)', 
+                    borderRadius: '20px', 
+                    padding: '2px 10px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}>
+                    <CheckCircle2 size={12} />
+                    {selectedConditions.length > 0 ? t('entry.packaging.conditions_selected_count', { count: selectedConditions.length, defaultValue: `تم اختيار ${selectedConditions.length} شرط` }) : t('entry.packaging.no_conditions_selected', { defaultValue: 'لم يتم اختيار شروط' })}
+                    {fixedPackagingTerms.length > 0 && t('entry.packaging.fixed_status_count', { count: fixedPackagingTerms.length, defaultValue: ` (${fixedPackagingTerms.length} ثابتة تلقائياً)` })}
+                  </span>
+                </h3>
+
+                <button 
+                  type="button"
+                  onClick={() => {
+                    if (!showPackagingPicker) {
+                      setTempPackagingConditions({ ...(currentOrder?.packagingConditions || {}) });
+                      setPackagingSearchQuery('');
+                    }
+                    setShowPackagingPicker(prev => !prev);
+                  }}
+                  className="btn btn-outline"
+                  style={{ 
+                    padding: '0.4rem 0.9rem', 
+                    fontSize: '0.85rem', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '0.4rem',
+                    borderColor: 'var(--border-color)'
+                  }}
+                >
+                  <span>{showPackagingPicker ? t('entry.packaging.toggle_hide', { defaultValue: 'إخفاء القائمة' }) : t('entry.packaging.toggle_show', { defaultValue: 'تحديد / تعديل الشروط' })}</span>
+                  <ChevronLeft size={16} style={{ 
+                    transform: showPackagingPicker ? 'rotate(90deg)' : 'rotate(-90deg)',
+                    transition: 'transform 0.2s'
+                  }} />
+                </button>
               </div>
               
-              <div style={{ marginBottom: '1.5rem', padding: '1rem', backgroundColor: 'var(--surface-color)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap' }}>
-                  <label style={{ fontWeight: 'bold', fontSize: '0.9rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', paddingTop: '0.5rem' }}>
-                    <CheckSquare size={16} style={{ verticalAlign: 'middle', marginLeft: '0.4rem' }} />
-                    {t('entry.packaging.select_conditions')}
-                  </label>
-                  <div ref={packagingPickerRef} style={{ position: 'relative', flex: '1', minWidth: '220px', maxWidth: '400px' }}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!showPackagingPicker) {
-                          setTempPackagingConditions({ ...(currentOrder.packagingConditions || {}) });
-                          setPackagingSearchQuery('');
-                        }
-                        setShowPackagingPicker(prev => !prev);
-                      }}
-                      className="form-control"
-                      style={{
-                        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                        textAlign: 'right', width: '100%', padding: '0.5rem 0.75rem',
-                        border: showPackagingPicker ? '2px solid var(--accent-color)' : '1px solid var(--border-color)',
-                        borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--bg-color)',
-                        color: selectedConditions.length > 0 ? 'var(--text-main)' : 'var(--text-muted)',
-                        transition: 'border-color 0.2s'
-                      }}
-                    >
-                      <span>{selectedConditions.length > 0 ? t('entry.packaging.conditions_selected_count', { count: selectedConditions.length, defaultValue: `تم اختيار ${selectedConditions.length} شرط` }) : t('entry.packaging.select_conditions_placeholder', { defaultValue: 'اختر الشروط المطلوبة...' })}</span>
-                      <ChevronLeft size={16} style={{ transform: showPackagingPicker ? 'rotate(90deg)' : 'rotate(-90deg)', transition: 'transform 0.2s', opacity: 0.6 }} />
-                    </button>
-                    {showPackagingPicker && (
-                      <div style={{
-                        position: 'absolute', top: '100%', right: 0, left: 0, zIndex: 100,
-                        marginTop: '4px', padding: '0.75rem',
-                        backgroundColor: 'var(--surface-color)', border: '2px solid var(--accent-color)',
-                        borderRadius: 'var(--radius-md)', boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
-                        maxHeight: '340px', overflowY: 'auto'
-                      }}>
-                        {/* Search filter input inside dropdown */}
-                        <div style={{ marginBottom: '0.75rem', position: 'relative' }}>
-                          <input
-                            type="text"
-                            placeholder={t('entry.packaging.search_placeholder', { defaultValue: 'البحث في الشروط المطلوبة...' })}
-                            value={packagingSearchQuery}
-                            onChange={(e) => setPackagingSearchQuery(e.target.value)}
-                            style={{
-                              width: '100%',
-                              padding: '0.5rem 2rem 0.5rem 0.75rem',
-                              fontSize: '0.9rem',
-                              border: '1px solid var(--border-color)',
-                              borderRadius: 'var(--radius-sm, 6px)',
-                              backgroundColor: 'var(--bg-color)',
-                              color: 'var(--text-main)',
-                              outline: 'none',
-                              textAlign: 'right',
-                              direction: 'rtl'
-                            }}
-                          />
-                          <Search size={15} style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }} />
-                        </div>
+              <div style={{ marginBottom: '1.5rem', padding: '1.25rem', backgroundColor: 'var(--surface-color)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+                {showPackagingPicker && (
+                  <div style={{ animation: 'fadeIn 0.2s ease', marginBottom: '1.25rem' }}>
+                    {/* Top Toolbar: Search + Action Buttons */}
+                    <div style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'space-between', 
+                      gap: '1rem', 
+                      marginBottom: '1rem',
+                      flexWrap: 'wrap'
+                    }}>
+                      {/* Search input */}
+                      <div style={{ position: 'relative', flex: 1, minWidth: '240px' }}>
+                        <input
+                          type="text"
+                          placeholder={t('entry.packaging.search_placeholder', { defaultValue: 'البحث في الشروط المطلوبة...' })}
+                          value={packagingSearchQuery}
+                          onChange={(e) => setPackagingSearchQuery(e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '0.55rem 2.2rem 0.55rem 0.75rem',
+                            fontSize: '0.9rem',
+                            border: '1px solid var(--border-color)',
+                            borderRadius: '8px',
+                            backgroundColor: 'var(--bg-color)',
+                            color: 'var(--text-main)',
+                            outline: 'none',
+                            textAlign: 'right',
+                            direction: 'rtl'
+                          }}
+                        />
+                        <Search size={15} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }} />
+                      </div>
 
-                        <div style={{ 
-                          maxHeight: '180px', 
-                          overflowY: 'auto',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: '0.25rem'
-                        }}>
-                          {(() => {
-                            const filtered = (lookups.packagingConditionsList || []).filter(cond => {
-                              const condName = typeof cond === 'object' ? cond.name : cond;
-                              return condName.toLowerCase().includes(packagingSearchQuery.toLowerCase());
-                            });
-                            if (filtered.length > 0) {
-                              return filtered.map((cond, i) => {
-                                const condName = typeof cond === 'object' ? cond.name : cond;
-                                const isChecked = !!tempPackagingConditions[condName];
-                                return (
-                                  <div
-                                    key={i}
-                                    onClick={() => setTempPackagingConditions(prev => ({ ...prev, [condName]: !isChecked }))}
-                                    style={{
-                                      display: 'flex', alignItems: 'center', gap: '0.6rem',
-                                      padding: '0.5rem 0.6rem', cursor: 'pointer',
-                                      borderRadius: '6px', transition: 'background-color 0.15s',
-                                      backgroundColor: isChecked ? 'rgba(212, 175, 55, 0.12)' : 'transparent',
-                                      marginBottom: '2px'
-                                    }}
-                                    onMouseEnter={(e) => { if (!isChecked) e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)'; }}
-                                    onMouseLeave={(e) => { if (!isChecked) e.currentTarget.style.backgroundColor = 'transparent'; }}
-                                  >
-                                    <div style={{
-                                      width: '18px', height: '18px', borderRadius: '4px', flexShrink: 0,
-                                      border: isChecked ? '2px solid var(--accent-color)' : '2px solid var(--border-color)',
-                                      backgroundColor: isChecked ? 'var(--accent-color)' : 'transparent',
-                                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                      transition: 'all 0.15s'
-                                    }}>
-                                      {isChecked && <span style={{ color: '#000', fontSize: '12px', fontWeight: 'bold', lineHeight: 1 }}>✓</span>}
-                                    </div>
-                                    <span style={{ fontWeight: isChecked ? 'bold' : 'normal', color: 'var(--text-main)', fontSize: '0.9rem' }}>
-                                      {condName}
-                                    </span>
-                                  </div>
-                                );
-                              });
-                            }
+                      {/* Action buttons */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        <button 
+                          type="button"
+                          onClick={handleSaveCurrentPackagingAsFixed}
+                          title={t('entry.packaging.save_as_fixed_title', { defaultValue: 'حفظ الشروط المحددة لتكون الشروط الثابتة التلقائية لكل الطلبيات الجديدة' })}
+                          className="btn btn-outline"
+                          style={{ 
+                            padding: '0.45rem 0.9rem', 
+                            fontSize: '0.82rem',
+                            borderColor: 'var(--accent-color)',
+                            color: 'var(--accent-color)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          <Pin size={13} style={{ fill: 'currentColor' }} />
+                          <span>{t('entry.packaging.save_as_fixed_btn', { defaultValue: 'حفظ المحددة كشروط ثابتة دائماً' })}</span>
+                        </button>
+
+                        <button 
+                          type="button"
+                          onClick={() => setTempPackagingConditions({})}
+                          className="btn btn-outline"
+                          style={{ padding: '0.45rem 0.8rem', fontSize: '0.82rem' }}
+                        >
+                          {t('entry.packaging.clear_all', { defaultValue: 'مسح التحديد' })}
+                        </button>
+
+                        <button 
+                          type="button"
+                          onClick={() => {
+                            updateOrder('packagingConditions', tempPackagingConditions);
+                            setShowPackagingPicker(false);
+                            toast.success(t('entry.packaging.conditions_updated', { defaultValue: 'تم حفظ الشروط للطلبية' }));
+                          }}
+                          className="btn btn-accent"
+                          style={{ 
+                            padding: '0.45rem 1.4rem', 
+                            fontSize: '0.85rem',
+                            backgroundColor: 'var(--accent-color)',
+                            color: '#000',
+                            fontWeight: 'bold'
+                          }}
+                        >
+                          {t('entry.packaging.ok_btn', { defaultValue: 'موافق وتطبيق' })}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Conditions List */}
+                    <div style={{ 
+                      maxHeight: '280px', 
+                      overflowY: 'auto', 
+                      padding: '0.5rem',
+                      backgroundColor: 'rgba(0, 0, 0, 0.2)',
+                      borderRadius: '8px',
+                      border: '1px solid var(--border-color)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '0.5rem'
+                    }}>
+                      {(() => {
+                        const filtered = (lookups.packagingConditionsList || []).filter(cond => {
+                          const condName = typeof cond === 'object' ? cond.name : cond;
+                          return condName.toLowerCase().includes(packagingSearchQuery.toLowerCase());
+                        });
+                        if (filtered.length > 0) {
+                          return filtered.map((cond, i) => {
+                            const condName = typeof cond === 'object' ? cond.name : cond;
+                            const isChecked = !!tempPackagingConditions[condName];
+                            const isFixed = fixedPackagingTerms.includes(condName);
                             return (
-                              <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                                {t('entry.packaging.no_matching_conditions', { defaultValue: 'لا توجد شروط مطابقة للبحث' })}
+                              <div
+                                key={i}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  gap: '1rem',
+                                  padding: '0.65rem 0.9rem',
+                                  borderRadius: '6px',
+                                  backgroundColor: isChecked ? 'rgba(212, 175, 55, 0.09)' : 'var(--bg-color)',
+                                  border: isFixed ? '1px solid var(--accent-color)' : (isChecked ? '1px solid rgba(212, 175, 55, 0.3)' : '1px solid var(--border-color)'),
+                                  transition: 'all 0.2s',
+                                  userSelect: 'none'
+                                }}
+                              >
+                                {/* Checkbox and Label */}
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', flex: 1, margin: 0 }}>
+                                  <input 
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={() => setTempPackagingConditions(prev => ({ ...prev, [condName]: !isChecked }))}
+                                    style={{
+                                      width: '18px',
+                                      height: '18px',
+                                      accentColor: 'var(--accent-color)',
+                                      cursor: 'pointer',
+                                      flexShrink: 0
+                                    }}
+                                  />
+                                  <span style={{ 
+                                    fontSize: '0.92rem',
+                                    color: isChecked ? 'var(--text-strong)' : 'var(--text-main)',
+                                    fontWeight: isChecked ? '600' : 'normal',
+                                    lineHeight: '1.4'
+                                  }}>
+                                    {condName}
+                                  </span>
+                                </label>
+
+                                {/* Pin Button */}
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleFixedPackagingTerm(condName);
+                                  }}
+                                  title={isFixed ? t('entry.packaging.unpin_term_title', { defaultValue: 'شرط ثابت دائماً للطلبيات (انقر لإلغاء التثبيت)' }) : t('entry.packaging.pin_term_title', { defaultValue: 'تثبيت كشرط دائم افتراضي لكل الطلبيات الجديدة' })}
+                                  style={{
+                                    background: isFixed ? 'rgba(212, 175, 55, 0.2)' : 'transparent',
+                                    border: isFixed ? '1px solid var(--accent-color)' : '1px dashed var(--border-color)',
+                                    borderRadius: '6px',
+                                    padding: '4px 10px',
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '5px',
+                                    fontSize: '0.78rem',
+                                    color: isFixed ? 'var(--accent-color)' : 'var(--text-muted)',
+                                    flexShrink: 0,
+                                    fontWeight: isFixed ? 'bold' : 'normal',
+                                    transition: 'all 0.2s'
+                                  }}
+                                >
+                                  <Pin size={12} style={{ fill: isFixed ? 'currentColor' : 'none' }} />
+                                  <span>{isFixed ? t('entry.packaging.pinned_term_status', { defaultValue: 'ثابت دائماً' }) : t('entry.packaging.pin_term_action', { defaultValue: 'تثبيت' })}</span>
+                                </button>
                               </div>
                             );
-                          })()}
-                        </div>
+                          });
+                        }
+                        return (
+                          <div style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                            {t('entry.packaging.no_matching_conditions', { defaultValue: 'لا توجد شروط مطابقة للبحث' })}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                )}
 
-                        {/* Confirmation and Clear Action Buttons */}
-                        <div style={{ 
-                          display: 'flex', 
-                          justifyContent: 'flex-end', 
-                          gap: '0.5rem', 
-                          borderTop: '1px solid var(--border-color)', 
-                          paddingTop: '0.75rem',
-                          marginTop: '0.75rem'
-                        }}>
-                          <button 
-                            type="button"
-                            onClick={() => setTempPackagingConditions({})}
-                            className="btn"
-                            style={{ padding: '0.35rem 0.8rem', fontSize: '0.8rem', backgroundColor: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-muted)' }}
-                          >
-                            {t('entry.packaging.clear_all', { defaultValue: 'مسح الكل' })}
-                          </button>
-                          <button 
-                            type="button"
-                            onClick={() => {
-                              updateOrder('packagingConditions', tempPackagingConditions);
-                              setShowPackagingPicker(false);
-                              toast.success(t('entry.packaging.conditions_updated', { defaultValue: 'تم تحديث الشروط المختارة' }));
-                            }}
-                            className="btn btn-accent"
-                            style={{ 
-                              padding: '0.35rem 1.2rem', 
-                              fontSize: '0.8rem',
-                              backgroundColor: 'var(--accent-color)',
-                              color: '#000',
-                              fontWeight: 'bold'
-                            }}
-                          >
-                            {t('entry.packaging.ok_btn', { defaultValue: 'موافق' })}
-                          </button>
+                {/* Grouped Selected Badges Display */}
+                {selectedConditions.length > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    {/* Fixed Conditions Section */}
+                    {fixedSelected.length > 0 && (
+                      <div>
+                        <div style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--accent-color)', marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <Pin size={13} style={{ fill: 'currentColor' }} />
+                          <span>{t('entry.packaging.fixed_terms_section_title', { defaultValue: 'الشروط الثابتة الدائمة (تتسجل تلقائياً مع كل طلبية):' })}</span>
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                          {fixedSelected.map((cond, i) => (
+                            <span key={i} style={{
+                              display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
+                              padding: '0.35rem 0.75rem', borderRadius: '6px',
+                              backgroundColor: 'rgba(212, 175, 55, 0.15)',
+                              border: '1px solid var(--accent-color)',
+                              fontSize: '0.85rem', fontWeight: '500',
+                              color: 'var(--text-strong)',
+                              animation: 'fadeIn 0.2s ease'
+                            }}>
+                              <Pin size={12} style={{ fill: 'currentColor', color: 'var(--accent-color)' }} />
+                              <span>{cond}</span>
+                              <button 
+                                type="button" 
+                                onClick={() => handlePackagingConditionChange(cond, false)} 
+                                style={{
+                                  background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer',
+                                  padding: '0', display: 'flex', alignItems: 'center', marginRight: '-0.2rem'
+                                }} 
+                                title={t('entry.packaging.unpin_for_this_order', { defaultValue: 'إلغاء التحديد لهذه الطلبية فقط' })}
+                              >
+                                <X size={14} />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Additional Conditions Section */}
+                    {extraSelected.length > 0 && (
+                      <div>
+                        <div style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--text-muted)', marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <Sparkles size={13} />
+                          <span>{t('entry.packaging.additional_terms_section_title', { defaultValue: 'الشروط الإضافية المحددة لهذه الطلبية:' })}</span>
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                          {extraSelected.map((cond, i) => (
+                            <span key={i} style={{
+                              display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
+                              padding: '0.35rem 0.75rem', borderRadius: '6px',
+                              backgroundColor: 'var(--bg-color)',
+                              border: '1px solid var(--border-color)',
+                              fontSize: '0.85rem',
+                              color: 'var(--text-main)',
+                              animation: 'fadeIn 0.2s ease'
+                            }}>
+                              <span>{cond}</span>
+                              <button 
+                                type="button" 
+                                onClick={() => handlePackagingConditionChange(cond, false)} 
+                                style={{
+                                  background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer',
+                                  padding: '0', display: 'flex', alignItems: 'center', marginRight: '-0.2rem'
+                                }} 
+                                title={t('entry.packaging.remove_extra_term', { defaultValue: 'حذف الشرط الإضافي' })}
+                              >
+                                <X size={14} />
+                              </button>
+                            </span>
+                          ))}
                         </div>
                       </div>
                     )}
                   </div>
-                </div>
-
-                {selectedConditions.length > 0 && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border-color)' }}>
-                    {selectedConditions.map((cond, i) => (
-                      <span key={i} style={{
-                        display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
-                        padding: '0.3rem 0.7rem', borderRadius: '50px',
-                        backgroundColor: 'rgba(212, 175, 55, 0.1)',
-                        border: '1px solid var(--accent-color)',
-                        fontSize: '0.85rem', fontWeight: 'bold',
-                        color: 'var(--text-main)',
-                        animation: 'fadeIn 0.2s ease'
-                      }}>
-                        {cond}
-                        <button type="button" onClick={() => handlePackagingConditionChange(cond, false)} style={{
-                          background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer',
-                          padding: '0', display: 'flex', alignItems: 'center', marginRight: '-0.2rem'
-                        }} title={t('entry.actions.delete_btn')}>
-                          <X size={13} strokeWidth={3} />
-                        </button>
-                      </span>
-                    ))}
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '2rem 1rem', color: 'var(--text-muted)', fontSize: '0.92rem' }}>
+                    <CheckSquare size={36} style={{ opacity: 0.25, display: 'block', margin: '0 auto 0.5rem' }} />
+                    {t('entry.packaging.no_conditions_hint')}
                   </div>
                 )}
               </div>
-              
-              {selectedConditions.length === 0 && (
-                <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-muted)', fontSize: '0.95rem', backgroundColor: 'var(--surface-color)', borderRadius: 'var(--radius-md)', border: '1px dashed var(--border-color)' }}>
-                  <CheckSquare size={40} style={{ opacity: 0.25, display: 'block', margin: '0 auto 0.75rem' }} />
-                  {t('entry.packaging.no_conditions_hint')}
-                </div>
-              )}
             </div>
           </div>
         );
       }
-
-
 
       default:
         return null;
@@ -2349,6 +2646,40 @@ const DataEntryWizard = () => {
                 }}
               >
                 <RefreshCw size={15} /> {t('entry.actions.clear_btn')}
+              </button>
+              <button
+                type="button"
+                className="btn"
+                onClick={handleDownloadOrderPDF}
+                title={t('entry.actions.download_pdf_tooltip', 'تحميل مستند وفاتورة التصدير كملف PDF')}
+                style={{
+                  padding: '0.5rem 1rem',
+                  background: 'linear-gradient(135deg, #1a5276, #2980b9)',
+                  border: 'none',
+                  color: '#fff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  fontSize: '0.85rem',
+                  fontWeight: 'bold',
+                  borderRadius: 'var(--radius-sm, 8px)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  boxShadow: '0 2px 8px rgba(26, 82, 118, 0.3)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'linear-gradient(135deg, #154360, #1f618d)';
+                  e.currentTarget.style.boxShadow = '0 4px 16px rgba(26, 82, 118, 0.4)';
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'linear-gradient(135deg, #1a5276, #2980b9)';
+                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(26, 82, 118, 0.3)';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                }}
+              >
+                <DownloadCloud size={16} />
+                <span>{t('entry.actions.download_pdf', 'تحميل PDF')}</span>
               </button>
               
               {showSerialsList && (
@@ -2681,6 +3012,7 @@ const DataEntryWizard = () => {
           alignItems: 'center',
           justifyContent: 'center',
           gap: '1rem',
+          flexWrap: 'wrap',
           padding: '0.75rem 1.5rem',
           background: 'linear-gradient(135deg, rgba(212, 175, 55, 0.15), rgba(212, 175, 55, 0.05))',
           border: '1px solid rgba(212, 175, 55, 0.3)',
@@ -2692,6 +3024,26 @@ const DataEntryWizard = () => {
           <span style={{ color: 'var(--accent-color)', fontWeight: '600', fontSize: '0.95rem' }}>
             {t('entry.actions.edit_mode_banner', { serial: originalSerial })}
           </span>
+          <button
+            type="button"
+            className="btn"
+            onClick={handleDownloadOrderPDF}
+            style={{
+              padding: '0.4rem 0.85rem',
+              fontSize: '0.82rem',
+              background: 'linear-gradient(135deg, #1a5276, #2980b9)',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '6px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.35rem',
+              fontWeight: 'bold',
+              cursor: 'pointer'
+            }}
+          >
+            <DownloadCloud size={14} /> {t('entry.actions.download_pdf', 'تحميل PDF')}
+          </button>
           <button
             className="btn btn-outline"
             onClick={handleClear}
@@ -2707,7 +3059,7 @@ const DataEntryWizard = () => {
           className="btn"
           disabled={isSaving}
           style={{
-            flex: 1, maxWidth: '200px', fontSize: '0.95rem', padding: '0.9rem',
+            flex: 1, maxWidth: '180px', fontSize: '0.95rem', padding: '0.9rem',
             background: 'linear-gradient(135deg, #ef4444, #dc2626)',
             border: 'none', color: '#fff', fontWeight: 'bold',
             boxShadow: '0 2px 8px rgba(239, 68, 68, 0.3)',
@@ -2734,6 +3086,48 @@ const DataEntryWizard = () => {
           }}
         >
           <RefreshCw size={18} /> {t('entry.actions.clear_btn')}
+        </button>
+
+        <button
+          type="button"
+          className="btn"
+          disabled={isSaving}
+          style={{
+            flex: 1,
+            maxWidth: '180px',
+            fontSize: '0.95rem',
+            padding: '0.9rem',
+            background: 'linear-gradient(135deg, #1a5276, #2980b9)',
+            border: 'none',
+            color: '#fff',
+            fontWeight: 'bold',
+            boxShadow: '0 2px 8px rgba(26, 82, 118, 0.3)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '0.45rem',
+            borderRadius: 'var(--radius-sm, 8px)',
+            cursor: isSaving ? 'not-allowed' : 'pointer',
+            opacity: isSaving ? 0.5 : 1,
+            transition: 'all 0.2s'
+          }}
+          onClick={handleDownloadOrderPDF}
+          title={t('entry.actions.download_pdf_tooltip', 'تحميل مستند وفاتورة التصدير كملف PDF')}
+          onMouseEnter={(e) => {
+            if (isSaving) return;
+            e.currentTarget.style.background = 'linear-gradient(135deg, #154360, #1f618d)';
+            e.currentTarget.style.boxShadow = '0 4px 16px rgba(26, 82, 118, 0.4)';
+            e.currentTarget.style.transform = 'translateY(-1px)';
+          }}
+          onMouseLeave={(e) => {
+            if (isSaving) return;
+            e.currentTarget.style.background = 'linear-gradient(135deg, #1a5276, #2980b9)';
+            e.currentTarget.style.boxShadow = '0 2px 8px rgba(26, 82, 118, 0.3)';
+            e.currentTarget.style.transform = 'translateY(0)';
+          }}
+        >
+          <DownloadCloud size={18} />
+          <span>{t('entry.actions.download_pdf', 'تحميل PDF')}</span>
         </button>
 
         {isEditMode ? (
@@ -2783,6 +3177,19 @@ const DataEntryWizard = () => {
             </button>
           )
         )}
+      </div>
+
+      {/* Hidden Container for Export Order PDF Rendering */}
+      <div style={{ position: 'absolute', left: '-9999px', top: '-9999px', visibility: 'hidden' }}>
+        <ExportOrderDocument
+          id="entry-export-doc"
+          order={{
+            ...currentOrder,
+            productImages: productImages.length > 0 ? productImages : currentOrder.productImages
+          }}
+          lookups={lookups}
+          t={t}
+        />
       </div>
 
       <ImageEditorModal 

@@ -1,10 +1,11 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { normalizeImageUrl } from '../utils/imageUtils';
 import { supabase } from '../supabaseClient';
 import { useAppData } from '../context/AppDataContext';
 import { useAuth } from '../context/AuthContext';
 import { useFilteredLookups } from '../hooks/useFilteredLookups';
-import { Filter, Download, FileText, ChevronDown, ChevronUp, Printer, Calendar, Factory, ArrowUpDown, Camera, X, Brain, ShieldCheck, AlertTriangle, Clock, Activity, CheckCircle2, Trophy, Coins, TrendingUp, Search, ListChecks } from 'lucide-react';
+import { Filter, Download, FileText, ChevronDown, ChevronUp, Printer, Calendar, Factory, ArrowUpDown, Camera, X, Brain, ShieldCheck, AlertTriangle, Clock, Activity, CheckCircle2, Trophy, Coins, TrendingUp, Search, ListChecks, Eye, Pin, BookmarkCheck, Sparkles } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
 import { CustomDateInput } from '../components/CustomDateInput';
@@ -61,8 +62,21 @@ const getSizeRange = (orderData) => {
   return '-';
 };
 
+const compareSerialNumbers = (a, b) => {
+  if (a === undefined || a === null || b === undefined || b === null) return 0;
+  const strA = String(a).trim();
+  const strB = String(b).trim();
+  const isPureNumA = /^\d+$/.test(strA);
+  const isPureNumB = /^\d+$/.test(strB);
+  if (isPureNumA && isPureNumB) {
+    return parseInt(strA, 10) - parseInt(strB, 10);
+  }
+  return strA.localeCompare(strB, undefined, { numeric: true, sensitivity: 'base' });
+};
+
 const OrderReports = () => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const { lookups } = useAppData();
   const { user, hasPermission } = useAuth();
   const filteredLookups = useFilteredLookups();
@@ -77,11 +91,51 @@ const OrderReports = () => {
     [receivings]
   );
 
-  const [selectedTerms, setSelectedTerms] = useState([]);
+  const [fixedTerms, setFixedTerms] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('gh_fixed_order_terms') || '[]');
+      return Array.isArray(saved) ? saved : [];
+    } catch {
+      return [];
+    }
+  });
+  const [selectedTerms, setSelectedTerms] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('gh_fixed_order_terms') || '[]');
+      return Array.isArray(saved) ? saved : [];
+    } catch {
+      return [];
+    }
+  });
   const [showTermsDropdown, setShowTermsDropdown] = useState(false);
   const [tempSelectedTerms, setTempSelectedTerms] = useState([]);
   const termsDropdownRef = useRef(null);
   const [termsSearchQuery, setTermsSearchQuery] = useState('');
+
+  const toggleFixedTerm = (termName) => {
+    setFixedTerms(prev => {
+      const isAlreadyFixed = prev.includes(termName);
+      const next = isAlreadyFixed ? prev.filter(t => t !== termName) : [...prev, termName];
+      localStorage.setItem('gh_fixed_order_terms', JSON.stringify(next));
+      if (!isAlreadyFixed) {
+        setSelectedTerms(curr => curr.includes(termName) ? curr : [...curr, termName]);
+        setTempSelectedTerms(curr => curr.includes(termName) ? curr : [...curr, termName]);
+        toast.success(t('reports.messages.term_pinned', { name: termName, defaultValue: `📌 تم تعيين "${termName}" كشرط ثابت تلقائياً!` }), { id: 'term-pin-toast' });
+      } else {
+        toast.success(t('reports.messages.term_unpinned', { name: termName, defaultValue: `تم إلغاء تثبيت "${termName}" من الشروط الثابتة` }), { id: 'term-pin-toast' });
+      }
+      return next;
+    });
+  };
+
+  const handleSaveCurrentAsFixed = () => {
+    const toSave = [...tempSelectedTerms];
+    setFixedTerms(toSave);
+    localStorage.setItem('gh_fixed_order_terms', JSON.stringify(toSave));
+    setSelectedTerms(toSave);
+    setShowTermsDropdown(false);
+    toast.success(t('reports.messages.terms_saved_fixed', { count: toSave.length, defaultValue: `📌 تم حفظ (${toSave.length}) شروط ثابتة افتراضياً لكل الفواتير القادمة!` }), { id: 'fixed-terms-toast' });
+  };
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -212,10 +266,12 @@ const OrderReports = () => {
     let result = [...currentData];
 
     if (activeFilters.fromSerial) {
-      result = result.filter(o => o.serial_number && parseInt(o.serial_number) >= parseInt(activeFilters.fromSerial));
+      const fromVal = String(activeFilters.fromSerial).trim();
+      result = result.filter(o => o.serial_number && compareSerialNumbers(o.serial_number, fromVal) >= 0);
     }
     if (activeFilters.toSerial) {
-      result = result.filter(o => o.serial_number && parseInt(o.serial_number) <= parseInt(activeFilters.toSerial));
+      const toVal = String(activeFilters.toSerial).trim();
+      result = result.filter(o => o.serial_number && compareSerialNumbers(o.serial_number, toVal) <= 0);
     }
     if (activeFilters.fromDate) {
       result = result.filter(o => {
@@ -555,19 +611,41 @@ const OrderReports = () => {
          dateHtml += `</tr></tbody></table>`;
        }
 
-       // Define conditions block dynamically to hide it when empty
-       let conditionsHtml = '';
-       if (selectedTerms.length > 0) {
-         conditionsHtml += 
-           `<table style="border-collapse:collapse;width:100%;border:2px solid #000;border-top:none;"><tbody>
-             <tr><td style="${bl}background:#e6e6e6;font-weight:800;font-size:14px;">Conditions 状况：</td></tr>
-             <tr><td style="${bl}height:${Math.max(90, selectedTerms.length * 22)}px;vertical-align:top;padding:8px;">
-               <ul style="margin:0;padding-left:20px;font-size:13px;font-weight:bold;">
-                 ${selectedTerms.map(t => `<li style="margin-bottom:6px;">${t}</li>`).join('')}
-               </ul>
-             </td></tr>
-           </tbody></table>`;
-       }
+        // Split conditions: Column 1 = Fixed Default Conditions, Column 2 = Additional Conditions (or handwriting space)
+        const fixedSelected = fixedTerms.filter(t => selectedTerms.includes(t));
+        const extraSelected = selectedTerms.filter(t => !fixedTerms.includes(t));
+
+        // If user has not designated any fixed terms yet, but has selected terms, show them in Col 1
+        const finalCol1 = fixedSelected.length > 0 ? fixedSelected : (selectedTerms.length > 0 && fixedTerms.length === 0 ? selectedTerms : []);
+        const finalCol2 = fixedSelected.length > 0 ? extraSelected : [];
+
+        const maxItemsCount = Math.max(finalCol1.length, finalCol2.length);
+        const minCondHeight = Math.max(220, maxItemsCount * 28 + 30);
+
+        let conditionsHtml = 
+          `<table style="border-collapse:collapse;width:100%;border:2px solid #000;border-top:none;"><tbody>
+            <tr>
+              <td colspan="2" style="${bl}background:#e6e6e6;font-weight:800;font-size:14px;padding:6px 12px;">
+                Conditions 状况：
+              </td>
+            </tr>
+            <tr>
+              <td style="${bl}width:50%;height:${minCondHeight}px;vertical-align:top;padding:12px 16px;border-right:1px solid #000;">
+                ${finalCol1.length > 0 ? `
+                  <ul style="margin:0;padding-left:18px;font-size:12px;font-weight:bold;line-height:1.6;">
+                    ${finalCol1.map(t => `<li style="margin-bottom:8px;">${t}</li>`).join('')}
+                  </ul>
+                ` : '&nbsp;'}
+              </td>
+              <td style="${bl}width:50%;height:${minCondHeight}px;vertical-align:top;padding:12px 16px;">
+                ${finalCol2.length > 0 ? `
+                  <ul style="margin:0;padding-left:18px;font-size:12px;font-weight:bold;line-height:1.6;">
+                    ${finalCol2.map(t => `<li style="margin-bottom:8px;">${t}</li>`).join('')}
+                  </ul>
+                ` : '&nbsp;'}
+              </td>
+            </tr>
+          </tbody></table>`;
 
        // Signature block HTML
        const signatureHtml = 
@@ -609,7 +687,7 @@ const OrderReports = () => {
 
        // ─── PAGINATION: Split rows into pages ───
        const ROWS_PER_PAGE = 25;
-       const totalPages = Math.ceil(rows.length / ROWS_PER_PAGE);
+       const totalPages = Math.max(1, Math.ceil(rows.length / ROWS_PER_PAGE));
        const { default: html2canvas } = await import('html2canvas');
        const pW = 210;
        const pM = 5;
@@ -642,11 +720,24 @@ const OrderReports = () => {
            pageRowsHtml += '</tr>';
          });
 
-         // Build full page HTML
+         // Pad empty rows up to 25 rows per page
+         const emptyRowsCount = ROWS_PER_PAGE - pageRows.length;
+         for (let eIdx = 0; eIdx < emptyRowsCount; eIdx++) {
+           pageRowsHtml += '<tr>';
+           activeCols.forEach(col => {
+             pageRowsHtml += `<td style="${col.style};height:28px;">&nbsp;</td>`;
+           });
+           pageRowsHtml += '</tr>';
+         }
+
+         // Build full page HTML with flex layout to keep signatures always at bottom
          const pageEl = document.createElement('div');
-         pageEl.style.cssText = 'position:fixed;left:-9999px;top:0;width:1050px;background:#fff;padding:22px 26px;font-family:"Microsoft YaHei",SimHei,SimSun,Inter,sans-serif;color:#000;font-size:15px;line-height:1.4;direction:ltr;text-align:left;-webkit-font-smoothing:antialiased;';
+         pageEl.style.cssText = 'position:fixed;left:-9999px;top:0;width:1050px;min-height:1440px;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between;background:#fff;padding:22px 26px;font-family:"Microsoft YaHei",SimHei,SimSun,Inter,sans-serif;color:#000;font-size:15px;line-height:1.4;direction:ltr;text-align:left;-webkit-font-smoothing:antialiased;';
 
          let pageHtml = '';
+         // Top section
+         pageHtml += '<div style="width:100%;flex:1;display:flex;flex-direction:column;">';
+         
          // Title
          pageHtml += '<div style="text-align:center;margin-bottom:12px;">';
          pageHtml += '<span style="font-size:36px;font-weight:900;color:#b41e1e;letter-spacing:1px;">Order Contract 订单合同</span>';
@@ -654,24 +745,33 @@ const OrderReports = () => {
            pageHtml += `<span style="font-size:14px;color:#666;margin-right:10px;display:block;margin-top:4px;">Page ${pageIdx + 1} / ${totalPages}</span>`;
          }
          pageHtml += '</div>';
+         
          // Meta + Date
          pageHtml += metaHtml;
          pageHtml += dateHtml;
+         
          // Table with header + page rows
          pageHtml += `<table style="${tbs}border-top:none;"><tbody>`;
          pageHtml += headerHtml;
          pageHtml += pageRowsHtml;
+         
          // Total row on last page only
          if (isLastPage) {
            pageHtml += totalRowHtml;
          }
          pageHtml += '</tbody></table>';
+         
          // Conditions on last page only
-         if (isLastPage) {
+         if (isLastPage && conditionsHtml) {
            pageHtml += conditionsHtml;
          }
-         // Signature on every page
+         
+         pageHtml += '</div>'; // End Top section
+
+         // Signature always pinned to the bottom of the page
+         pageHtml += '<div style="width:100%;margin-top:auto;">';
          pageHtml += signatureHtml;
+         pageHtml += '</div>';
 
          pageEl.innerHTML = pageHtml;
          document.body.appendChild(pageEl);
@@ -718,7 +818,7 @@ const OrderReports = () => {
       
       <div style={{ padding: '0.5rem', borderBottom: '1px solid var(--border-color)', backgroundColor: 'var(--bg-color)' }}>
         <input
-          ref={serialSearchQueryRef}
+          ref={serialSearchRef}
           type="text"
           placeholder={t('export.search_placeholder')}
           value={serialSearchQuery}
@@ -822,7 +922,7 @@ const OrderReports = () => {
           <div className="form-group" style={{ position: 'relative' }}>
             <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><FileText size={14}/> {t('reports.filters.from_serial')}</label>
             <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
-              <input type="number" className="form-control" placeholder={t('print.search.placeholder')} value={filters.fromSerial} onChange={(e) => updateFilter('fromSerial', e.target.value)} onKeyDown={(e) => handleF9Press(e, 'fromSerial')} style={{ flex: 1 }} />
+              <input type="text" className="form-control" placeholder={t('print.search.placeholder')} value={filters.fromSerial} onChange={(e) => updateFilter('fromSerial', e.target.value)} onKeyDown={(e) => handleF9Press(e, 'fromSerial')} style={{ flex: 1 }} />
               <button
                 className="inline-f9-btn"
                 type="button"
@@ -845,7 +945,7 @@ const OrderReports = () => {
           <div className="form-group" style={{ position: 'relative' }}>
             <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><FileText size={14}/> {t('reports.filters.to_serial')}</label>
             <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
-              <input type="number" className="form-control" placeholder={t('print.search.placeholder')} value={filters.toSerial} onChange={(e) => updateFilter('toSerial', e.target.value)} onKeyDown={(e) => handleF9Press(e, 'toSerial')} style={{ flex: 1 }} />
+              <input type="text" className="form-control" placeholder={t('print.search.placeholder')} value={filters.toSerial} onChange={(e) => updateFilter('toSerial', e.target.value)} onKeyDown={(e) => handleF9Press(e, 'toSerial')} style={{ flex: 1 }} />
               <button
                 className="inline-f9-btn"
                 type="button"
@@ -900,69 +1000,83 @@ const OrderReports = () => {
 
       {/* Detailed Terms Selection */}
       <div className="card glass-panel" style={{ marginBottom: '2rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
-          <ListChecks color="var(--accent-color)" />
-          <h3 style={{ margin: 0 }}>{t('reports.detailed_terms', { defaultValue: 'الشروط المطلوبة للفاتورة' })}</h3>
-        </div>
-        
-        <div ref={termsDropdownRef} style={{ position: 'relative', width: '100%', maxWidth: '500px' }}>
+        {/* Header Bar with Toggle */}
+        <div 
+          onClick={() => {
+            if (!showTermsDropdown) {
+              setTempSelectedTerms([...selectedTerms]);
+              setTermsSearchQuery('');
+            }
+            setShowTermsDropdown(!showTermsDropdown);
+          }}
+          style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'space-between',
+            cursor: 'pointer',
+            paddingBottom: showTermsDropdown ? '0.75rem' : '0',
+            borderBottom: showTermsDropdown ? '1px solid var(--border-color)' : 'none',
+            userSelect: 'none'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <ListChecks color="var(--accent-color)" size={20} />
+            <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 'bold' }}>
+              {t('reports.detailed_terms', { defaultValue: 'الشروط المطلوبة للفاتورة' })}
+            </h3>
+            
+            {/* Quick Status Count */}
+            <span style={{ 
+              fontSize: '0.8rem', 
+              backgroundColor: 'rgba(212, 175, 55, 0.12)', 
+              color: 'var(--accent-color)', 
+              border: '1px solid rgba(212, 175, 55, 0.3)', 
+              borderRadius: '20px', 
+              padding: '2px 10px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px'
+            }}>
+              <CheckCircle2 size={12} />
+              {selectedTerms.length > 0 ? t('reports.selected_terms_count', { count: selectedTerms.length, defaultValue: `تم اختيار ${selectedTerms.length} شرط` }) : t('reports.no_conditions_selected', { defaultValue: 'لم يتم اختيار شروط' })}
+              {fixedTerms.length > 0 && t('reports.fixed_status_count', { count: fixedTerms.length, defaultValue: ` (${fixedTerms.length} ثابتة تلقائياً)` })}
+            </span>
+          </div>
+
           <button 
             type="button"
-            onClick={() => {
-              if (!showTermsDropdown) {
-                setTempSelectedTerms([...selectedTerms]);
-                setTermsSearchQuery('');
-              }
-              setShowTermsDropdown(!showTermsDropdown);
-            }}
-            className="form-control"
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              cursor: 'pointer',
-              backgroundColor: 'var(--surface-color)',
-              border: '1px solid var(--border-color)',
-              padding: '0.75rem 1rem',
-              borderRadius: 'var(--radius-md)',
-              color: 'var(--text-main)',
-              fontSize: '0.95rem',
-              textAlign: 'right',
-              direction: 'rtl'
+            className="btn btn-outline"
+            style={{ 
+              padding: '0.35rem 0.85rem', 
+              fontSize: '0.85rem', 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '0.4rem',
+              borderColor: 'var(--border-color)'
             }}
           >
-            <span style={{ fontWeight: '500' }}>
-              {selectedTerms.length > 0 
-                ? `${t('reports.selected_terms_count', { count: selectedTerms.length, defaultValue: `تم اختيار ${selectedTerms.length} شرط` })}`
-                : `${t('reports.select_terms_placeholder', { defaultValue: 'اختر الشروط المطلوبة...' })}`
-              }
-            </span>
-            <ChevronDown size={18} style={{ 
+            <span>{showTermsDropdown ? t('reports.toggle_terms_hide', { defaultValue: 'إخفاء القائمة' }) : t('reports.toggle_terms_show', { defaultValue: 'تحديد / تعديل الشروط' })}</span>
+            <ChevronDown size={16} style={{ 
               transform: showTermsDropdown ? 'rotate(180deg)' : 'rotate(0deg)',
-              transition: 'transform 0.2s',
-              marginRight: 'auto',
-              marginLeft: '4px'
+              transition: 'transform 0.2s'
             }} />
           </button>
+        </div>
 
-          {showTermsDropdown && (
-            <div style={{
-              position: 'absolute',
-              top: 'calc(100% + 6px)',
-              right: 0,
-              left: 0,
-              backgroundColor: 'var(--surface-color)',
-              border: '2px solid var(--accent-color)',
-              borderRadius: 'var(--radius-md)',
-              boxShadow: '0 12px 32px rgba(0,0,0,0.4)',
-              zIndex: 999,
-              padding: '1rem',
-              maxHeight: '350px',
-              overflowY: 'auto',
-              animation: 'fadeIn 0.15s ease'
+        {/* Collapsible Selection Body (Rendered Inline - No Overlaps!) */}
+        {showTermsDropdown && (
+          <div style={{ marginTop: '1rem', animation: 'fadeIn 0.2s ease' }}>
+            {/* Top Toolbar: Search + Quick Actions */}
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'space-between', 
+              gap: '1rem', 
+              marginBottom: '1rem',
+              flexWrap: 'wrap'
             }}>
-              {/* Search filter input inside dropdown */}
-              <div style={{ marginBottom: '0.75rem', position: 'relative' }}>
+              {/* Search Box */}
+              <div style={{ position: 'relative', flex: 1, minWidth: '240px' }}>
                 <input
                   type="text"
                   placeholder={t('reports.search_terms_placeholder', { defaultValue: 'البحث في الشروط المطلوبة...' })}
@@ -970,59 +1084,111 @@ const OrderReports = () => {
                   onChange={(e) => setTermsSearchQuery(e.target.value)}
                   style={{
                     width: '100%',
-                    padding: '0.5rem 2rem 0.5rem 0.75rem',
+                    padding: '0.55rem 2.2rem 0.55rem 0.75rem',
                     fontSize: '0.9rem',
                     border: '1px solid var(--border-color)',
-                    borderRadius: 'var(--radius-sm, 6px)',
-                    backgroundColor: 'var(--bg-color)',
+                    borderRadius: '8px',
+                    backgroundColor: 'var(--surface-color)',
                     color: 'var(--text-main)',
                     outline: 'none',
                     textAlign: 'right',
                     direction: 'rtl'
                   }}
                 />
-                <Search size={15} style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }} />
+                <Search size={15} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }} />
               </div>
 
-              <div style={{ 
-                maxHeight: '220px', 
-                overflowY: 'auto', 
-                marginBottom: '1rem',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '0.5rem',
-                paddingRight: '4px'
-              }}>
-                {(() => {
-                  const filtered = (lookups.packagingConditionsList || []).filter(term => {
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <button 
+                  type="button"
+                  onClick={handleSaveCurrentAsFixed}
+                  title={t('reports.save_as_fixed_title', { defaultValue: 'حفظ الشروط المحددة لتظهر تلقائياً كشروط ثابتة في كل الفواتير القادمة' })}
+                  className="btn btn-outline"
+                  style={{ 
+                    padding: '0.45rem 0.9rem', 
+                    fontSize: '0.82rem',
+                    borderColor: 'var(--accent-color)',
+                    color: 'var(--accent-color)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  <Pin size={13} style={{ fill: 'currentColor' }} />
+                  <span>{t('reports.save_as_fixed_btn', { defaultValue: 'حفظ المحددة كشروط ثابتة دائماً' })}</span>
+                </button>
+
+                <button 
+                  type="button"
+                  onClick={() => setTempSelectedTerms([])}
+                  className="btn btn-outline"
+                  style={{ padding: '0.45rem 0.8rem', fontSize: '0.82rem' }}
+                >
+                  {t('reports.clear_all', { defaultValue: 'مسح التحديد' })}
+                </button>
+
+                <button 
+                  type="button"
+                  onClick={() => {
+                    setSelectedTerms(tempSelectedTerms);
+                    setShowTermsDropdown(false);
+                    toast.success(t('reports.terms_updated', { defaultValue: 'تم تطبيق الشروط المختارة على الفاتورة' }));
+                  }}
+                  className="btn btn-accent"
+                  style={{ 
+                    padding: '0.45rem 1.4rem', 
+                    fontSize: '0.85rem',
+                    backgroundColor: 'var(--accent-color)',
+                    color: '#000',
+                    fontWeight: 'bold'
+                  }}
+                >
+                  {t('reports.ok_btn', { defaultValue: 'موافق وتطبيق' })}
+                </button>
+              </div>
+            </div>
+
+            {/* Terms List Grid */}
+            <div style={{ 
+              maxHeight: '280px', 
+              overflowY: 'auto', 
+              padding: '0.5rem',
+              backgroundColor: 'rgba(0, 0, 0, 0.2)',
+              borderRadius: '8px',
+              border: '1px solid var(--border-color)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.5rem'
+            }}>
+              {(() => {
+                const filtered = (lookups.packagingConditionsList || []).filter(term => {
+                  const termName = typeof term === 'object' ? term.name : term;
+                  return termName.toLowerCase().includes(termsSearchQuery.toLowerCase());
+                });
+                if (filtered.length > 0) {
+                  return filtered.map((term, idx) => {
                     const termName = typeof term === 'object' ? term.name : term;
-                    return termName.toLowerCase().includes(termsSearchQuery.toLowerCase());
-                  });
-                  if (filtered.length > 0) {
-                    return filtered.map((term, idx) => {
-                      const termName = typeof term === 'object' ? term.name : term;
-                      const isSelected = tempSelectedTerms.includes(termName);
-                      return (
-                        <label 
-                          key={idx}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.75rem',
-                            padding: '0.6rem 0.8rem',
-                            borderRadius: '6px',
-                            cursor: 'pointer',
-                            backgroundColor: isSelected ? 'rgba(212, 175, 55, 0.08)' : 'transparent',
-                            transition: 'background-color 0.2s',
-                            userSelect: 'none'
-                          }}
-                          onMouseEnter={(e) => {
-                            if (!isSelected) e.currentTarget.style.backgroundColor = 'var(--surface-highlight)';
-                          }}
-                          onMouseLeave={(e) => {
-                            if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent';
-                          }}
-                        >
+                    const isSelected = tempSelectedTerms.includes(termName);
+                    const isFixed = fixedTerms.includes(termName);
+                    return (
+                      <div 
+                        key={idx}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: '1rem',
+                          padding: '0.65rem 0.9rem',
+                          borderRadius: '6px',
+                          backgroundColor: isSelected ? 'rgba(212, 175, 55, 0.09)' : 'var(--surface-color)',
+                          border: isFixed ? '1px solid var(--accent-color)' : (isSelected ? '1px solid rgba(212, 175, 55, 0.3)' : '1px solid var(--border-color)'),
+                          transition: 'all 0.2s',
+                          userSelect: 'none'
+                        }}
+                      >
+                        {/* Checkbox and Text */}
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', flex: 1, margin: 0 }}>
                           <input 
                             type="checkbox"
                             checked={isSelected}
@@ -1035,107 +1201,164 @@ const OrderReports = () => {
                               width: '18px',
                               height: '18px',
                               accentColor: 'var(--accent-color)',
-                              cursor: 'pointer'
+                              cursor: 'pointer',
+                              flexShrink: 0
                             }}
                           />
                           <span style={{ 
-                            fontSize: '0.95rem',
+                            fontSize: '0.92rem',
                             color: isSelected ? 'var(--text-strong)' : 'var(--text-main)',
-                            fontWeight: isSelected ? 'bold' : 'normal'
+                            fontWeight: isSelected ? '600' : 'normal',
+                            lineHeight: '1.4'
                           }}>{termName}</span>
                         </label>
-                      );
-                    });
-                  }
-                  return (
-                    <div style={{ textAlign: 'center', padding: '1rem', color: 'var(--text-muted)' }}>
-                      {t('reports.no_matching_terms', { defaultValue: 'لا توجد شروط مطابقة للبحث' })}
-                    </div>
-                  );
-                })()}
-              </div>
-              
-              <div style={{ 
-                display: 'flex', 
-                justifyContent: 'flex-end', 
-                gap: '0.5rem', 
-                borderTop: '1px solid var(--border-color)', 
-                paddingTop: '0.75rem' 
-              }}>
-                <button 
-                  type="button"
-                  onClick={() => setTempSelectedTerms([])}
-                  className="btn btn-outline"
-                  style={{ padding: '0.4rem 1rem', fontSize: '0.85rem' }}
-                >
-                  {t('reports.clear_all', { defaultValue: 'مسح الكل' })}
-                </button>
-                <button 
-                  type="button"
-                  onClick={() => {
-                    setSelectedTerms(tempSelectedTerms);
-                    setShowTermsDropdown(false);
-                    toast.success(t('reports.terms_updated', { defaultValue: 'تم تحديث الشروط المختارة' }));
-                  }}
-                  className="btn btn-accent"
-                  style={{ 
-                    padding: '0.4rem 1.5rem', 
-                    fontSize: '0.85rem',
-                    backgroundColor: 'var(--accent-color)',
-                    color: '#000',
-                    fontWeight: 'bold'
-                  }}
-                >
-                  {t('reports.ok_btn', { defaultValue: 'موافق' })}
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
 
-        {/* Selected Terms Badges Display for immediate visual feedback */}
+                        {/* Pin / Permanent Status Toggle Button */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleFixedTerm(termName);
+                          }}
+                          title={isFixed ? t('reports.unpin_term_title', { defaultValue: 'شرط ثابت دائماً (انقر لإلغاء تثبيته)' }) : t('reports.pin_term_title', { defaultValue: 'تثبيت كشرط دائم افتراضي لكل الفواتير' })}
+                          style={{
+                            background: isFixed ? 'rgba(212, 175, 55, 0.2)' : 'transparent',
+                            border: isFixed ? '1px solid var(--accent-color)' : '1px dashed var(--border-color)',
+                            borderRadius: '6px',
+                            padding: '4px 10px',
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            fontSize: '0.78rem',
+                            color: isFixed ? 'var(--accent-color)' : 'var(--text-muted)',
+                            flexShrink: 0,
+                            fontWeight: isFixed ? 'bold' : 'normal',
+                            transition: 'all 0.2s'
+                          }}
+                        >
+                          <Pin size={12} style={{ fill: isFixed ? 'currentColor' : 'none' }} />
+                          <span>{isFixed ? t('reports.pinned_term_status', { defaultValue: 'ثابت دائماً' }) : t('reports.pin_term_action', { defaultValue: 'تثبيت' })}</span>
+                        </button>
+                      </div>
+                    );
+                  });
+                }
+                return (
+                  <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-muted)' }}>
+                    {t('reports.no_matching_terms', { defaultValue: 'لا توجد شروط مطابقة للبحث' })}
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        )}
+
+        {/* Selected Terms Badges Display (Always clean & clearly organized) */}
         {selectedTerms.length > 0 && (
           <div style={{ 
-            display: 'flex', 
-            flexWrap: 'wrap', 
-            gap: '0.5rem', 
-            marginTop: '1rem',
+            marginTop: '1.25rem',
             paddingTop: '0.75rem',
-            borderTop: '1px dashed var(--border-color)'
+            borderTop: '1px dashed var(--border-color)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '0.75rem'
           }}>
-            {selectedTerms.map((term, i) => (
-              <div 
-                key={i}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.4rem',
-                  backgroundColor: 'rgba(212, 175, 55, 0.1)',
-                  border: '1px solid rgba(212, 175, 55, 0.3)',
-                  borderRadius: '6px',
-                  padding: '0.3rem 0.6rem',
-                  fontSize: '0.85rem',
-                  color: 'var(--text-strong)'
-                }}
-              >
-                <span>{term}</span>
-                <button 
-                  type="button"
-                  onClick={() => setSelectedTerms(prev => prev.filter(t => t !== term))}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    padding: 0,
-                    cursor: 'pointer',
-                    color: '#ef4444',
-                    display: 'inline-flex',
-                    alignItems: 'center'
-                  }}
-                >
-                  <X size={14} />
-                </button>
+            {/* 1. Fixed Terms Section */}
+            {selectedTerms.filter(t => fixedTerms.includes(t)).length > 0 && (
+              <div>
+                <div style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--accent-color)', marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Pin size={13} style={{ fill: 'currentColor' }} />
+                  <span>{t('reports.fixed_terms_section_title', { defaultValue: 'الشروط الثابتة الدائمة (ستظهر في النصف الأول من الفاتورة):' })}</span>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                  {selectedTerms.filter(t => fixedTerms.includes(t)).map((term, i) => (
+                    <div 
+                      key={i}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.4rem',
+                        backgroundColor: 'rgba(212, 175, 55, 0.15)',
+                        border: '1px solid var(--accent-color)',
+                        borderRadius: '6px',
+                        padding: '0.3rem 0.7rem',
+                        fontSize: '0.85rem',
+                        color: 'var(--text-strong)',
+                        fontWeight: '500'
+                      }}
+                    >
+                      <Pin size={12} style={{ fill: 'currentColor', color: 'var(--accent-color)' }} />
+                      <span>{term}</span>
+                      <button 
+                        type="button"
+                        onClick={() => setSelectedTerms(prev => prev.filter(t => t !== term))}
+                        title={t('reports.unpin_for_this_invoice', { defaultValue: 'إلغاء التحديد لهذه الفاتورة فقط' })}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          padding: 0,
+                          cursor: 'pointer',
+                          color: '#ef4444',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          marginRight: '2px'
+                        }}
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
-            ))}
+            )}
+
+            {/* 2. Additional Custom Terms Section */}
+            {selectedTerms.filter(t => !fixedTerms.includes(t)).length > 0 && (
+              <div>
+                <div style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--text-muted)', marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Sparkles size={13} />
+                  <span>{t('reports.additional_terms_section_title', { defaultValue: 'الشروط الإضافية الخاصة (ستظهر في النصف الثاني من الفاتورة):' })}</span>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                  {selectedTerms.filter(t => !fixedTerms.includes(t)).map((term, i) => (
+                    <div 
+                      key={i}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.4rem',
+                        backgroundColor: 'var(--surface-color)',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: '6px',
+                        padding: '0.3rem 0.7rem',
+                        fontSize: '0.85rem',
+                        color: 'var(--text-main)'
+                      }}
+                    >
+                      <span>{term}</span>
+                      <button 
+                        type="button"
+                        onClick={() => setSelectedTerms(prev => prev.filter(t => t !== term))}
+                        title={t('reports.remove_extra_term', { defaultValue: 'حذف الشرط الإضافي' })}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          padding: 0,
+                          cursor: 'pointer',
+                          color: '#ef4444',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          marginRight: '2px'
+                        }}
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1274,6 +1497,7 @@ const OrderReports = () => {
                   <th style={{ padding: '1rem', textAlign: 'center' }}>{t('reports.table.cols.health')}</th>
                   <th style={{ padding: '1rem', textAlign: 'center' }}>{t('reports.table.cols.last_activity')}</th>
                   <th style={{ padding: '1rem', textAlign: 'center' }}>{t('reports.table.cols.details')}</th>
+                  <th style={{ padding: '1rem', textAlign: 'center' }}>{t('reports.table.cols.review_order', 'استعراض')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -1301,7 +1525,7 @@ const OrderReports = () => {
                         </td>
                         <td style={{ padding: '1rem', textAlign: 'center' }}>
                             <span style={{ backgroundColor: 'var(--accent-color)', color: '#fff', padding: '0.2rem 0.8rem', borderRadius: '50px', fontWeight: 'bold' }}>
-                                {computedTotal > 0 ? computedTotal : (d.totalQuantity || '-')}
+                                 {computedTotal > 0 ? computedTotal : (d.totalQuantity || '-')}
                             </span>
                         </td>
                         <td style={{ padding: '1rem', textAlign: 'center' }}>{d.requestDate || '-'}</td>
@@ -1334,26 +1558,71 @@ const OrderReports = () => {
                             {isExpanded ? <ChevronUp size={20} color="var(--accent-color)" /> : <ChevronDown size={20} />}
                           </button>
                         </td>
+                        <td style={{ padding: '1rem', textAlign: 'center' }}>
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            onClick={() => navigate(`/entry?serial=${encodeURIComponent(order.serial_number)}`)}
+                            style={{
+                              padding: '0.4rem 0.85rem',
+                              fontSize: '0.82rem',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '0.4rem',
+                              borderRadius: '8px',
+                              fontWeight: 'bold',
+                              boxShadow: '0 2px 8px rgba(0,0,0,0.18)',
+                              cursor: 'pointer',
+                              whiteSpace: 'nowrap'
+                            }}
+                            title={t('reports.table.cols.review_tooltip', 'استعراض وتوثيق الطلبية في شاشة الإدخال')}
+                          >
+                            <Eye size={15} />
+                            <span>{t('reports.table.cols.review_order', 'استعراض')}</span>
+                          </button>
+                        </td>
                       </tr>
                       {/* Expanded Section for Details */}
                       <tr className="expandable-content" style={{ display: isExpanded ? 'table-row' : 'none', backgroundColor: 'rgba(0,0,0,0.2)' }}>
-                          <td colSpan={10} style={{ padding: '1.5rem', borderBottom: '1px solid var(--border-color)' }}>
+                          <td colSpan={11} style={{ padding: '1.5rem', borderBottom: '1px solid var(--border-color)' }}>
                              {isExpanded && (
                                <div className="expandable-content-wrapper">
-                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
-                                   <div style={{ padding: '0.9rem', borderRadius: 12, background: `${insight.stageColor}12`, border: `1px solid ${insight.stageColor}33` }}>
-                                     <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>{t('reports.table.cols.order_stage')}</span>
-                                     <div style={{ color: insight.stageColor, fontWeight: 900, marginTop: 4 }}>{insight.stageLabel}</div>
+                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+                                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem', flex: 1 }}>
+                                     <div style={{ padding: '0.9rem', borderRadius: 12, background: `${insight.stageColor}12`, border: `1px solid ${insight.stageColor}33` }}>
+                                       <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>{t('reports.table.cols.order_stage')}</span>
+                                       <div style={{ color: insight.stageColor, fontWeight: 900, marginTop: 4 }}>{insight.stageLabel}</div>
+                                     </div>
+                                     <div style={{ padding: '0.9rem', borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                       <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>{t('reports.table.cols.health_score')}</span>
+                                       <div style={{ color: insight.healthScore >= 80 ? '#34d399' : insight.healthScore >= 55 ? '#fbbf24' : '#fb7185', fontWeight: 900, marginTop: 4 }}>{insight.healthScore}/100</div>
+                                     </div>
+                                     <div style={{ padding: '0.9rem', borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                       <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>{t('reports.table.cols.issues_alerts')}</span>
+                                       <div style={{ color: 'var(--text-strong)', fontWeight: 900, marginTop: 4 }}>{insight.criticalCount} / {insight.warningCount}</div>
+                                     </div>
                                    </div>
-                                   <div style={{ padding: '0.9rem', borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                                     <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>{t('reports.table.cols.health_score')}</span>
-                                     <div style={{ color: insight.healthScore >= 80 ? '#34d399' : insight.healthScore >= 55 ? '#fbbf24' : '#fb7185', fontWeight: 900, marginTop: 4 }}>{insight.healthScore}/100</div>
-                                   </div>
-                                   <div style={{ padding: '0.9rem', borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                                     <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>{t('reports.table.cols.issues_alerts')}</span>
-                                     <div style={{ color: 'var(--text-strong)', fontWeight: 900, marginTop: 4 }}>{insight.criticalCount} / {insight.warningCount}</div>
-                                   </div>
-                                 </div>
+                                   <button
+                                     type="button"
+                                     className="btn btn-primary"
+                                     onClick={() => navigate(`/entry?serial=${encodeURIComponent(order.serial_number)}`)}
+                                     style={{
+                                       padding: '0.6rem 1.2rem',
+                                       fontSize: '0.88rem',
+                                       display: 'inline-flex',
+                                       alignItems: 'center',
+                                       gap: '0.5rem',
+                                       borderRadius: '10px',
+                                       fontWeight: 'bold',
+                                       whiteSpace: 'nowrap',
+                                       cursor: 'pointer'
+                                     }}
+                                   >
+                                     <Eye size={16} />
+                                     <span>{t('reports.table.cols.review_order', 'استعراض في شاشة التوثيق')}</span>
+                                    </button>
+                                  </div>
 
                                  {insight.issues.length > 0 && (
                                    <div style={{ marginBottom: '1rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '0.6rem' }}>

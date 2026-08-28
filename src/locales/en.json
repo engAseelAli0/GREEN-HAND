@@ -123,14 +123,32 @@
     "load_error": "Error loading analytics data"
   },
   "activity": {
-    "create": "Order Created",
-    "update": "Order Updated",
-    "receive": "Goods Received",
-    "delete": "Order Deleted",
+    "create": "Create Order",
+    "update": "Update Order",
+    "copy": "Copy Order",
+    "delete": "Delete Order",
+    "barcode_print": "Print Barcode",
+    "barcode_sample": "Print Sample Barcode",
+    "receive": "Factory Receiving",
+    "fields": {
+      "productName": "Product Name",
+      "factoryId": "Factory",
+      "totalQuantity": "Total Qty",
+      "deliveryDate": "Delivery Date",
+      "productPrice": "Price",
+      "currency": "Currency",
+      "cartonPackage": "Carton Pkg",
+      "cartonQty": "Ctn Qty",
+      "barcode": "Main Barcode",
+      "color_count": "Color Count"
+    },
     "notes": {
-      "created": "New order registered in the system.",
-      "updated": "Order details have been modified.",
-      "received": "Goods received and status updated."
+      "created": "Created order #{{serial}}",
+      "updated": "Updated order #{{serial}}",
+      "serial_changed": "Changed serial from {{old}} to {{new}}",
+      "deleted": "Deleted order #{{serial}}",
+      "copied": "Copied order from {{from}} to {{to}}",
+      "received": "Received order with total {{count}} pieces"
     }
   },
   "entry": {
@@ -240,7 +258,31 @@
       "select_conditions_placeholder": "— Select Conditions —",
       "conditions_selected_count": "{{count}} conditions selected",
       "no_conditions_saved": "No packaging conditions saved",
-      "no_conditions_hint": "Select at least one condition from the list above."
+      "no_conditions_hint": "Select at least one condition from the list above.",
+      "search_placeholder": "Search required conditions...",
+      "clear_all": "Clear Selection",
+      "ok_btn": "Apply & Done",
+      "no_matching_conditions": "No matching conditions found",
+      "conditions_updated": "Conditions updated for order",
+      "toggle_show": "Select / Edit Conditions",
+      "toggle_hide": "Hide List",
+      "save_as_fixed_btn": "Save Selected as Default Conditions",
+      "save_as_fixed_title": "Save selected conditions as permanent defaults for all new orders",
+      "pin_term_action": "Pin",
+      "pinned_term_status": "Always Default",
+      "pin_term_title": "Pin as permanent default condition for all new orders",
+      "unpin_term_title": "Permanent default condition (click to unpin)",
+      "fixed_terms_section_title": "Permanent Default Conditions (Recorded automatically with every order):",
+      "additional_terms_section_title": "Additional Conditions Selected for this Order:",
+      "unpin_for_this_order": "Deselect for this order only",
+      "remove_extra_term": "Remove additional condition",
+      "fixed_status_count": "({{count}} default permanent)",
+      "no_conditions_selected": "No conditions selected",
+      "messages": {
+        "term_pinned": "📌 Pinned \"{{name}}\" as default condition for all orders!",
+        "term_unpinned": "Unpinned \"{{name}}\" from default conditions",
+        "terms_saved_fixed": "📌 Saved ({{count}}) default conditions for all future orders!"
+      }
     },
     "measurements": {
       "section_title": "Detailed Product Measurements",
@@ -268,19 +310,21 @@
       "select_company_placeholder": "Click to select company",
       "save_btn": "Submit & Save Order",
       "update_btn": "Update Order #{{serial}}",
-      "save_as_copy": "Save as New Copy"
+      "save_as_copy": "Save as New Copy",
+      "download_pdf": "Download PDF",
+      "download_pdf_tooltip": "Download export document and invoice as PDF"
     },
     "messages": {
       "enter_serial": "Please enter serial number",
       "checking_serial": "Checking serial number...",
       "serial_available": "Serial number is available",
       "serial_taken": "Serial number is already taken!",
-      "saving": "Saving...",
-      "save_success": "Order saved successfully!",
-      "save_error": "Error saving data",
-      "confirm_delete": "Are you sure you want to delete this order permanently?",
+      "saving": "Saving new order...",
+      "save_success": "New order ({{serial}}) saved successfully!",
+      "save_error": "An error occurred while saving!",
+      "confirm_delete": "Are you sure you want to delete order No ({{serial}}) entirely?\n\n- Data will be permanently removed from the database.\n- The Item No will be released for reuse.\n- All associated images will be deleted.",
       "delete_error": "Error deleting order",
-      "copy_success": "Order copied successfully",
+      "copy_success": "New copy saved with No ({{serial}}) successfully!",
       "missing_serial": "Serial data missing",
       "connection_error": "Connection error",
       "serial_check_error": "Error checking serial",
@@ -308,7 +352,6 @@
       "next": "Next",
       "fetching": "Loading...",
       "confirm_clear": "⚠️ Are you sure you want to clear all data and start a new order?\n\nAll entered fields will be erased and the form will be reset completely.",
-      "confirm_delete": "Are you sure you want to delete order No ({{serial}}) entirely?\n\n- Data will be permanently removed from the database.\n- The Item No will be released for reuse.\n- All associated images will be deleted.",
       "enter_serial_first": "Please enter an Item Number first before uploading images",
       "uploading_images": "Compressing and uploading edited image...",
       "upload_success": "Image saved and uploaded successfully!",
@@ -323,12 +366,8 @@
       "packaging_error": "Packaging error: Carton packaging ({{package}}) cannot exceed total quantity ({{total}}).",
       "serial_used_error": "This serial number is already in use! Retrieve it for editing or use a new number.",
       "serial_used_in_old_error": "This model number already exists in the Old Items List (as Product Code or Barcode) and cannot be duplicated!",
-      "saving": "Saving new order...",
-      "save_success": "New order ({{serial}}) saved successfully!",
-      "save_error": "An error occurred while saving!",
       "updating": "Updating order...",
       "update_success": "Updated successfully! Order number is now ({{serial}})",
-      "copy_success": "New copy saved with No ({{serial}}) successfully!",
       "deleting": "Deleting order...",
       "delete_success": "Order ({{serial}}) deleted and number released successfully!",
       "search_hint": "Please enter the serial number of the order to retrieve",
@@ -688,10 +727,13 @@
         "health_score": "Health Score",
         "issues_alerts": "Critical Issues / Alerts",
         "total_sum": "Total (合计)",
-        "items_count": "{{count}} Items"
+        "items_count": "{{count}} Items",
+        "review_order": "Review",
+        "review_tooltip": "Review & edit order in Data Entry wizard",
+        "actions": "Actions"
       }
     },
-    "detailed_terms": "Required Terms for Invoice",
+    "detailed_terms": "Required Conditions for Invoice",
     "no_terms_available": "No additional terms available at the moment. You can add them in Settings.",
     "activity": {
       "smart_log": "Smart Activity Log",
@@ -717,7 +759,10 @@
       "no_data_export": "No data to export",
       "preparing_pdf": "Preparing comprehensive report export...",
       "pdf_success": "Report downloaded successfully!",
-      "pdf_error": "Error downloading PDF"
+      "pdf_error": "Error downloading PDF",
+      "term_pinned": "📌 Set \"{{name}}\" as default condition!",
+      "term_unpinned": "Unpinned \"{{name}}\" from default conditions",
+      "terms_saved_fixed": "📌 Saved ({{count}}) default conditions for all future invoices!"
     },
     "excel_headers": {
       "serial": "Model NO. (Serial)",
@@ -735,7 +780,28 @@
       "order_date": "Order Date",
       "delivery_date": "Delivery Date",
       "system_date": "System Add Date"
-    }
+    },
+    "selected_terms_count": "{{count}} conditions selected",
+    "select_terms_placeholder": "Select required conditions...",
+    "search_terms_placeholder": "Search required conditions...",
+    "no_matching_terms": "No matching conditions found",
+    "terms_updated": "Invoice conditions updated successfully",
+    "clear_all": "Clear Selection",
+    "ok_btn": "Apply & Done",
+    "toggle_terms_show": "Select / Edit Conditions",
+    "toggle_terms_hide": "Hide List",
+    "save_as_fixed_btn": "Save Selected as Default Conditions",
+    "save_as_fixed_title": "Save selected conditions to appear automatically on all future invoices",
+    "pin_term_action": "Pin",
+    "pinned_term_status": "Always Default",
+    "pin_term_title": "Pin as permanent default condition for all invoices",
+    "unpin_term_title": "Permanent default condition (click to unpin)",
+    "fixed_terms_section_title": "Permanent Default Conditions (First half of invoice):",
+    "additional_terms_section_title": "Additional Special Conditions (Second half of invoice):",
+    "unpin_for_this_invoice": "Deselect for this invoice only",
+    "remove_extra_term": "Remove additional condition",
+    "fixed_status_count": "({{count}} default permanent)",
+    "no_conditions_selected": "No conditions selected"
   },
   "shipping": {
     "title": "Shipping Invoice & Comprehensive Reports",
@@ -996,7 +1062,6 @@
     "password": "Password",
     "role": "Role",
     "login_btn": "Sign In",
-    "login_desc": "Enter your credentials to access the system",
     "remember_me": "Remember Me",
     "logging_in": "Logging in...",
     "change_password": "Change Password",
@@ -1212,35 +1277,6 @@
     "shapes": "Geometric Shapes",
     "arrow": "Arrow",
     "line": "Line"
-  },
-  "activity": {
-    "create": "Create Order",
-    "update": "Update Order",
-    "copy": "Copy Order",
-    "delete": "Delete Order",
-    "barcode_print": "Print Barcode",
-    "barcode_sample": "Print Sample Barcode",
-    "receive": "Factory Receiving",
-    "fields": {
-      "productName": "Product Name",
-      "factoryId": "Factory",
-      "totalQuantity": "Total Qty",
-      "deliveryDate": "Delivery Date",
-      "productPrice": "Price",
-      "currency": "Currency",
-      "cartonPackage": "Carton Pkg",
-      "cartonQty": "Ctn Qty",
-      "barcode": "Main Barcode",
-      "color_count": "Color Count"
-    },
-    "notes": {
-      "created": "Created order #{{serial}}",
-      "updated": "Updated order #{{serial}}",
-      "serial_changed": "Changed serial from {{old}} to {{new}}",
-      "deleted": "Deleted order #{{serial}}",
-      "copied": "Copied order from {{from}} to {{to}}",
-      "received": "Received order with total {{count}} pieces"
-    }
   },
   "intelligence": {
     "stages": {

@@ -1,10 +1,11 @@
 import React, { useState, useMemo, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { normalizeImageUrl } from '../utils/imageUtils';
 import { supabase } from '../supabaseClient';
 import { useAppData } from '../context/AppDataContext';
 import { useAuth } from '../context/AuthContext';
 import { useFilteredLookups } from '../hooks/useFilteredLookups';
-import { Filter, Download, FileText, ChevronDown, ChevronUp, Printer, Calendar, Factory, ArrowUpDown, Camera, X, Brain, ShieldCheck, AlertTriangle, Clock, Activity, CheckCircle2, Trophy, Coins, TrendingUp, Search, ListChecks } from 'lucide-react';
+import { Filter, Download, FileText, ChevronDown, ChevronUp, Printer, Calendar, Factory, ArrowUpDown, Camera, X, Brain, ShieldCheck, AlertTriangle, Clock, Activity, CheckCircle2, Trophy, Coins, TrendingUp, Search, ListChecks, Eye } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
 import { CustomDateInput } from '../components/CustomDateInput';
@@ -57,12 +58,24 @@ const getSizeRange = (orderData) => {
     return `${orderData.sizeFrom} - ${orderData.sizeTo}`;
   }
   if (orderData.sizeFrom) return orderData.sizeFrom;
-  if (orderData.sizeTo) return orderData.sizeTo;
   return '-';
+};
+
+const compareSerialNumbers = (a, b) => {
+  if (a === undefined || a === null || b === undefined || b === null) return 0;
+  const strA = String(a).trim();
+  const strB = String(b).trim();
+  const isPureNumA = /^\d+$/.test(strA);
+  const isPureNumB = /^\d+$/.test(strB);
+  if (isPureNumA && isPureNumB) {
+    return parseInt(strA, 10) - parseInt(strB, 10);
+  }
+  return strA.localeCompare(strB, undefined, { numeric: true, sensitivity: 'base' });
 };
 
 const ReportsPortal = () => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const { lookups } = useAppData();
   const { user, hasPermission } = useAuth();
   const filteredLookups = useFilteredLookups();
@@ -198,10 +211,12 @@ const ReportsPortal = () => {
     let result = [...currentData];
 
     if (activeFilters.fromSerial) {
-      result = result.filter(o => o.serial_number && parseInt(o.serial_number) >= parseInt(activeFilters.fromSerial));
+      const fromVal = String(activeFilters.fromSerial).trim();
+      result = result.filter(o => o.serial_number && compareSerialNumbers(o.serial_number, fromVal) >= 0);
     }
     if (activeFilters.toSerial) {
-      result = result.filter(o => o.serial_number && parseInt(o.serial_number) <= parseInt(activeFilters.toSerial));
+      const toVal = String(activeFilters.toSerial).trim();
+      result = result.filter(o => o.serial_number && compareSerialNumbers(o.serial_number, toVal) <= 0);
     }
     if (activeFilters.fromDate) {
       result = result.filter(o => {
@@ -672,7 +687,7 @@ const ReportsPortal = () => {
           <div className="form-group" style={{ position: 'relative' }}>
             <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><FileText size={14}/> {t('reports.filters.from_serial')}</label>
             <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
-              <input type="number" className="form-control" placeholder={t('print.search.placeholder')} value={filters.fromSerial} onChange={(e) => updateFilter('fromSerial', e.target.value)} onKeyDown={(e) => handleF9Press(e, 'fromSerial')} style={{ flex: 1 }} />
+              <input type="text" className="form-control" placeholder={t('print.search.placeholder')} value={filters.fromSerial} onChange={(e) => updateFilter('fromSerial', e.target.value)} onKeyDown={(e) => handleF9Press(e, 'fromSerial')} style={{ flex: 1 }} />
               <button
                 className="inline-f9-btn"
                 type="button"
@@ -695,7 +710,7 @@ const ReportsPortal = () => {
           <div className="form-group" style={{ position: 'relative' }}>
             <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}><FileText size={14}/> {t('reports.filters.to_serial')}</label>
             <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
-              <input type="number" className="form-control" placeholder={t('print.search.placeholder')} value={filters.toSerial} onChange={(e) => updateFilter('toSerial', e.target.value)} onKeyDown={(e) => handleF9Press(e, 'toSerial')} style={{ flex: 1 }} />
+              <input type="text" className="form-control" placeholder={t('print.search.placeholder')} value={filters.toSerial} onChange={(e) => updateFilter('toSerial', e.target.value)} onKeyDown={(e) => handleF9Press(e, 'toSerial')} style={{ flex: 1 }} />
               <button
                 className="inline-f9-btn"
                 type="button"
@@ -916,6 +931,7 @@ const ReportsPortal = () => {
                   <th style={{ padding: '1rem', textAlign: 'center' }}>{t('reports.table.cols.health')}</th>
                   <th style={{ padding: '1rem', textAlign: 'center' }}>{t('reports.table.cols.last_activity')}</th>
                   <th style={{ padding: '1rem', textAlign: 'center' }}>{t('reports.table.cols.details')}</th>
+                  <th style={{ padding: '1rem', textAlign: 'center' }}>{t('reports.table.cols.review_order', 'استعراض')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -976,25 +992,70 @@ const ReportsPortal = () => {
                             {isExpanded ? <ChevronUp size={20} color="var(--accent-color)" /> : <ChevronDown size={20} />}
                           </button>
                         </td>
+                        <td style={{ padding: '1rem', textAlign: 'center' }}>
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            onClick={() => navigate(`/entry?serial=${encodeURIComponent(order.serial_number)}`)}
+                            style={{
+                              padding: '0.4rem 0.85rem',
+                              fontSize: '0.82rem',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '0.4rem',
+                              borderRadius: '8px',
+                              fontWeight: 'bold',
+                              boxShadow: '0 2px 8px rgba(0,0,0,0.18)',
+                              cursor: 'pointer',
+                              whiteSpace: 'nowrap'
+                            }}
+                            title={t('reports.table.cols.review_tooltip', 'استعراض وتوثيق الطلبية في شاشة الإدخال')}
+                          >
+                            <Eye size={15} />
+                            <span>{t('reports.table.cols.review_order', 'استعراض')}</span>
+                          </button>
+                        </td>
                       </tr>
                       {/* Expanded Section for Details */}
                       <tr className="expandable-content" style={{ display: isExpanded ? 'table-row' : 'none', backgroundColor: 'rgba(0,0,0,0.2)' }}>
-                          <td colSpan={10} style={{ padding: '1.5rem', borderBottom: '1px solid var(--border-color)' }}>
+                          <td colSpan={11} style={{ padding: '1.5rem', borderBottom: '1px solid var(--border-color)' }}>
                              {isExpanded && (
                                <div className="expandable-content-wrapper">
-                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
-                                   <div style={{ padding: '0.9rem', borderRadius: 12, background: `${insight.stageColor}12`, border: `1px solid ${insight.stageColor}33` }}>
-                                     <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>{t('reports.table.cols.order_stage')}</span>
-                                     <div style={{ color: insight.stageColor, fontWeight: 900, marginTop: 4 }}>{insight.stageLabel}</div>
+                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+                                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem', flex: 1 }}>
+                                     <div style={{ padding: '0.9rem', borderRadius: 12, background: `${insight.stageColor}12`, border: `1px solid ${insight.stageColor}33` }}>
+                                       <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>{t('reports.table.cols.order_stage')}</span>
+                                       <div style={{ color: insight.stageColor, fontWeight: 900, marginTop: 4 }}>{insight.stageLabel}</div>
+                                     </div>
+                                     <div style={{ padding: '0.9rem', borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                       <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>{t('reports.table.cols.health_score')}</span>
+                                       <div style={{ color: insight.healthScore >= 80 ? '#34d399' : insight.healthScore >= 55 ? '#fbbf24' : '#fb7185', fontWeight: 900, marginTop: 4 }}>{insight.healthScore}/100</div>
+                                     </div>
+                                     <div style={{ padding: '0.9rem', borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                       <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>{t('reports.table.cols.issues_alerts')}</span>
+                                       <div style={{ color: 'var(--text-strong)', fontWeight: 900, marginTop: 4 }}>{insight.criticalCount} / {insight.warningCount}</div>
+                                     </div>
                                    </div>
-                                   <div style={{ padding: '0.9rem', borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                                     <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>{t('reports.table.cols.health_score')}</span>
-                                     <div style={{ color: insight.healthScore >= 80 ? '#34d399' : insight.healthScore >= 55 ? '#fbbf24' : '#fb7185', fontWeight: 900, marginTop: 4 }}>{insight.healthScore}/100</div>
-                                   </div>
-                                   <div style={{ padding: '0.9rem', borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                                     <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>{t('reports.table.cols.issues_alerts')}</span>
-                                     <div style={{ color: 'var(--text-strong)', fontWeight: 900, marginTop: 4 }}>{insight.criticalCount} / {insight.warningCount}</div>
-                                   </div>
+                                   <button
+                                     type="button"
+                                     className="btn btn-primary"
+                                     onClick={() => navigate(`/entry?serial=${encodeURIComponent(order.serial_number)}`)}
+                                     style={{
+                                       padding: '0.6rem 1.2rem',
+                                       fontSize: '0.88rem',
+                                       display: 'inline-flex',
+                                       alignItems: 'center',
+                                       gap: '0.5rem',
+                                       borderRadius: '10px',
+                                       fontWeight: 'bold',
+                                       whiteSpace: 'nowrap',
+                                       cursor: 'pointer'
+                                     }}
+                                   >
+                                     <Eye size={16} />
+                                     <span>{t('reports.table.cols.review_order', 'استعراض في شاشة التوثيق')}</span>
+                                   </button>
                                  </div>
 
                                  {insight.issues.length > 0 && (

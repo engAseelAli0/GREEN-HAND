@@ -1123,7 +1123,7 @@ const AdminDashboard = () => {
                       type="color"
                       className="form-control"
                       title={t('admin.select_color_title')}
-                      value={newValueHex}
+                      value={newValueHex && newValueHex.startsWith('#') ? newValueHex : `#${newValueHex || '000000'}`}
                       onChange={(e) => setNewValueHex(e.target.value)}
                       style={{ height: '42px', padding: '4px', cursor: 'pointer', backgroundColor: 'var(--bg-color)' }}
                     />

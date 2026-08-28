@@ -71,16 +71,16 @@ export const AuthProvider = ({ children }) => {
         .from('system_users')
         .select('id, username, role, allowed_pages, permissions')
         .eq('username', username)
-        .single();
+        .maybeSingle();
 
       let userObj;
       if (error || !data) {
-        console.warn('Could not fetch system_users record:', error);
+        if (error) {
+          console.warn('Could not fetch system_users record:', error);
+        }
         
-        // PGRST116 is the PostgREST code for "The query returned 0 rows".
-        // If the error is not PGRST116, it is likely a transient network error,
-        // so we should not sign the user out. Instead, we allow them to fall back to session metadata.
-        const isUserNotFound = error && error.code === 'PGRST116';
+        // If user is not found in system_users, check if admin or regular user
+        const isUserNotFound = !data;
 
         if (isUserNotFound && username !== 'admin' && authSessionUser.user_metadata?.role !== 'admin') {
           console.error('User was deleted from system_users. Denying access.');

@@ -123,14 +123,32 @@
     "load_error": "خطأ في تحميل بيانات التحليلات"
   },
   "activity": {
-    "create": "إنشاء طلب",
+    "create": "إنشاء الطلب",
     "update": "تحديث الطلب",
-    "receive": "استلام بضاعة",
-    "delete": "حذف طلب",
+    "copy": "نسخ الطلب",
+    "delete": "حذف الطلب",
+    "barcode_print": "طباعة الباركود",
+    "barcode_sample": "طباعة عينة باركود",
+    "receive": "استلام المصنع",
+    "fields": {
+      "productName": "اسم المنتج",
+      "factoryId": "المصنع",
+      "totalQuantity": "إجمالي الكمية",
+      "deliveryDate": "تاريخ التسليم",
+      "productPrice": "السعر",
+      "currency": "العملة",
+      "cartonPackage": "تعبئة الكرتون",
+      "cartonQty": "عدد الكراتين",
+      "barcode": "الباركود الأساسي",
+      "color_count": "عدد الألوان"
+    },
     "notes": {
-      "created": "تم تسجيل الطلب في النظام.",
-      "updated": "تم تحديث بيانات الطلب.",
-      "received": "تم استلام البضاعة وتحديث الحالة."
+      "created": "إنشاء طلب برقم {{serial}}",
+      "updated": "تحديث طلب برقم {{serial}}",
+      "serial_changed": "تغيير رقم المسلسل من {{old}} إلى {{new}}",
+      "deleted": "حذف طلب برقم {{serial}}",
+      "copied": "تم نسخ الطلب من {{from}} إلى {{to}}",
+      "received": "تم استلام الطلب بإجمالي {{count}} قطعة"
     }
   },
   "entry": {
@@ -240,7 +258,31 @@
       "select_conditions_placeholder": "— اختر الشروط —",
       "conditions_selected_count": "{{count}} شرط محدد",
       "no_conditions_saved": "لا توجد شروط تعبئة محفوظة",
-      "no_conditions_hint": "اختر شرطاً واحداً على الأقل من القائمة أعلاه."
+      "no_conditions_hint": "اختر شرطاً واحداً على الأقل من القائمة أعلاه.",
+      "search_placeholder": "البحث في الشروط المطلوبة...",
+      "clear_all": "مسح التحديد",
+      "ok_btn": "موافق وتطبيق",
+      "no_matching_conditions": "لا توجد شروط مطابقة للبحث",
+      "conditions_updated": "تم حفظ الشروط للطلبية",
+      "toggle_show": "تحديد / تعديل الشروط",
+      "toggle_hide": "إخفاء القائمة",
+      "save_as_fixed_btn": "حفظ المحددة كشروط ثابتة دائماً",
+      "save_as_fixed_title": "حفظ الشروط المحددة لتكون الشروط الثابتة التلقائية لكل الطلبيات الجديدة",
+      "pin_term_action": "تثبيت",
+      "pinned_term_status": "ثابت دائماً",
+      "pin_term_title": "تثبيت كشرط دائم افتراضي لكل الطلبيات الجديدة",
+      "unpin_term_title": "شرط ثابت دائماً للطلبيات (انقر لإلغاء التثبيت)",
+      "fixed_terms_section_title": "الشروط الثابتة الدائمة (تتسجل تلقائياً مع كل طلبية):",
+      "additional_terms_section_title": "الشروط الإضافية المحددة لهذه الطلبية:",
+      "unpin_for_this_order": "إلغاء التحديد لهذه الطلبية فقط",
+      "remove_extra_term": "حذف الشرط الإضافي",
+      "fixed_status_count": "({{count}} ثابتة تلقائياً)",
+      "no_conditions_selected": "لم يتم اختيار شروط",
+      "messages": {
+        "term_pinned": "📌 تم تثبيت \"{{name}}\" كشرط دائم لكل الطلبيات!",
+        "term_unpinned": "تم إلغاء تثبيت \"{{name}}\" من الشروط الدائمة",
+        "terms_saved_fixed": "📌 تم حفظ ({{count}}) شروط ثابتة افتراضياً لكل الطلبيات القادمة!"
+      }
     },
     "measurements": {
       "section_title": "مقاسات المنتج التفصيلية",
@@ -281,7 +323,9 @@
       "tabs_tooltip": "التبديل إلى عرض التبويبات",
       "prev": "السابق",
       "next": "التالي",
-      "fetching": "جاري التحميل..."
+      "fetching": "جاري التحميل...",
+      "download_pdf": "تحميل PDF",
+      "download_pdf_tooltip": "تحميل مستند وفاتورة التصدير كملف PDF"
     },
     "messages": {
       "enter_serial": "يرجى إدخال رقم المسلسل",
@@ -679,7 +723,10 @@
         "health_score": "درجة الصحة",
         "issues_alerts": "مشاكل حرجة / تنبيهات",
         "total_sum": "الإجمالي (Total 合计)",
-        "items_count": "{{count}} أصناف (Items)"
+        "items_count": "{{count}} أصناف (Items)",
+        "review_order": "استعراض",
+        "review_tooltip": "استعراض وتوثيق الطلبية في شاشة الإدخال",
+        "actions": "الإجراءات"
       }
     },
     "detailed_terms": "الشروط المطلوبة للفاتورة",
@@ -708,7 +755,10 @@
       "no_data_export": "لا توجد بيانات لتصديرها",
       "preparing_pdf": "جاري تجهيز وتصدير التقرير الشامل...",
       "pdf_success": "تم تحميل التقرير بنجاح!",
-      "pdf_error": "حدث خطأ أثناء تحميل الـ PDF"
+      "pdf_error": "حدث خطأ أثناء تحميل الـ PDF",
+      "term_pinned": "📌 تم تعيين \"{{name}}\" كشرط ثابت تلقائياً!",
+      "term_unpinned": "تم إلغاء تثبيت \"{{name}}\" من الشروط الثابتة",
+      "terms_saved_fixed": "📌 تم حفظ ({{count}}) شروط ثابتة افتراضياً لكل الفواتير القادمة!"
     },
     "excel_headers": {
       "serial": "رقم الموديل (Serial)",
@@ -726,7 +776,28 @@
       "order_date": "تاريخ الطلب",
       "delivery_date": "تاريخ التسليم",
       "system_date": "تاريخ الإضافة بالنظام"
-    }
+    },
+    "selected_terms_count": "تم اختيار {{count}} شرط",
+    "select_terms_placeholder": "اختر الشروط المطلوبة...",
+    "search_terms_placeholder": "البحث في الشروط المطلوبة...",
+    "no_matching_terms": "لا توجد شروط مطابقة للبحث",
+    "terms_updated": "تم تطبيق الشروط المختارة على الفاتورة",
+    "clear_all": "مسح التحديد",
+    "ok_btn": "موافق وتطبيق",
+    "toggle_terms_show": "تحديد / تعديل الشروط",
+    "toggle_terms_hide": "إخفاء القائمة",
+    "save_as_fixed_btn": "حفظ المحددة كشروط ثابتة دائماً",
+    "save_as_fixed_title": "حفظ الشروط المحددة لتظهر تلقائياً كشروط ثابتة في كل الفواتير القادمة",
+    "pin_term_action": "تثبيت",
+    "pinned_term_status": "ثابت دائماً",
+    "pin_term_title": "تثبيت كشرط دائم افتراضي لكل الفواتير",
+    "unpin_term_title": "شرط ثابت دائماً (انقر لإلغاء تثبيته)",
+    "fixed_terms_section_title": "الشروط الثابتة الدائمة (ستظهر في النصف الأول من الفاتورة):",
+    "additional_terms_section_title": "الشروط الإضافية الخاصة (ستظهر في النصف الثاني من الفاتورة):",
+    "unpin_for_this_invoice": "إلغاء التحديد لهذه الفاتورة فقط",
+    "remove_extra_term": "حذف الشرط الإضافي",
+    "fixed_status_count": "({{count}} ثابتة تلقائياً)",
+    "no_conditions_selected": "لم يتم اختيار شروط"
   },
   "shipping": {
     "title": "فاتورة الشحن والتقارير المجمعة",
@@ -1202,35 +1273,6 @@
     "shapes": "الأشكال الهندسية",
     "arrow": "سهم",
     "line": "خط مستقيم"
-  },
-  "activity": {
-    "create": "إنشاء الطلب",
-    "update": "تحديث الطلب",
-    "copy": "نسخ الطلب",
-    "delete": "حذف الطلب",
-    "barcode_print": "طباعة الباركود",
-    "barcode_sample": "طباعة عينة باركود",
-    "receive": "استلام المصنع",
-    "fields": {
-      "productName": "اسم المنتج",
-      "factoryId": "المصنع",
-      "totalQuantity": "إجمالي الكمية",
-      "deliveryDate": "تاريخ التسليم",
-      "productPrice": "السعر",
-      "currency": "العملة",
-      "cartonPackage": "تعبئة الكرتون",
-      "cartonQty": "عدد الكراتين",
-      "barcode": "الباركود الأساسي",
-      "color_count": "عدد الألوان"
-    },
-    "notes": {
-      "created": "إنشاء طلب برقم {{serial}}",
-      "updated": "تحديث طلب برقم {{serial}}",
-      "serial_changed": "تغيير رقم المسلسل من {{old}} إلى {{new}}",
-      "deleted": "حذف طلب برقم {{serial}}",
-      "copied": "تم نسخ الطلب من {{from}} إلى {{to}}",
-      "received": "تم استلام الطلب بإجمالي {{count}} قطعة"
-    }
   },
   "intelligence": {
     "stages": {

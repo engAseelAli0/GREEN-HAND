@@ -5,7 +5,7 @@ import { supabase } from '../supabaseClient';
 import { useAppData } from '../context/AppDataContext';
 import { useAuth } from '../context/AuthContext';
 import { useFilteredLookups } from '../hooks/useFilteredLookups';
-import { Filter, Download, FileText, ChevronDown, ChevronUp, Printer, Calendar, Factory, ArrowUpDown, Camera, X, Brain, ShieldCheck, AlertTriangle, Clock, Activity, CheckCircle2, Trophy, Coins, TrendingUp, Search, ListChecks, Eye, Pin, BookmarkCheck, Sparkles } from 'lucide-react';
+import { Filter, Download, FileText, ChevronDown, ChevronUp, Printer, Calendar, Factory, ArrowUpDown, Camera, X, Brain, ShieldCheck, AlertTriangle, Clock, Activity, CheckCircle2, Trophy, Coins, TrendingUp, Search, ListChecks, Eye, Pin, BookmarkCheck, Sparkles, Edit3, Plus, Trash2, Layers } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
 import { CustomDateInput } from '../components/CustomDateInput';
@@ -77,7 +77,7 @@ const compareSerialNumbers = (a, b) => {
 const OrderReports = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { lookups } = useAppData();
+  const { lookups, updateLookup } = useAppData();
   const { user, hasPermission } = useAuth();
   const filteredLookups = useFilteredLookups();
   const [orders, setOrders] = useState([]);
@@ -85,6 +85,7 @@ const OrderReports = () => {
   const [filteredOrders, setFilteredOrders] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
+  const [showConditionsEditor, setShowConditionsEditor] = useState(false);
   const [sortConfig, setSortConfig] = useState({ key: 'serial_number', direction: 'desc' });
   const receivingMap = useMemo(
     () => new Map(receivings.map(item => [item.serial_number, item])),
@@ -896,7 +897,7 @@ const OrderReports = () => {
           <p style={{ color: 'var(--text-muted)' }}>{t('reports.subtitle')}</p>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-          {hasPermission('reports', 'export') && (
+          {hasPermission('order-reports', 'export') && (
             <>
               <button className="btn" onClick={exportToExcel} style={{ backgroundColor: '#10b981', color: 'white', boxShadow: '0 4px 15px rgba(16, 185, 129, 0.3)' }}>
                 <Download size={20} /> {t('reports.export_excel')}
@@ -1100,6 +1101,24 @@ const OrderReports = () => {
 
               {/* Action Buttons */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <button 
+                  type="button"
+                  onClick={() => setShowConditionsEditor(true)}
+                  title={t('reports.edit_master_list', { defaultValue: 'تعديل قائمة الشروط الأساسية في النظام' })}
+                  className="btn btn-outline"
+                  style={{ 
+                    padding: '0.45rem 0.9rem', 
+                    fontSize: '0.82rem',
+                    borderColor: 'var(--border-color)',
+                    color: 'var(--text-main)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  <Edit3 size={13} style={{ fill: 'none' }} />
+                  <span>{t('reports.edit_list_btn', { defaultValue: 'إدارة الشروط الأساسية' })}</span>
+                </button>
                 <button 
                   type="button"
                   onClick={handleSaveCurrentAsFixed}
@@ -1793,6 +1812,134 @@ const OrderReports = () => {
             </table>
           </div>
         )}
+      </div>
+
+      {showConditionsEditor && (
+        <PackagingConditionsEditorModal 
+           isOpen={showConditionsEditor}
+           onClose={() => setShowConditionsEditor(false)}
+           lookups={lookups}
+           updateLookup={updateLookup}
+           hasPermission={hasPermission}
+        />
+      )}
+    </div>
+  );
+};
+
+const PackagingConditionsEditorModal = ({ isOpen, onClose, lookups, updateLookup, hasPermission }) => {
+  const { t } = useTranslation();
+  const [newValue, setNewValue] = useState('');
+  const [editIndex, setEditIndex] = useState(null);
+
+  if (!isOpen) return null;
+
+  const currentList = lookups.packagingConditionsList || [];
+
+  const handleSave = () => {
+    if (!hasPermission('admin', editIndex !== null ? 'edit' : 'add')) {
+      toast.error(t('auth.unauthorized_desc', {defaultValue: 'لا تملك صلاحية لهذه العملية.'}));
+      return;
+    }
+    if (!newValue.trim()) {
+      toast.error(t('entry.packaging.empty_condition', {defaultValue: 'الرجاء إدخال نص الشرط'}));
+      return;
+    }
+    
+    let newList = [...currentList];
+    if (editIndex !== null) {
+      newList[editIndex] = newValue.trim();
+      setEditIndex(null);
+      toast.success(t('entry.packaging.edit_success', {defaultValue: 'تم التعديل بنجاح'}));
+    } else {
+      newList.push(newValue.trim());
+      toast.success(t('entry.packaging.add_success', {defaultValue: 'تمت الإضافة بنجاح'}));
+    }
+    updateLookup('packagingConditionsList', newList);
+    setNewValue('');
+  };
+
+  const handleDelete = (index) => {
+    if (!hasPermission('admin', 'delete')) {
+      toast.error(t('auth.unauthorized_desc', {defaultValue: 'لا تملك صلاحية لهذه العملية.'}));
+      return;
+    }
+    if(window.confirm(t('entry.packaging.confirm_delete', {defaultValue: 'هل أنت متأكد من حذف هذا الشرط من القائمة الأساسية؟'}))) {
+       let newList = [...currentList];
+       newList.splice(index, 1);
+       updateLookup('packagingConditionsList', newList);
+       toast.success(t('entry.packaging.delete_success', {defaultValue: 'تم الحذف بنجاح'}));
+    }
+  }
+
+  return (
+    <div style={{
+      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, 
+      backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 9999, 
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      backdropFilter: 'blur(4px)'
+    }}>
+      <div style={{
+         backgroundColor: 'var(--bg-color)', padding: '1.5rem', borderRadius: '12px',
+         width: '90%', maxWidth: '600px', maxHeight: '80vh', overflowY: 'auto',
+         boxShadow: '0 10px 25px rgba(0,0,0,0.2)', border: '1px solid var(--border-color)',
+         direction: 'rtl'
+      }}>
+         <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem'}}>
+            <h3 style={{margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+              <Edit3 size={20} color="var(--accent-color)" />
+              {t('entry.packaging.edit_conditions_list', {defaultValue: 'إدارة قائمة الشروط الأساسية'})}
+            </h3>
+            <button onClick={onClose} style={{background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)'}}><X size={20}/></button>
+         </div>
+
+         <div style={{display: 'flex', gap: '0.5rem', marginBottom: '1.5rem'}}>
+            <input 
+              type="text" 
+              className="form-control" 
+              placeholder={t('entry.packaging.new_condition_placeholder', {defaultValue: 'اكتب نص الشرط الجديد...'})}
+              value={newValue}
+              onChange={(e) => setNewValue(e.target.value)}
+              style={{flex: 1}}
+              onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+            />
+            <button className="btn btn-primary" onClick={handleSave} style={{display: 'flex', alignItems: 'center', gap: '4px'}}>
+               {editIndex !== null ? <Edit3 size={16} /> : <Plus size={16} />}
+               <span>{editIndex !== null ? t('entry.packaging.btn_edit', {defaultValue: 'تعديل'}) : t('entry.packaging.btn_add', {defaultValue: 'إضافة'})}</span>
+            </button>
+            {editIndex !== null && (
+               <button className="btn btn-outline" onClick={() => {setEditIndex(null); setNewValue('');}}>
+                 {t('entry.packaging.btn_cancel', {defaultValue: 'إلغاء'})}
+               </button>
+            )}
+         </div>
+
+         <div style={{border: '1px solid var(--border-color)', borderRadius: '8px', overflow: 'hidden'}}>
+            {currentList.map((cond, idx) => (
+               <div key={idx} style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
+                  padding: '0.75rem 1rem', borderBottom: idx < currentList.length - 1 ? '1px solid var(--border-color)' : 'none',
+                  backgroundColor: editIndex === idx ? 'var(--surface-color)' : 'transparent',
+                  transition: 'background-color 0.2s'
+               }}>
+                  <div style={{flex: 1, paddingLeft: '1rem', color: 'var(--text-main)', fontSize: '0.95rem'}}>{cond}</div>
+                  <div style={{display: 'flex', gap: '0.25rem'}}>
+                     <button onClick={() => {setEditIndex(idx); setNewValue(cond);}} style={{background: 'rgba(212, 175, 55, 0.1)', border: '1px solid rgba(212, 175, 55, 0.2)', color: 'var(--accent-color)', cursor: 'pointer', padding: '0.4rem', borderRadius: '4px'}} title={t('entry.packaging.btn_edit', {defaultValue: 'تعديل'})}>
+                        <Edit3 size={15} />
+                     </button>
+                     <button onClick={() => handleDelete(idx)} style={{background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#ef4444', cursor: 'pointer', padding: '0.4rem', borderRadius: '4px'}} title={t('entry.packaging.btn_delete', {defaultValue: 'حذف'})}>
+                        <Trash2 size={15} />
+                     </button>
+                  </div>
+               </div>
+            ))}
+            {currentList.length === 0 && (
+               <div style={{padding: '3rem 2rem', textAlign: 'center', color: 'var(--text-muted)'}}>
+                  <Layers size={32} style={{opacity: 0.5, marginBottom: '0.5rem'}} />
+                  <div>{t('entry.packaging.no_conditions_yet', {defaultValue: 'لا توجد شروط مضافة حالياً.'})}</div>
+               </div>
+            )}
+         </div>
       </div>
     </div>
   );

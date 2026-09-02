@@ -237,31 +237,44 @@ const ExportOrderDocument = ({ order, lookups = {}, t, id = "export-doc", classN
 
           {/* ═══ ROW 2-4: BUYER & FACTORY INFO ═══ */}
           <tr>
-            <th colSpan={1} rowSpan={3} className="title-cell">
-              <div style={{ fontSize: '20px', fontWeight: 900, marginBottom: '6px' }}>{t('export.doc.product_order_en', 'PRODUCT ORDER')}</div>
-              <div style={{ fontSize: '20px', fontWeight: 900 }}>{t('export.doc.product_order_zh', '产品订购单')}</div>
+            <th colSpan={1} rowSpan={3} className="title-cell" style={{ padding: '8px 6px', verticalAlign: 'middle' }}>
+              <div style={{ fontSize: '18px', fontWeight: 900, marginBottom: '4px', letterSpacing: '0.5px' }}>{t('export.doc.product_order_en', 'PRODUCT ORDER')}</div>
+              <div style={{ fontSize: '18px', fontWeight: 900 }}>{t('export.doc.product_order_zh', '产品订购单')}</div>
+              {tmImage && (
+                <div style={{ marginTop: '8px', display: 'flex', justifyContent: 'center' }}>
+                  <div style={{ background: '#fff', padding: '4px 8px', borderRadius: '6px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.15)' }}>
+                    <img
+                      src={tmImage}
+                      alt="trademark"
+                      crossOrigin="anonymous"
+                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                      style={{ maxHeight: '42px', maxWidth: '120px', objectFit: 'contain' }}
+                    />
+                  </div>
+                </div>
+              )}
             </th>
-            <th colSpan={2} className="hdr-light">{t('export.doc.buyer_name', 'Buyer')}</th>
-            <td colSpan={3} className="val-center val-bold">{order.buyerCompany || '-'}</td>
-            <th colSpan={2} className="hdr-light">{t('export.doc.factory_name', 'Factory')}</th>
-            <td colSpan={3} className="val-center val-bold">{factoryInfo.name || '-'}</td>
+            <th colSpan={2} className="hdr-light" style={{ whiteSpace: 'nowrap', padding: '6px 8px' }}>{t('export.doc.buyer_name', 'Buyer')}</th>
+            <td colSpan={3} className="val-center val-bold" style={{ padding: '6px 8px' }}>{order.buyerCompany || '-'}</td>
+            <th colSpan={2} className="hdr-light" style={{ whiteSpace: 'nowrap', padding: '6px 8px' }}>{t('export.doc.factory_name', 'Factory')}</th>
+            <td colSpan={3} className="val-center val-bold" style={{ padding: '6px 8px' }}>{factoryInfo.name || '-'}</td>
           </tr>
           <tr>
-            <th colSpan={2} className="hdr-light">{t('export.doc.buyer_mobile', 'Buyer Mobile')}</th>
-            <td colSpan={3} className="val-center val-bold">{order.buyerNumber || '-'}</td>
-            <th colSpan={2} className="hdr-light">{t('export.doc.factory_mobile', 'Factory Mobile')}</th>
-            <td colSpan={3} className="val-center val-bold">{factoryInfo.mobile || '-'}</td>
+            <th colSpan={2} className="hdr-light" style={{ whiteSpace: 'nowrap', padding: '6px 8px' }}>{t('export.doc.buyer_mobile', 'Buyer Mobile')}</th>
+            <td colSpan={3} className="val-center val-bold" style={{ padding: '6px 8px' }}>{order.buyerNumber || '-'}</td>
+            <th colSpan={2} className="hdr-light" style={{ whiteSpace: 'nowrap', padding: '6px 8px' }}>{t('export.doc.factory_mobile', 'Factory Mobile')}</th>
+            <td colSpan={3} className="val-center val-bold" style={{ padding: '6px 8px' }}>{factoryInfo.mobile || '-'}</td>
           </tr>
           <tr>
-            <th colSpan={2} className="hdr-light">{t('export.doc.customer_id', 'Customer ID')}</th>
-            <td colSpan={3} className="val-center val-bold">{order.buyerMobile || '-'}</td>
-            <th colSpan={2} className="hdr-light">{t('export.doc.factory_address', 'Factory Address')}</th>
-            <td colSpan={3} className="val-center val-bold">{factoryInfo.address || '-'}</td>
+            <th colSpan={2} className="hdr-light" style={{ whiteSpace: 'nowrap', padding: '6px 8px' }}>{t('export.doc.customer_id', 'Customer ID')}</th>
+            <td colSpan={3} className="val-center val-bold" style={{ padding: '6px 8px' }}>{order.buyerMobile || '-'}</td>
+            <th colSpan={2} className="hdr-light" style={{ whiteSpace: 'nowrap', padding: '6px 8px' }}>{t('export.doc.factory_address', 'Factory Address')}</th>
+            <td colSpan={3} className="val-center val-bold" style={{ padding: '6px 8px' }}>{factoryInfo.address || '-'}</td>
           </tr>
 
           {/* ═══ ROW 5: PRODUCT COLUMNS ═══ */}
           <tr>
-            <th className="hdr-blue">{t('export.doc.product_name', 'Product')}</th>
+            <th className="hdr-blue" style={{ whiteSpace: 'nowrap', minWidth: '180px', padding: '6px 10px' }}>{t('export.doc.product_name', 'Product')}</th>
             <th className="hdr-blue">{t('export.doc.model_no', 'Model NO.')}</th>
             <th className="hdr-blue">{t('export.doc.barcode', 'Barcode')}</th>
             <th className="hdr-blue">{t('export.doc.qty', 'Quantity')}</th>
@@ -276,10 +289,10 @@ const ExportOrderDocument = ({ order, lookups = {}, t, id = "export-doc", classN
 
           {/* ═══ ROW 6: PRODUCT VALUES ═══ */}
           <tr>
-            <td className="val-center val-bold hdr-grey">
+            <td className="val-center val-bold hdr-grey" style={{ whiteSpace: 'nowrap', minWidth: '180px', padding: '6px 12px' }}>
               {englishOnly(order.productName)}
               {chineseOnly(order.productName) && (
-                <span style={{ fontWeight: '800', marginLeft: '8px', color: '#333' }}>
+                <span style={{ fontWeight: '800', marginLeft: '8px', color: '#333', whiteSpace: 'nowrap' }}>
                   - {chineseOnly(order.productName)}
                 </span>
               )}
@@ -338,88 +351,165 @@ const ExportOrderDocument = ({ order, lookups = {}, t, id = "export-doc", classN
 
             if (totalRows === 0) totalRows = 2;
 
+            const totalImages = order.productImages?.filter(Boolean).length || 0;
+            const isMultiImage = totalImages > 1;
+            const maxSizeCols = isMultiImage ? 7 : 8;
+            const imageColSpan = isMultiImage ? 3 : 2;
+            const partSizes = sizesToRender.slice(0, maxSizeCols);
+
             const rows = [];
             let isFirstRow = true;
 
             if (parts.length === 0) {
+              const emptyRowCount = 4;
+              const totalEmptyRows = 1 + emptyRowCount;
+              const displaySizes = partSizes.length > 0 ? partSizes : [];
+              const actualCols = displaySizes.length > 0 ? displaySizes.length : 4;
+              const remainingCols = Math.max(0, maxSizeCols - actualCols);
+
               rows.push(
-                <tr key="empty-m1">
+                <tr key="empty-hdr">
                   <th className="hdr-grey">{t('export.doc.size_header', 'Size')}</th>
-                  <td colSpan={8} style={{ border: 'none', background: '#fff' }}></td>
-                  <td colSpan={2} rowSpan={2} style={{ textAlign: 'center', verticalAlign: 'middle', padding: '4px', borderLeft: '3px solid #000' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'center' }}>
-                      {order.productImages?.slice(0, 2).map((img, idx) => (
-                        <img
+                  {displaySizes.length > 0 ? (
+                    displaySizes.map((s, i) => (
+                      <th key={i} className="hdr-grey" style={{ minWidth: '40px', height: '28px' }}>
+                        {s}
+                      </th>
+                    ))
+                  ) : (
+                    Array.from({ length: 4 }).map((_, i) => (
+                      <th key={i} className="hdr-grey" style={{ minWidth: '40px', height: '28px' }}>&nbsp;</th>
+                    ))
+                  )}
+                  {remainingCols > 0 && (
+                    <td
+                      colSpan={remainingCols}
+                      style={{ border: 'none', background: '#fff' }}
+                    ></td>
+                  )}
+                  <td colSpan={imageColSpan} rowSpan={totalEmptyRows} style={{ padding: '6px', borderLeft: '3px solid #000', backgroundColor: '#fff', verticalAlign: 'middle', textAlign: 'center' }}>
+                    <div style={{
+                      display: 'flex',
+                      flexDirection: 'row',
+                      gap: '8px',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: '100%',
+                      maxWidth: isMultiImage ? '340px' : '230px',
+                      margin: '0 auto',
+                      boxSizing: 'border-box'
+                    }}>
+                      {order.productImages?.filter(Boolean).map((img, idx) => (
+                        <div
                           key={idx}
-                          src={normalizeImageUrl(img)}
-                          alt="product"
-                          crossOrigin="anonymous"
-                          onError={(e) => {
-                            e.currentTarget.style.display = 'none';
+                          style={{
+                            flex: isMultiImage ? '1 1 48%' : '0 1 100%',
+                            maxWidth: isMultiImage ? '160px' : '230px',
+                            height: isMultiImage ? '230px' : '250px',
+                            border: '1.5px solid #000',
+                            borderRadius: '4px',
+                            backgroundColor: '#fff',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            padding: '3px',
+                            boxSizing: 'border-box',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.08)'
                           }}
-                          style={{ maxHeight: '130px', objectFit: 'contain' }}
-                        />
+                        >
+                          <img
+                            src={normalizeImageUrl(img)}
+                            alt={`product-${idx + 1}`}
+                            crossOrigin="anonymous"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                            }}
+                            style={{ maxWidth: '100%', maxHeight: '100%', width: 'auto', height: 'auto', objectFit: 'contain', display: 'block' }}
+                          />
+                        </div>
                       ))}
-                      {tmImage && (
-                        <img
-                          src={tmImage}
-                          alt="trademark"
-                          crossOrigin="anonymous"
-                          onError={(e) => {
-                            e.currentTarget.style.display = 'none';
-                          }}
-                          style={{ maxHeight: '60px', objectFit: 'contain', marginTop: order.productImages?.length > 0 ? '10px' : '0' }}
-                        />
-                      )}
                     </div>
                   </td>
                 </tr>
               );
-              rows.push(
-                <tr key="empty-m2">
-                  <td style={{ height: '40px' }}></td>
-                  <td colSpan={8} style={{ border: 'none', background: '#fff' }}></td>
-                </tr>
-              );
+
+              for (let r = 1; r <= emptyRowCount; r++) {
+                rows.push(
+                  <tr key={`empty-row-${r}`}>
+                    <td className="val-bold val-left" style={{ height: '32px', minHeight: '32px', paddingLeft: '6px' }}>&nbsp;</td>
+                    {displaySizes.length > 0 ? (
+                      displaySizes.map((_, c) => (
+                        <td key={c} className="val-center" style={{ height: '32px', minHeight: '32px' }}>&nbsp;</td>
+                      ))
+                    ) : (
+                      Array.from({ length: 4 }).map((_, c) => (
+                        <td key={c} className="val-center" style={{ height: '32px', minHeight: '32px' }}>&nbsp;</td>
+                      ))
+                    )}
+                    {remainingCols > 0 && (
+                      <td
+                        colSpan={remainingCols}
+                        style={{ border: 'none', background: '#fff' }}
+                      ></td>
+                    )}
+                  </tr>
+                );
+              }
+
               return rows;
             }
 
             parts.forEach(part => {
-              const partSizes = sizesToRender.slice(0, 8);
               rows.push(
                 <tr key={`part-hdr-${part}`}>
                   <th className="hdr-grey">{t('export.doc.part_size_header', { part, defaultValue: `${part} Size` })}</th>
                   {partSizes.map(s => <th key={s} className="hdr-grey">{s}</th>)}
-                  {partSizes.length < 8 && (
-                    <td colSpan={8 - partSizes.length} style={{ border: 'none', background: '#fff' }}></td>
+                  {partSizes.length < maxSizeCols && (
+                    <td colSpan={maxSizeCols - partSizes.length} style={{ border: 'none', background: '#fff' }}></td>
                   )}
 
                   {isFirstRow && (
-                    <td colSpan={2} rowSpan={totalRows} style={{ textAlign: 'center', verticalAlign: 'middle', padding: '4px', borderLeft: '3px solid #000' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'center' }}>
-                        {order.productImages?.slice(0, 2).map((img, idx) => (
-                          <img
+                    <td colSpan={imageColSpan} rowSpan={totalRows} style={{ padding: '6px', borderLeft: '3px solid #000', backgroundColor: '#fff', verticalAlign: 'middle', textAlign: 'center' }}>
+                      <div style={{
+                        display: 'flex',
+                        flexDirection: 'row',
+                        gap: '8px',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: '100%',
+                        maxWidth: isMultiImage ? '340px' : '230px',
+                        margin: '0 auto',
+                        boxSizing: 'border-box'
+                      }}>
+                        {order.productImages?.filter(Boolean).map((img, idx) => (
+                          <div
                             key={idx}
-                            src={normalizeImageUrl(img)}
-                            alt="product"
-                            crossOrigin="anonymous"
-                            onError={(e) => {
-                              e.currentTarget.style.display = 'none';
+                            style={{
+                              flex: isMultiImage ? '1 1 48%' : '0 1 100%',
+                              maxWidth: isMultiImage ? '160px' : '230px',
+                              height: isMultiImage ? '250px' : '275px',
+                              border: '1.5px solid #000',
+                              borderRadius: '4px',
+                              backgroundColor: '#fff',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              padding: '3px',
+                              boxSizing: 'border-box',
+                              boxShadow: '0 1px 3px rgba(0,0,0,0.08)'
                             }}
-                            style={{ maxHeight: '130px', objectFit: 'contain' }}
-                          />
+                          >
+                            <img
+                              src={normalizeImageUrl(img)}
+                              alt={`product-${idx + 1}`}
+                              crossOrigin="anonymous"
+                              onError={(e) => {
+                                e.currentTarget.style.display = 'none';
+                              }}
+                              style={{ maxWidth: '100%', maxHeight: '100%', width: 'auto', height: 'auto', objectFit: 'contain', display: 'block' }}
+                            />
+                          </div>
                         ))}
-                        {tmImage && (
-                          <img
-                            src={tmImage}
-                            alt="trademark"
-                            crossOrigin="anonymous"
-                            onError={(e) => {
-                              e.currentTarget.style.display = 'none';
-                            }}
-                            style={{ maxHeight: '60px', objectFit: 'contain', marginTop: order.productImages?.length > 0 ? '10px' : '0' }}
-                          />
-                        )}
                       </div>
                     </td>
                   )}
@@ -435,8 +525,8 @@ const ExportOrderDocument = ({ order, lookups = {}, t, id = "export-doc", classN
                     {partSizes.map(s => (
                       <td key={s} className="val-center val-bold">{measurementsObj[mName]?.[s] || ''}</td>
                     ))}
-                    {partSizes.length < 8 && (
-                      <td colSpan={8 - partSizes.length} style={{ border: 'none', background: '#fff' }}></td>
+                    {partSizes.length < maxSizeCols && (
+                      <td colSpan={maxSizeCols - partSizes.length} style={{ border: 'none', background: '#fff' }}></td>
                     )}
                   </tr>
                 );
@@ -449,7 +539,7 @@ const ExportOrderDocument = ({ order, lookups = {}, t, id = "export-doc", classN
           {(() => {
             const numMaterials = [0, 1, 2].filter(i => order.materials && order.materials[i] && order.materials[i].name).length;
             const actualMaterials = Math.max(1, numMaterials);
-            const fabricColSpan = 2 + 2 + (actualMaterials - 1);
+            const fabricColSpan = 1 + (actualMaterials === 1 ? 2 : actualMaterials);
             const conditionsColSpan = 11 - 2 - fabricColSpan;
 
             return (
@@ -475,17 +565,17 @@ const ExportOrderDocument = ({ order, lookups = {}, t, id = "export-doc", classN
                 </tr>
 
                 <tr>
-                  <th colSpan={2} className="hdr-light" style={{ backgroundColor: '#d0dbe5' }}>{t('export.doc.fabric_comp', 'Fabric Composition')}</th>
+                  <th colSpan={1} className="hdr-light" style={{ backgroundColor: '#d0dbe5', whiteSpace: 'nowrap', padding: '4px 6px' }}>{t('export.doc.fabric_comp', 'Fabric Composition')}</th>
                   {[0, 1, 2].slice(0, actualMaterials).map(i => (
-                    <td key={i} colSpan={i === 0 ? 2 : 1} className="val-center val-bold">
+                    <td key={i} colSpan={actualMaterials === 1 ? 2 : 1} className="val-center val-bold">
                       {order.materials?.[i]?.name || ''}
                     </td>
                   ))}
                 </tr>
                 <tr>
-                  <th colSpan={2} className="hdr-light" style={{ backgroundColor: '#d0dbe5' }}>{t('export.doc.percentage', 'Percentage')}</th>
+                  <th colSpan={1} className="hdr-light" style={{ backgroundColor: '#d0dbe5', whiteSpace: 'nowrap', padding: '4px 6px' }}>{t('export.doc.percentage', 'Percentage')}</th>
                   {[0, 1, 2].slice(0, actualMaterials).map(i => (
-                    <td key={i} colSpan={i === 0 ? 2 : 1} className="val-center val-bold" style={{ color: order.materials?.[i] ? '#38761d' : 'inherit' }}>
+                    <td key={i} colSpan={actualMaterials === 1 ? 2 : 1} className="val-center val-bold" style={{ color: order.materials?.[i] ? '#38761d' : 'inherit' }}>
                       {order.materials?.[i] ? `${order.materials[i].percentage}%` : ''}
                     </td>
                   ))}

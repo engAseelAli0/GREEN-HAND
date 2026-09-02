@@ -392,7 +392,7 @@ const WarehouseReceipt = () => {
             {t('warehouse.results.preview')} <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', fontWeight: 'normal' }}>({filteredData.length} {t('warehouse.results.models_count')})</span>
            </h3>
            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-              {hasPermission('warehouse', 'export') && (<>
+              {hasPermission('warehouse-receipt', 'export') && (<>
               <button className="btn btn-outline" onClick={() => window.print()} style={{ color: 'var(--text-main)', borderColor: 'var(--border-color)' }}>
                   <Printer size={20} /> {t('warehouse.results.print_btn')}
               </button>

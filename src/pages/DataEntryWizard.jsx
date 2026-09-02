@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useAppData, defaultOrderState } from '../context/AppDataContext';
 import { useAuth } from '../context/AuthContext';
 import { useFilteredLookups } from '../hooks/useFilteredLookups';
-import { Save, RefreshCw, Hash, Calendar, Box, Scissors, Palette, LayoutGrid, ChevronRight, ChevronLeft, MessageSquare, CheckSquare, Square, Ruler, Camera, X, ImagePlus, Edit3, Copy, Trash2, Layers, PanelTop, Search, DownloadCloud, Pin, Sparkles, CheckCircle2 } from 'lucide-react';
+import { Save, RefreshCw, Hash, Calendar, Box, Scissors, Palette, LayoutGrid, ChevronRight, ChevronLeft, MessageSquare, CheckSquare, Square, Ruler, Camera, X, ImagePlus, Edit3, Copy, Trash2, Layers, PanelTop, Search, DownloadCloud, Pin, Sparkles, CheckCircle2, Package, Award, Info, FileText } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import toast from 'react-hot-toast';
 import { compressImage, normalizeImageUrl } from '../utils/imageUtils';
@@ -52,12 +52,22 @@ const DataEntryWizard = () => {
   const { user, hasPermission } = useAuth();
   const filteredLookups = useFilteredLookups();
 
-  const TABS = [
-    { id: 'basic', label: t('entry.tabs.basic_info'), icon: Hash, num: 1 },
-    { id: 'fabrics_factory', label: t('entry.tabs.fabrics_factory'), icon: Scissors, num: 2 },
-    { id: 'colors_sizes', label: t('entry.tabs.colors_sizes'), icon: Palette, num: 3 },
-    { id: 'packaging', label: t('entry.tabs.packaging'), icon: CheckSquare, num: 4 },
+  const SECTIONS = [
+    { id: 'section-factory', label: t('entry.factory.section_title'), icon: Box },
+    { id: 'section-model', label: t('entry.buyer.serial_no_manual'), icon: Hash },
+    { id: 'section-images', label: t('entry.buyer.product_images'), icon: Camera },
+    { id: 'section-remarks', label: t('entry.buyer.remarks'), icon: MessageSquare },
+    { id: 'section-packaging', label: t('entry.factory.carton_package'), icon: Package },
+    { id: 'section-colors', label: t('entry.colors.section_title'), icon: Palette },
+    { id: 'section-fabrics', label: t('entry.fabrics.section_title'), icon: Scissors },
+    { id: 'section-sizes', label: t('entry.dates.size_range'), icon: Ruler },
+    { id: 'section-measurements', label: t('entry.measurements.section_title'), icon: Ruler },
+    { id: 'section-dates', label: t('entry.dates.section_title'), icon: Calendar },
+    { id: 'section-trademark', label: t('entry.fabrics.trade_mark'), icon: Award },
+    { id: 'section-other-info', label: t('entry.buyer.section_title'), icon: Info },
+    { id: 'section-conditions', label: t('entry.packaging.section_title'), icon: CheckSquare },
   ];
+  const TABS = SECTIONS;
   const [activeTab, setActiveTab] = useState('basic');
   const [selectedColorsArr, setSelectedColorsArr] = useState(() => {
     if (currentOrder?.colorDistribution) {
@@ -328,7 +338,7 @@ const DataEntryWizard = () => {
     const originalFiles = Array.from(e.target.files);
     if (!originalFiles.length) return;
 
-    const modelNum = currentOrder.serialNumber?.trim();
+    const modelNum = currentOrder.serialNumber?.trim() || currentOrder.productName?.trim();
     if (!modelNum) {
       toast.error(t('entry.messages.model_required'));
       return;
@@ -621,6 +631,119 @@ const DataEntryWizard = () => {
 
     return true;
   };
+  const getCleanOrder = () => {
+    // 1. Determine the actual active sizes based on current selection
+    let activeSizes = [];
+    const hasManual = currentOrder.manualSizes && currentOrder.manualSizes.length > 0;
+    if (hasManual) {
+      activeSizes = currentOrder.manualSizes.filter(s => s && s.trim() !== '');
+    } else {
+      activeSizes = lookups.sizes || [];
+      if (currentOrder.sizeFrom && currentOrder.sizeTo) {
+        const idx1 = activeSizes.indexOf(currentOrder.sizeFrom);
+        const idx2 = activeSizes.indexOf(currentOrder.sizeTo);
+        if (idx1 !== -1 && idx2 !== -1) {
+          activeSizes = activeSizes.slice(Math.min(idx1, idx2), Math.max(idx1, idx2) + 1);
+        }
+      }
+    }
+
+    const cleanOrder = { 
+      ...currentOrder,
+      manualSizes: hasManual ? activeSizes : [],
+      sizeFrom: hasManual ? '' : currentOrder.sizeFrom,
+      sizeTo: hasManual ? '' : currentOrder.sizeTo
+    };
+
+    const productObj = lookups.products?.find(p => (typeof p === 'object' ? p.name : p) === currentOrder.productName);
+    const validPartsList = (productObj && productObj.parts && productObj.parts.length > 0) 
+        ? productObj.parts : (currentOrder.productName ? [currentOrder.productName] : []);
+
+    // 2. Clean groupedMeasurements: only keep parts in validPartsList, and valid mNames, and active sizes
+    if (cleanOrder.groupedMeasurements) {
+      const cleanGrouped = {};
+      validPartsList.forEach(partName => {
+        if (cleanOrder.groupedMeasurements[partName]) {
+          const cleanPart = {};
+          
+          const validMeasurementsForPart = (lookups.measurements || []).filter(m => {
+             if (typeof m === 'object' && m.part) {
+                return m.part.split('،').map(p => p.trim()).includes(partName.trim()); 
+             }
+             return false;
+          }).map(m => typeof m === 'object' ? m.name : m);
+
+          Object.keys(cleanOrder.groupedMeasurements[partName]).forEach(mName => {
+             // If validMeasurementsForPart is empty, it means no strict lookup was found, so we might keep it.
+             // But usually it's strict. To be safe, if validMeasurementsForPart has items, enforce it.
+             if (validMeasurementsForPart.length === 0 || validMeasurementsForPart.includes(mName)) {
+                const cleanSizes = {};
+                activeSizes.forEach(size => {
+                  if (cleanOrder.groupedMeasurements[partName][mName][size] !== undefined) {
+                    cleanSizes[size] = cleanOrder.groupedMeasurements[partName][mName][size];
+                  }
+                });
+                if (Object.keys(cleanSizes).length > 0) {
+                  cleanPart[mName] = cleanSizes;
+                }
+             }
+          });
+
+          if (Object.keys(cleanPart).length > 0) {
+            cleanGrouped[partName] = cleanPart;
+          }
+        }
+      });
+      cleanOrder.groupedMeasurements = cleanGrouped;
+    }
+
+    // 3. Clean measurements (old format): keep active sizes
+    if (cleanOrder.measurements) {
+      const cleanMeasurements = {};
+      Object.keys(cleanOrder.measurements).forEach(mName => {
+         const cleanSizes = {};
+         activeSizes.forEach(size => {
+           if (cleanOrder.measurements[mName][size] !== undefined) {
+             cleanSizes[size] = cleanOrder.measurements[mName][size];
+           }
+         });
+         if (Object.keys(cleanSizes).length > 0) {
+           cleanMeasurements[mName] = cleanSizes;
+         }
+      });
+      cleanOrder.measurements = cleanMeasurements;
+    }
+
+    // 4. Clean colorDistribution: only keep active sizes and colors
+    if (cleanOrder.colorDistribution) {
+      const cleanDistribution = {};
+      selectedColorsArr.forEach(color => {
+        if (cleanOrder.colorDistribution[color]) {
+          const cleanSizes = {};
+          activeSizes.forEach(size => {
+            if (cleanOrder.colorDistribution[color][size] !== undefined) {
+              cleanSizes[size] = cleanOrder.colorDistribution[color][size];
+            }
+          });
+          cleanDistribution[color] = cleanSizes;
+        }
+      });
+      cleanOrder.colorDistribution = cleanDistribution;
+    }
+    // 5. Clean packagingConditions: only keep those that are true and exist in lookups
+    if (cleanOrder.packagingConditions) {
+      const cleanConditions = {};
+      const validConditionNames = (lookups.packagingConditionsList || []).map(c => typeof c === 'object' ? c.name : c);
+      Object.keys(cleanOrder.packagingConditions).forEach(cond => {
+        if (cleanOrder.packagingConditions[cond] && validConditionNames.includes(cond)) {
+           cleanConditions[cond] = true;
+        }
+      });
+      cleanOrder.packagingConditions = cleanConditions;
+    }
+
+    return cleanOrder;
+  };
 
   const handleSaveNew = async () => {
     if (!validateForm()) return;
@@ -646,7 +769,8 @@ const DataEntryWizard = () => {
          return;
       }
 
-      const orderWithActivity = appendActivity(currentOrder, createActivityItem({
+      const baseOrder = getCleanOrder();
+      const orderWithActivity = appendActivity(baseOrder, createActivityItem({
         action: 'create',
         user,
         note: t('activity.notes.created', { serial: currentOrder.serialNumber }),
@@ -701,20 +825,21 @@ const DataEntryWizard = () => {
         .select('order_data')
         .eq('serial_number', originalSerial)
         .single();
-      const orderWithActivity = appendActivity(currentOrder, createActivityItem({
+      const baseOrder = getCleanOrder();
+      const orderWithActivity = appendActivity(baseOrder, createActivityItem({
         action: 'update',
         user,
-        note: t('activity.notes.updated', { serial: currentOrder.serialNumber }),
-        changes: summarizeOrderChanges(previous?.order_data, currentOrder),
+        note: t('activity.notes.updated', { serial: baseOrder.serialNumber }),
+        changes: summarizeOrderChanges(previous?.order_data, baseOrder),
         meta: { source: 'data-entry', previousSerial: originalSerial },
       }));
       const payload = {
-        serial_number: currentOrder.serialNumber,
+        serial_number: baseOrder.serialNumber,
         order_data: orderWithActivity
       };
       const { error } = await supabase.from('orders').update(payload).eq('serial_number', originalSerial);
       if (error) throw error;
-      toast.success(t('entry.messages.update_success', { serial: currentOrder.serialNumber }), { id: toastId });
+      toast.success(t('entry.messages.update_success', { serial: baseOrder.serialNumber }), { id: toastId });
       await handleClear();
     } catch (err) {
       console.error(err);
@@ -854,8 +979,9 @@ const DataEntryWizard = () => {
          }
        }
 
+       const baseOrder = getCleanOrder();
        const updatedOrderState = {
-         ...currentOrder,
+         ...baseOrder,
          serialNumber: newSerial,
          orderNumber: null,
          productImages: copiedProductImages
@@ -1188,200 +1314,112 @@ const DataEntryWizard = () => {
     }
   }
 
-  const currentTabIdx = TABS.findIndex(t => t.id === activeTab);
+    const currentTabIdx = 0;
 
-  const renderTabContent = (tabId) => {
-    const targetTab = tabId || activeTab;
-    switch (targetTab) {
+  const renderAllSections = () => {
+    const sizesReady = (currentOrder.sizeFrom && currentOrder.sizeTo) || (currentOrder.manualSizes && currentOrder.manualSizes.some(s => s.trim() !== ''));
+    const productObj = lookups.products?.find(p => (typeof p === 'object' ? p.name : p) === currentOrder.productName);
+    const partsList = (productObj && productObj.parts && productObj.parts.length > 0) 
+        ? productObj.parts : [currentOrder.productName];
 
-      case 'basic':
-        return (
-          <div className="tab-panel" key={tabKey}>
-            <div className="card">
-              <div className="tab-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h3><Hash size={22} /> {t('entry.buyer.section_title')}</h3>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(212, 175, 55, 0.1)', padding: '0.4rem 1rem', borderRadius: '8px', border: '1px dashed var(--accent-color)' }}>
-                   <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>{t('entry.buyer.order_no')}</span>
-                   <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--accent-color)' }}>{currentOrder.orderNumber || '---'}</span>
-                </div>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div className="form-group">
-                   <label className="form-label">{t('entry.buyer.serial_no_manual')}</label>
-                   <input 
-                    type="text" 
-                    className="form-control" 
-                    value={currentOrder.serialNumber} 
-                    onChange={(e) => handleSerialChange(e.target.value)} 
-                    onKeyDown={(e) => e.key === 'Enter' && handleFetch(currentOrder.serialNumber)}
-                    data-enter-ignore="true"
-                    placeholder={t('entry.buyer.serial_placeholder')} 
-                  />
-                  <div style={{ display: 'flex', justifyContent: 'space-between', margin: '4px 0' }}>
-                    <span>
-                      {serialStatus === 'checking' && <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('entry.buyer.checking')}</span>}
-                      {serialStatus === 'used' && <span style={{ fontSize: '0.8rem', color: '#ef4444', fontWeight: 'bold' }}>{t('entry.buyer.used')}</span>}
-                      {serialStatus === 'used_in_old' && <span style={{ fontSize: '0.8rem', color: '#f59e0b', fontWeight: 'bold' }}>{t('entry.buyer.used_in_old', { defaultValue: '⚠️ موجود في الأصناف القديمة!' })}</span>}
-                      {serialStatus === 'available' && <span style={{ fontSize: '0.8rem', color: '#22c55e', fontWeight: 'bold' }}>{t('entry.buyer.available')}</span>}
-                    </span>
-                    {serialStatus === 'used' && <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{t('entry.buyer.fetch_hint')}</span>}
-                  </div>
-                  {currentOrder.barcode && (
-                    <div style={{ marginTop: '8px', padding: '6px', backgroundColor: 'rgba(212, 175, 55, 0.1)', border: '1px dashed var(--accent-color)', borderRadius: '6px', color: 'var(--accent-color)', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                       {t('entry.buyer.generated_barcode')} <strong style={{ letterSpacing: '2px', fontSize: '1.1rem' }}>{currentOrder.barcode}</strong>
+    const selectedConditions = (lookups.packagingConditionsList || [])
+      .map(c => (typeof c === 'object' ? c.name : c))
+      .filter(cond => !!currentOrder?.packagingConditions?.[cond]);
+    const fixedSelected = selectedConditions.filter(c => fixedPackagingTerms.includes(c));
+    const extraSelected = selectedConditions.filter(c => !fixedPackagingTerms.includes(c));
+
+    return (
+      <div className="tab-panel" key={tabKey} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        
+        {/* ═══ 1. تحديد المصنع ورقم الموديل ═══ */}
+        <div className="card" id="section-factory" style={{ scrollMarginTop: '5.5rem', marginBottom: 0 }}>
+          <div className="tab-section-header" style={{ marginBottom: '1.25rem' }}>
+            <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+              <Box size={20} color="var(--accent-color)" />
+              <span>{t('entry.factory.section_title')}</span>
+            </h3>
+          </div>
+          
+          <div className="form-group">
+            <label className="form-label">{t('entry.factory.factory_select')}</label>
+            <ClearableSelect className="form-control" value={currentOrder.factoryId || ''} onChange={(e) => updateOrder('factoryId', e.target.value)} clearTitle={t('entry.actions.clear_btn')}>
+              <option value="">{t('entry.factory.factory_placeholder')}</option>
+              {filteredLookups.factories?.map((f, i) => <option key={i} value={f.name || f}>{f.name || f}</option>)}
+            </ClearableSelect>
+          </div>
+
+          {currentOrder.factoryId && (() => {
+            const selectedFactoryObj = Array.isArray(lookups.factories) ? lookups.factories.find(f => (f.name === currentOrder.factoryId || f === currentOrder.factoryId)) : null;
+            if (selectedFactoryObj && (selectedFactoryObj.mobile || selectedFactoryObj.code || selectedFactoryObj.address)) {
+              return (
+                <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+                  {selectedFactoryObj.code && (
+                    <div className="form-group" style={{ flex: 1, minWidth: '120px', marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('entry.factory.factory_code')}</label>
+                      <input type="text" className="form-control" value={selectedFactoryObj.code} readOnly style={{ backgroundColor: 'var(--bg-color)', opacity: 0.8, borderStyle: 'dashed', color: 'var(--accent-color)', fontWeight: 'bold' }} />
+                    </div>
+                  )}
+                  {selectedFactoryObj.mobile && (
+                    <div className="form-group" style={{ flex: 1, minWidth: '150px', marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('entry.factory.factory_mobile')}</label>
+                      <input type="text" className="form-control" value={selectedFactoryObj.mobile} readOnly style={{ backgroundColor: 'var(--bg-color)', opacity: 0.8, borderStyle: 'dashed' }} />
+                    </div>
+                  )}
+                  {selectedFactoryObj.address && (
+                    <div className="form-group" style={{ flex: 2, minWidth: '200px', marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('entry.factory.factory_address')}</label>
+                      <input type="text" className="form-control" value={selectedFactoryObj.address} readOnly style={{ backgroundColor: 'var(--bg-color)', opacity: 0.8, borderStyle: 'dashed' }} />
                     </div>
                   )}
                 </div>
-                <div className="form-group">
-                   <label className="form-label">{t('entry.buyer.buyer_code')}</label>
-                   <ClearableSelect className="form-control" value={currentOrder.buyerMobile || ''} onChange={(e) => updateOrder('buyerMobile', e.target.value)} clearTitle={t('entry.actions.clear_btn')}>
-                    <option value="">{t('entry.buyer.buyer_code_placeholder')}</option>
-                    {lookups.buyerCodes?.map((code, i) => {
-                      const val = typeof code === 'object' ? code.name : code;
-                      return <option key={i} value={val}>{val}</option>;
-                    })}
-                  </ClearableSelect>
-                </div>
-                <div className="form-group">
-                   <label className="form-label">{t('entry.buyer.buyer_number')}</label>
-                  <input type="text" className="form-control" value={currentOrder.buyerNumber || ''} onChange={(e) => updateOrder('buyerNumber', e.target.value)} />
-                </div>
+              );
+            }
+            return null;
+          })()}
 
-                <div className="form-group">
-                   <label className="form-label">{t('entry.buyer.company_name')}</label>
-                     <select className="form-control" value={currentOrder.buyerCompany || ''} onChange={(e) => updateOrder('buyerCompany', e.target.value)}>
-                        <option value="">{t('entry.actions.select_company_placeholder')}</option>
-                       {filteredLookups.companies?.map((c, i) => <option key={i} value={typeof c === 'object' ? c.name : c}>{typeof c === 'object' ? c.name : c}</option>)}
-                     </select>
+          {/* ═══ 2. رقم الموديل (مباشرة تحت اختيار المصنع) ═══ */}
+          <div id="section-model" style={{ scrollMarginTop: '5.5rem', paddingTop: '1rem', borderTop: '1px dashed rgba(212, 175, 55, 0.25)', marginTop: '1rem' }}>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontWeight: 'bold', fontSize: '0.95rem' }}>
+                <Hash size={17} color="var(--accent-color)" />
+                {t('entry.buyer.serial_no_manual')}
+              </label>
+              <input 
+                type="text" 
+                className="form-control" 
+                value={currentOrder.serialNumber} 
+                onChange={(e) => handleSerialChange(e.target.value)} 
+                onKeyDown={(e) => e.key === 'Enter' && handleFetch(currentOrder.serialNumber)}
+                data-enter-ignore="true"
+                placeholder={t('entry.buyer.serial_placeholder')} 
+              />
+              <div style={{ display: 'flex', justifyContent: 'space-between', margin: '4px 0' }}>
+                <span>
+                  {serialStatus === 'checking' && <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('entry.buyer.checking')}</span>}
+                  {serialStatus === 'used' && <span style={{ fontSize: '0.8rem', color: '#ef4444', fontWeight: 'bold' }}>{t('entry.buyer.used')}</span>}
+                  {serialStatus === 'used_in_old' && <span style={{ fontSize: '0.8rem', color: '#f59e0b', fontWeight: 'bold' }}>{t('entry.buyer.used_in_old', { defaultValue: '⚠️ موجود في الأصناف القديمة!' })}</span>}
+                  {serialStatus === 'available' && <span style={{ fontSize: '0.8rem', color: '#22c55e', fontWeight: 'bold' }}>{t('entry.buyer.available')}</span>}
+                </span>
+                {serialStatus === 'used' && <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{t('entry.buyer.fetch_hint')}</span>}
+              </div>
+              {currentOrder.barcode && (
+                <div style={{ marginTop: '8px', padding: '6px', backgroundColor: 'rgba(212, 175, 55, 0.1)', border: '1px dashed var(--accent-color)', borderRadius: '6px', color: 'var(--accent-color)', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                   {t('entry.buyer.generated_barcode')} <strong style={{ letterSpacing: '2px', fontSize: '1.1rem' }}>{currentOrder.barcode}</strong>
                 </div>
-                {currentOrder.buyerCompany && (() => {
-                  const selectedCompanyObj = Array.isArray(lookups.companies) ? lookups.companies.find(c => (c.name === currentOrder.buyerCompany || c === currentOrder.buyerCompany)) : null;
-                  if (selectedCompanyObj && (selectedCompanyObj.mobile || selectedCompanyObj.fax || selectedCompanyObj.address)) {
-                    return (
-                      <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-                        {selectedCompanyObj.mobile && (
-                          <div className="form-group" style={{ flex: 1, minWidth: '150px', marginBottom: 0 }}>
-                            <label className="form-label" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('admin.company_mobile') || 'Company Mobile'}</label>
-                            <input type="text" className="form-control" value={selectedCompanyObj.mobile} readOnly style={{ backgroundColor: 'var(--bg-color)', opacity: 0.8, borderStyle: 'dashed' }} />
-                          </div>
-                        )}
-                        {selectedCompanyObj.fax && (
-                          <div className="form-group" style={{ flex: 1, minWidth: '150px', marginBottom: 0 }}>
-                            <label className="form-label" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('admin.company_fax') || 'Company Fax'}</label>
-                            <input type="text" className="form-control" value={selectedCompanyObj.fax} readOnly style={{ backgroundColor: 'var(--bg-color)', opacity: 0.8, borderStyle: 'dashed' }} />
-                          </div>
-                        )}
-                        {selectedCompanyObj.address && (
-                          <div className="form-group" style={{ flex: 2, minWidth: '200px', marginBottom: 0 }}>
-                            <label className="form-label" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('admin.company_address') || 'Company Address'}</label>
-                            <input type="text" className="form-control" value={selectedCompanyObj.address} readOnly style={{ backgroundColor: 'var(--bg-color)', opacity: 0.8, borderStyle: 'dashed' }} />
-                          </div>
-                        )}
-                      </div>
-                    );
-                  }
-                  return null;
-                })()}
-                <div className="form-group">
-                   <label className="form-label">{t('entry.buyer.product_name')}</label>
-                   <ClearableSelect className="form-control" value={currentOrder.productName} onChange={(e) => updateOrder('productName', e.target.value)} clearTitle={t('entry.actions.clear_btn')}>
-                     <option value="">{t('entry.buyer.product_name_placeholder')}</option>
-                    {lookups.products?.map((p, i) => {
-                      const val = typeof p === 'object' ? p.name : p;
-                      return <option key={i} value={val}>{val}</option>;
-                    })}
-                  </ClearableSelect>
-                </div>
-                <div className="form-group">
-                   <label className="form-label">{t('entry.buyer.price_currency')}</label>
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                     <input type="text" inputMode="decimal" className="form-control" placeholder={t('entry.buyer.price_placeholder')} style={{ flex: 2, textAlign: 'right' }} value={currentOrder.productPrice || ''} onChange={(e) => updateOrder('productPrice', e.target.value.replace(/[^0-9.]/g, ''))} />
-                     <ClearableSelect className="form-control" style={{ flex: 1 }} value={currentOrder.currency || ''} onChange={(e) => updateOrder('currency', e.target.value)} clearTitle={t('entry.actions.clear_btn')}>
-                       <option value="">{t('entry.buyer.currency_placeholder')}</option>
-                      {lookups.currencies?.map((c, i) => <option key={i} value={c}>{c}</option>)}
-                    </ClearableSelect>
-                  </div>
-                </div>
+              )}
+            </div>
+          </div>
+        </div>
 
-                <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-                   <label className="form-label">{t('entry.buyer.sale_type')}</label>
-                  <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
-                     <ClearableSelect className="form-control" style={{ flex: '0 0 200px' }} value={currentOrder.saleType || ''} onChange={(e) => {
-                       const val = e.target.value;
-                       updateOrder('saleType', val);
-                       if (val === 'تجزئة') {
-                          updateOrder('retailPercentage', '100');
-                          updateOrder('wholesalePercentage', '0');
-                       } else if (val === 'جملة') {
-                          updateOrder('wholesalePercentage', '100');
-                          updateOrder('retailPercentage', '0');
-                       } else {
-                          updateOrder('retailPercentage', '');
-                          updateOrder('wholesalePercentage', '');
-                       }
-                     }} clearTitle={t('entry.actions.clear_btn')}>
-                       <option value="">{t('entry.buyer.sale_type_placeholder')}</option>
-                       <option value="تجزئة">{t('entry.buyer.retail')}</option>
-                       <option value="جملة">{t('entry.buyer.wholesale')}</option>
-                       <option value="جملة وتجزئة">{t('entry.buyer.both')}</option>
-                    </ClearableSelect>
-
-                    {currentOrder.saleType === 'تجزئة' && (
-                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                           <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{t('entry.buyer.retail_percentage')}</span>
-                          <input type="text" className="form-control" value="100%" readOnly style={{ width: '80px', backgroundColor: 'var(--bg-color)', color: 'var(--accent-color)', fontWeight: 'bold', textAlign: 'center' }} />
-                       </div>
-                    )}
-                    
-                    {currentOrder.saleType === 'جملة' && (
-                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                           <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{t('entry.buyer.wholesale_percentage')}</span>
-                          <input type="text" className="form-control" value="100%" readOnly style={{ width: '80px', backgroundColor: 'var(--bg-color)', color: 'var(--accent-color)', fontWeight: 'bold', textAlign: 'center' }} />
-                       </div>
-                    )}
-
-                    {currentOrder.saleType === 'جملة وتجزئة' && (
-                       <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                              <span style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}>{t('entry.buyer.wholesale')} %:</span>
-                             <input type="number" min="0" max="100" className="form-control" placeholder={t('entry.buyer.example', { value: 60 })} 
-                               style={{ width: '100px' }}
-                               value={currentOrder.wholesalePercentage || ''} 
-                               onChange={(e) => {
-                                  let val = e.target.value;
-                                  let num = parseInt(val) || 0;
-                                  let other = parseInt(currentOrder.retailPercentage) || 0;
-                                  if (num + other > 100) {
-                                     toast.error(t('entry.messages.material_limit_error', { allowed: 100 - other }));
-                                     return;
-                                  }
-                                  updateOrder('wholesalePercentage', val);
-                               }} 
-                             />
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                              <span style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}>{t('entry.buyer.retail')} %:</span>
-                             <input type="number" min="0" max="100" className="form-control" placeholder={t('entry.buyer.example', { value: 40 })} 
-                               style={{ width: '100px' }}
-                               value={currentOrder.retailPercentage || ''}
-                               onChange={(e) => {
-                                  let val = e.target.value;
-                                  let num = parseInt(val) || 0;
-                                  let other = parseInt(currentOrder.wholesalePercentage) || 0;
-                                  if (num + other > 100) {
-                                     toast.error(t('entry.messages.material_limit_error', { allowed: 100 - other }));
-                                     return;
-                                  }
-                                  updateOrder('retailPercentage', val);
-                               }} 
-                             />
-                          </div>
-                       </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* ═══ Product Images Upload ═══ */}
+        {/* ═══ 3. رفع الصور ═══ */}
+        <div className="card" id="section-images" style={{ scrollMarginTop: '5.5rem', marginBottom: 0 }}>
+          <div className="tab-section-header" style={{ marginBottom: '1.25rem' }}>
+            <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+              <Camera size={20} color="var(--accent-color)" />
+              <span>{t('entry.buyer.product_images')}</span>
+            </h3>
+          </div>
+          {/* ═══ Product Images Upload ═══ */}
                 <div className="form-group" style={{ gridColumn: '1 / -1' }}>
                   <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <Camera size={18} color="var(--accent-color)" />
@@ -1535,7 +1573,18 @@ const DataEntryWizard = () => {
                   )}
                 </div>
 
-                <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                
+        </div>
+
+        {/* ═══ 4. حقل الملاحظات ═══ */}
+        <div className="card" id="section-remarks" style={{ scrollMarginTop: '5.5rem', marginBottom: 0 }}>
+          <div className="tab-section-header" style={{ marginBottom: '1.25rem' }}>
+            <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+              <MessageSquare size={20} color="var(--accent-color)" />
+              <span>{t('entry.buyer.remarks')}</span>
+            </h3>
+          </div>
+          <div className="form-group" style={{ gridColumn: '1 / -1' }}>
                   <label className="form-label">{t('entry.buyer.remarks')}</label>
                   <textarea className="form-control" rows="3" placeholder={t('entry.buyer.remarks_placeholder')} value={currentOrder.remarks || ''} onChange={(e) => updateOrder('remarks', e.target.value)}></textarea>
                 </div>
@@ -1544,348 +1593,17 @@ const DataEntryWizard = () => {
                   <label className="form-label" style={{ color: 'var(--accent-color)', fontWeight: 'bold' }}>{t('entry.buyer.contract_notes')}</label>
                   <textarea className="form-control" rows="2" placeholder={t('entry.buyer.contract_notes_placeholder')} value={currentOrder.contractNotes || ''} onChange={(e) => updateOrder('contractNotes', e.target.value)}></textarea>
                 </div>
-              </div>
-              <hr style={{ margin: '2rem 0', borderColor: 'rgba(212, 175, 55, 0.15)', borderWidth: '1px', borderStyle: 'dashed' }} />
-              
-              <div className="sub-section-header" style={{ marginBottom: '1.25rem' }}>
-                <h4 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--accent-color)', margin: 0, fontSize: '1.05rem', fontWeight: '600' }}>
-                  <Calendar size={18} /> {t('entry.dates.section_title')}
-                </h4>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <CustomDateInput 
-                  label={t('entry.dates.request_date')} 
-                  value={currentOrder.requestDate} 
-                  onChange={(val) => {
-                    updateOrder('requestDate', val);
-                    // If delivery date is now before request date, clear it or adjust it
-                    if (currentOrder.deliveryDate && val && currentOrder.deliveryDate < val) {
-                      updateOrder('deliveryDate', '');
-                      toast(t('entry.messages.delivery_date_reset'), { icon: 'ℹ️' });
-                    }
-                  }} 
-                />
-                <CustomDateInput 
-                  label={t('entry.dates.delivery_date')} 
-                  value={currentOrder.deliveryDate} 
-                  onChange={(val) => updateOrder('deliveryDate', val)} 
-                  min={currentOrder.requestDate}
-                />
-                <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-                  <label className="form-label">{t('entry.dates.total_quantity')}</label>
-                  <input type="text" inputMode="numeric" className="form-control" style={{ textAlign: 'right' }} value={currentOrder.totalQuantity || ''} onChange={(e) => updateOrder('totalQuantity', e.target.value.replace(/[^0-9]/g, ''))} />
-                </div>
-                <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                    <label className="form-label" style={{ margin: 0 }}>
-                      {hasManual ? t('entry.dates.custom_sizes') : t('entry.dates.size_range')}
-                    </label>
-                    {targetSizes.length > 0 && (
-                      <span style={{ 
-                        backgroundColor: 'rgba(212, 175, 55, 0.15)', 
-                        color: 'var(--accent-color)', 
-                        padding: '2px 10px', 
-                        borderRadius: '12px', 
-                        fontSize: '0.8rem', 
-                        fontWeight: 'bold',
-                        border: '1px solid rgba(212, 175, 55, 0.3)'
-                      }}>
-                        {t('entry.dates.size_selected_count', { count: targetSizes.length })}
-                      </span>
-                    )}
-                  </div>
+        </div>
 
-                  {!hasManual ? (
-                    <div className="fade-in" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                      <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label className="form-label" style={{ fontSize: '0.75rem', opacity: 0.8 }}>{t('entry.dates.from')}</label>
-                        <ClearableSelect className="form-control" value={currentOrder.sizeFrom || ''} onChange={(e) => {
-                          const newVal = e.target.value;
-                          if (newVal === 'MANUAL_TRIGGER') {
-                             setAutoFocusLastSize(true);
-                             updateOrder('manualSizes', [...(currentOrder.manualSizes || []), '']);
-                             return;
-                          }
-                          const oldVal = currentOrder.sizeFrom;
-                          updateOrder('sizeFrom', newVal);
-                          if (newVal && oldVal) {
-                            const wasNumeric = !isNaN(parseFloat(oldVal)) && isFinite(oldVal);
-                            const isNumeric = !isNaN(parseFloat(newVal)) && isFinite(newVal);
-                            if (wasNumeric !== isNumeric) {
-                              updateOrder('sizeTo', '');
-                            }
-                          }
-                        }} clearTitle={t('entry.actions.clear_btn')}>
-                          <option value="">{t('entry.dates.select_size_placeholder')}</option>
-                          <option value="MANUAL_TRIGGER" style={{ color: 'var(--accent-color)', fontWeight: 'bold' }}>{t('entry.dates.manual_trigger')}</option>
-                          {lookups.sizes?.map((s, i) => <option key={i} value={s}>{s}</option>)}
-                        </ClearableSelect>
-                      </div>
-                      <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label className="form-label" style={{ fontSize: '0.75rem', opacity: 0.8 }}>{t('entry.dates.to')}</label>
-                        <ClearableSelect className="form-control" value={currentOrder.sizeTo || ''} onChange={(e) => {
-                          const newVal = e.target.value;
-                          if (newVal === 'MANUAL_TRIGGER') {
-                             setAutoFocusLastSize(true);
-                             updateOrder('manualSizes', [...(currentOrder.manualSizes || []), '']);
-                             return;
-                          }
-                          updateOrder('sizeTo', newVal);
-                        }} clearTitle={t('entry.actions.clear_btn')}>
-                          <option value="">{t('entry.dates.select_size_placeholder')}</option>
-                          <option value="MANUAL_TRIGGER" style={{ color: 'var(--accent-color)', fontWeight: 'bold' }}>{t('entry.dates.manual_trigger')}</option>
-                          {(() => {
-                            if (!currentOrder.sizeFrom) return lookups.sizes;
-                            const isNumeric = !isNaN(parseFloat(currentOrder.sizeFrom)) && isFinite(currentOrder.sizeFrom);
-                            const baseIdx = lookups.sizes?.indexOf(currentOrder.sizeFrom);
-                            return lookups.sizes?.filter((s, idx) => {
-                              const sIsNumeric = !isNaN(parseFloat(s)) && isFinite(s);
-                              if (sIsNumeric !== isNumeric) return false;
-                              if (isNumeric) return parseFloat(s) >= parseFloat(currentOrder.sizeFrom);
-                              return idx >= baseIdx;
-                            });
-                          })()?.map((s, i) => <option key={i} value={s}>{s}</option>)}
-                        </ClearableSelect>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="fade-in" style={{ 
-                      padding: '1rem', 
-                      background: 'rgba(212, 175, 55, 0.05)', 
-                      borderRadius: '8px', 
-                      border: '1px dashed var(--accent-color)',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center'
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: 'var(--accent-color)' }}>
-                        <CheckSquare size={18} />
-                        <span style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>{t('entry.dates.manual_sizes_active')}</span>
-                      </div>
-                      <button 
-                        type="button" 
-                        className="btn btn-outline"
-                        style={{ padding: '4px 12px', fontSize: '0.8rem', borderColor: '#ef4444', color: '#ef4444' }}
-                        onClick={() => {
-                          updateOrder('manualSizes', []);
-                          toast(t('entry.dates.cancel_manual'), { icon: '🔄' });
-                        }}
-                      >
-                        {t('entry.dates.cancel_manual')}
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {/* ═══ Manual Sizes Section ═══ */}
-                {hasManual && (
-                  <div className="form-group fade-in" style={{ gridColumn: '1 / -1', marginTop: '0.5rem' }}>
-                    <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <Edit3 size={16} color="var(--accent-color)" />
-                      {t('entry.dates.custom_sizes')}
-                    </label>
-                    
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
-                      {(currentOrder.manualSizes || []).map((s, idx) => (
-                        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <input 
-                            type="text" 
-                            className="form-control" 
-                            style={{ width: '100px', textAlign: 'center', border: '1px solid var(--accent-color)' }}
-                            value={s}
-                            autoFocus={autoFocusLastSize && idx === (currentOrder.manualSizes?.length - 1)}
-                            onFocus={() => setAutoFocusLastSize(false)}
-                            placeholder={t('entry.dates.size_placeholder')}
-                            onChange={(e) => {
-                              const newManual = [...(currentOrder.manualSizes || [])];
-                              newManual[idx] = e.target.value;
-                              updateOrder('manualSizes', newManual);
-                            }}
-                          />
-                          <button 
-                            type="button" 
-                            onClick={() => {
-                              const newManual = (currentOrder.manualSizes || []).filter((_, i) => i !== idx);
-                              updateOrder('manualSizes', newManual);
-                            }}
-                            style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}
-                          >
-                            <X size={16} />
-                          </button>
-                        </div>
-                      ))}
-                      
-                      <button 
-                        type="button"
-                        className="btn btn-outline"
-                        style={{ 
-                          padding: '0.4rem 1rem', 
-                          fontSize: '0.85rem', 
-                          borderColor: 'rgba(212, 175, 55, 0.4)',
-                          borderStyle: 'dashed',
-                          color: 'var(--accent-color)'
-                        }}
-                        onClick={() => {
-                          setAutoFocusLastSize(true);
-                          updateOrder('manualSizes', [...(currentOrder.manualSizes || []), '']);
-                        }}
-                      >
-                        {t('entry.dates.add_another_size')}
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
+        {/* ═══ 5. التعبئة والتغليف ═══ */}
+        <div className="card" id="section-packaging" style={{ scrollMarginTop: '5.5rem', marginBottom: 0 }}>
+          <div className="tab-section-header" style={{ marginBottom: '1.25rem' }}>
+            <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+              <Package size={20} color="var(--accent-color)" />
+              <span>{t('entry.factory.carton_package')}</span>
+            </h3>
           </div>
-        );
-
-      case 'fabrics_factory':
-        return (
-          <div className="tab-panel" key={tabKey}>
-            <div className="card">
-              <div className="tab-section-header">
-                <h3><Scissors size={22} /> {t('entry.fabrics.section_title')}</h3>
-              </div>
-              <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', alignItems: 'flex-start' }}>
-                <div className="form-group" style={{ flex: 1 }}>
-                  <label className="form-label">{t('entry.fabrics.fabric_type')}</label>
-                  <ClearableSelect className="form-control" value={currentOrder.productFabric || ''} onChange={(e) => updateOrder('productFabric', e.target.value)} clearTitle={t('entry.actions.clear_btn')}>
-                    <option value="">{t('entry.fabrics.select_fabric_placeholder')}</option>
-                    {lookups.fabrics?.map((f, i) => <option key={i} value={f}>{f}</option>)}
-                  </ClearableSelect>
-                </div>
-                <div className="form-group" style={{ flex: 1 }}>
-                  <label className="form-label">{t('entry.fabrics.trade_mark')}</label>
-                  <ClearableSelect className="form-control" value={currentOrder.tradeMark || ''} onChange={(e) => updateOrder('tradeMark', e.target.value)} clearTitle={t('entry.actions.clear_btn')}>
-                    <option value="">{t('entry.fabrics.select_trademark_placeholder')}</option>
-                    {lookups.tradeMarks?.map((t, i) => {
-                      const tmName = typeof t === 'object' ? t.name : t;
-                      return <option key={i} value={tmName}>{tmName}</option>;
-                    })}
-                  </ClearableSelect>
-                </div>
-                {/* Show trademark image */}
-                {currentOrder.tradeMark && (() => {
-                  const tmObj = lookups.tradeMarks?.find(t => (typeof t === 'object' ? t.name : t) === currentOrder.tradeMark);
-                  const tmImage = tmObj && typeof tmObj === 'object' ? tmObj.imageUrl : null;
-                  if (tmImage) {
-                    return (
-                      <div style={{ 
-                        width: '120px', height: '120px', borderRadius: 'var(--radius-md)', 
-                        overflow: 'hidden', border: '2px solid rgba(212, 175, 55, 0.3)', 
-                        background: '#fff', flexShrink: 0, marginTop: '1.5rem',
-                        boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
-                      }}>
-                        <img src={tmImage} alt={currentOrder.tradeMark} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                      </div>
-                    );
-                  }
-                  return null;
-                })()}
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem' }}>
-                {[1, 2, 3].map((num, i) => {
-                  const currentTotal = (currentOrder.materials || []).reduce((sum, m) => sum + (parseFloat(m.percentage) || 0), 0);
-                  const isFilled = currentOrder.materials?.[i]?.name || currentOrder.materials?.[i]?.percentage;
-                  const isLocked = currentTotal >= 100 && !isFilled;
-
-                  return (
-                    <div className="form-group" key={i}>
-                      <label className="form-label">{t('entry.fabrics.material')} {num}</label>
-                      <div 
-                        style={{ display: 'flex', gap: '0.5rem' }}
-                        onClickCapture={(e) => {
-                          if (isLocked) {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            toast.error(t('entry.messages.material_limit_error', { allowed: 0 }));
-                          }
-                        }}
-                      >
-                        <ClearableSelect 
-                          className="form-control" 
-                          value={currentOrder.materials?.[i]?.name || ''} 
-                          onChange={(e) => {
-                             if (!isLocked) handleMaterialChange(i, 'name', e.target.value);
-                          }}
-                          disabled={isLocked}
-                          style={{ opacity: isLocked ? 0.5 : 1, cursor: isLocked ? 'not-allowed' : 'auto' }}
-                          clearTitle={t('entry.actions.clear_btn')}
-                        >
-                          <option value="">{t('entry.fabrics.select_material_placeholder')}</option>
-                          {lookups.materials?.map((m, j) => <option key={j} value={m}>{m}</option>)}
-                        </ClearableSelect>
-                        <input 
-                          type="text" 
-                          inputMode="numeric"
-                          className="form-control no-spinner" 
-                          placeholder="%" 
-                          style={{ 
-                            width: '85px', 
-                            fontWeight: 'bold', 
-                            fontSize: '1.2rem', 
-                            borderColor: 'var(--accent-color)',
-                            opacity: isLocked ? 0.5 : 1,
-                            cursor: isLocked ? 'not-allowed' : 'auto',
-                            backgroundColor: isLocked ? 'var(--bg-color)' : ''
-                          }} 
-                          value={currentOrder.materials?.[i]?.percentage || ''} 
-                          readOnly={isLocked}
-                          onChange={(e) => {
-                            if (isLocked) return;
-                            const val = e.target.value.replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[^0-9]/g, '');
-                            handleMaterialChange(i, 'percentage', val);
-                          }} 
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              <hr style={{ margin: '2rem 0', borderColor: 'rgba(212, 175, 55, 0.15)', borderWidth: '1px', borderStyle: 'dashed' }} />
-              
-              <div className="sub-section-header" style={{ marginBottom: '1.25rem' }}>
-                <h4 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--accent-color)', margin: 0, fontSize: '1.05rem', fontWeight: '600' }}>
-                  <Box size={18} /> {t('entry.factory.section_title')}
-                </h4>
-              </div>
-              <div className="form-group">
-                <label className="form-label">{t('entry.factory.factory_select')}</label>
-                <ClearableSelect className="form-control" value={currentOrder.factoryId || ''} onChange={(e) => updateOrder('factoryId', e.target.value)} clearTitle={t('entry.actions.clear_btn')}>
-                  <option value="">{t('entry.factory.factory_placeholder')}</option>
-                  {filteredLookups.factories?.map((f, i) => <option key={i} value={f.name || f}>{f.name || f}</option>)}
-                </ClearableSelect>
-              </div>
-              {currentOrder.factoryId && (() => {
-                const selectedFactoryObj = Array.isArray(lookups.factories) ? lookups.factories.find(f => (f.name === currentOrder.factoryId || f === currentOrder.factoryId)) : null;
-                if (selectedFactoryObj && (selectedFactoryObj.mobile || selectedFactoryObj.code)) {
-                  return (
-                    <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-                      {selectedFactoryObj.code && (
-                        <div className="form-group" style={{ flex: 1, minWidth: '120px', marginBottom: 0 }}>
-                          <label className="form-label" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('entry.factory.factory_code')}</label>
-                          <input type="text" className="form-control" value={selectedFactoryObj.code} readOnly style={{ backgroundColor: 'var(--bg-color)', opacity: 0.8, borderStyle: 'dashed', color: 'var(--accent-color)', fontWeight: 'bold' }} />
-                        </div>
-                      )}
-                      {selectedFactoryObj.mobile && (
-                        <div className="form-group" style={{ flex: 1, minWidth: '150px', marginBottom: 0 }}>
-                          <label className="form-label" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('entry.factory.factory_mobile')}</label>
-                          <input type="text" className="form-control" value={selectedFactoryObj.mobile} readOnly style={{ backgroundColor: 'var(--bg-color)', opacity: 0.8, borderStyle: 'dashed' }} />
-                        </div>
-                      )}
-                      {selectedFactoryObj.address && (
-                        <div className="form-group" style={{ flex: 2, minWidth: '200px', marginBottom: 0 }}>
-                          <label className="form-label" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('entry.factory.factory_address')}</label>
-                          <input type="text" className="form-control" value={selectedFactoryObj.address} readOnly style={{ backgroundColor: 'var(--bg-color)', opacity: 0.8, borderStyle: 'dashed' }} />
-                        </div>
-                      )}
-                    </div>
-                  );
-                }
-                return null;
-              })()}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div className="form-group">
                   <label className="form-label">{t('entry.factory.carton_package')}</label>
                   <ClearableSelect className="form-control" value={currentOrder.cartonPackage || ''} onChange={(e) => {
@@ -1927,20 +1645,13 @@ const DataEntryWizard = () => {
                     {lookups.plasticBagSizes?.map((pb, i) => <option key={i} value={pb}>{pb}</option>)}
                   </ClearableSelect>
                 </div>
-              </div>
-            </div>
-          </div>
-        );
+              
+</div>
+        </div>
 
-      case 'colors_sizes': {
-        const sizesReady = (currentOrder.sizeFrom && currentOrder.sizeTo) || (currentOrder.manualSizes && currentOrder.manualSizes.some(s => s.trim() !== ''));
-        const productObj = lookups.products?.find(p => (typeof p === 'object' ? p.name : p) === currentOrder.productName);
-        const partsList = (productObj && productObj.parts && productObj.parts.length > 0) 
-            ? productObj.parts : [currentOrder.productName];
-        return (
-          <div className="tab-panel" key={tabKey}>
-            <div className="card">
-              <div className="tab-section-header" style={{ justifyContent: 'space-between' }}>
+        {/* ═══ 6. تحديد الالوان ═══ */}
+        <div className="card" id="section-colors" style={{ scrollMarginTop: '5.5rem', marginBottom: 0 }}>
+          <div className="tab-section-header" style={{ justifyContent: 'space-between' }}>
                 <h3><Palette size={22} /> {t('entry.colors.section_title')}</h3>
                 {selectedColorsArr.length > 0 && sizesReady && (
                   <button className="btn btn-primary" onClick={divideQuantityEqually} style={{ fontSize: '0.85rem', padding: '0.5rem 1rem' }}>
@@ -2148,9 +1859,262 @@ const DataEntryWizard = () => {
                   </table>
                 </div>
               )}
-              <hr style={{ margin: '2rem 0', borderColor: 'rgba(212, 175, 55, 0.15)', borderWidth: '1px', borderStyle: 'dashed' }} />
               
-              <div className="sub-section-header" style={{ marginBottom: '1.25rem' }}>
+        </div>
+
+        {/* ═══ 7. تحديد القماش وتركيباته ═══ */}
+        <div className="card" id="section-fabrics" style={{ scrollMarginTop: '5.5rem', marginBottom: 0 }}>
+          <div className="tab-section-header" style={{ marginBottom: '1.25rem' }}>
+            <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+              <Scissors size={20} color="var(--accent-color)" />
+              <span>{t('entry.fabrics.section_title')}</span>
+            </h3>
+          </div>
+          <div style={{ marginBottom: '1.5rem' }}>
+            <div className="form-group" style={{ flex: 1 }}>
+                  <label className="form-label">{t('entry.fabrics.fabric_type')}</label>
+                  <ClearableSelect className="form-control" value={currentOrder.productFabric || ''} onChange={(e) => updateOrder('productFabric', e.target.value)} clearTitle={t('entry.actions.clear_btn')}>
+                    <option value="">{t('entry.fabrics.select_fabric_placeholder')}</option>
+                    {lookups.fabrics?.map((f, i) => <option key={i} value={f}>{f}</option>)}
+                  </ClearableSelect>
+                </div>
+                
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem' }}>
+                {[1, 2, 3].map((num, i) => {
+                  const currentTotal = (currentOrder.materials || []).reduce((sum, m) => sum + (parseFloat(m.percentage) || 0), 0);
+                  const isFilled = currentOrder.materials?.[i]?.name || currentOrder.materials?.[i]?.percentage;
+                  const isLocked = currentTotal >= 100 && !isFilled;
+
+                  return (
+                    <div className="form-group" key={i}>
+                      <label className="form-label">{t('entry.fabrics.material')} {num}</label>
+                      <div 
+                        style={{ display: 'flex', gap: '0.5rem' }}
+                        onClickCapture={(e) => {
+                          if (isLocked) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            toast.error(t('entry.messages.material_limit_error', { allowed: 0 }));
+                          }
+                        }}
+                      >
+                        <ClearableSelect 
+                          className="form-control" 
+                          value={currentOrder.materials?.[i]?.name || ''} 
+                          onChange={(e) => {
+                             if (!isLocked) handleMaterialChange(i, 'name', e.target.value);
+                          }}
+                          disabled={isLocked}
+                          style={{ opacity: isLocked ? 0.5 : 1, cursor: isLocked ? 'not-allowed' : 'auto' }}
+                          clearTitle={t('entry.actions.clear_btn')}
+                        >
+                          <option value="">{t('entry.fabrics.select_material_placeholder')}</option>
+                          {lookups.materials?.map((m, j) => <option key={j} value={m}>{m}</option>)}
+                        </ClearableSelect>
+                        <input 
+                          type="text" 
+                          inputMode="numeric"
+                          className="form-control no-spinner" 
+                          placeholder="%" 
+                          style={{ 
+                            width: '85px', 
+                            fontWeight: 'bold', 
+                            fontSize: '1.2rem', 
+                            borderColor: 'var(--accent-color)',
+                            opacity: isLocked ? 0.5 : 1,
+                            cursor: isLocked ? 'not-allowed' : 'auto',
+                            backgroundColor: isLocked ? 'var(--bg-color)' : ''
+                          }} 
+                          value={currentOrder.materials?.[i]?.percentage || ''} 
+                          readOnly={isLocked}
+                          onChange={(e) => {
+                            if (isLocked) return;
+                            const val = e.target.value.replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[^0-9]/g, '');
+                            handleMaterialChange(i, 'percentage', val);
+                          }} 
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              
+        </div>
+
+        {/* ═══ 8. اختيار القياسات ═══ */}
+        <div className="card" id="section-sizes" style={{ scrollMarginTop: '5.5rem', marginBottom: 0 }}>
+          <div className="tab-section-header" style={{ marginBottom: '1.25rem' }}>
+            <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+              <Ruler size={20} color="var(--accent-color)" />
+              <span>{hasManual ? t('entry.dates.custom_sizes') : t('entry.dates.size_range')}</span>
+            </h3>
+          </div>
+          <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                    <label className="form-label" style={{ margin: 0 }}>
+                      {hasManual ? t('entry.dates.custom_sizes') : t('entry.dates.size_range')}
+                    </label>
+                    {targetSizes.length > 0 && (
+                      <span style={{ 
+                        backgroundColor: 'rgba(212, 175, 55, 0.15)', 
+                        color: 'var(--accent-color)', 
+                        padding: '2px 10px', 
+                        borderRadius: '12px', 
+                        fontSize: '0.8rem', 
+                        fontWeight: 'bold',
+                        border: '1px solid rgba(212, 175, 55, 0.3)'
+                      }}>
+                        {t('entry.dates.size_selected_count', { count: targetSizes.length })}
+                      </span>
+                    )}
+                  </div>
+
+                  {!hasManual ? (
+                    <div className="fade-in" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.75rem', opacity: 0.8 }}>{t('entry.dates.from')}</label>
+                        <ClearableSelect className="form-control" value={currentOrder.sizeFrom || ''} onChange={(e) => {
+                          const newVal = e.target.value;
+                          if (newVal === 'MANUAL_TRIGGER') {
+                             setAutoFocusLastSize(true);
+                             updateOrder('manualSizes', [...(currentOrder.manualSizes || []), '']);
+                             return;
+                          }
+                          const oldVal = currentOrder.sizeFrom;
+                          updateOrder('sizeFrom', newVal);
+                          if (newVal && oldVal) {
+                            const wasNumeric = !isNaN(parseFloat(oldVal)) && isFinite(oldVal);
+                            const isNumeric = !isNaN(parseFloat(newVal)) && isFinite(newVal);
+                            if (wasNumeric !== isNumeric) {
+                              updateOrder('sizeTo', '');
+                            }
+                          }
+                        }} clearTitle={t('entry.actions.clear_btn')}>
+                          <option value="">{t('entry.dates.select_size_placeholder')}</option>
+                          <option value="MANUAL_TRIGGER" style={{ color: 'var(--accent-color)', fontWeight: 'bold' }}>{t('entry.dates.manual_trigger')}</option>
+                          {lookups.sizes?.map((s, i) => <option key={i} value={s}>{s}</option>)}
+                        </ClearableSelect>
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.75rem', opacity: 0.8 }}>{t('entry.dates.to')}</label>
+                        <ClearableSelect className="form-control" value={currentOrder.sizeTo || ''} onChange={(e) => {
+                          const newVal = e.target.value;
+                          if (newVal === 'MANUAL_TRIGGER') {
+                             setAutoFocusLastSize(true);
+                             updateOrder('manualSizes', [...(currentOrder.manualSizes || []), '']);
+                             return;
+                          }
+                          updateOrder('sizeTo', newVal);
+                        }} clearTitle={t('entry.actions.clear_btn')}>
+                          <option value="">{t('entry.dates.select_size_placeholder')}</option>
+                          <option value="MANUAL_TRIGGER" style={{ color: 'var(--accent-color)', fontWeight: 'bold' }}>{t('entry.dates.manual_trigger')}</option>
+                          {(() => {
+                            if (!currentOrder.sizeFrom) return lookups.sizes;
+                            const isNumeric = !isNaN(parseFloat(currentOrder.sizeFrom)) && isFinite(currentOrder.sizeFrom);
+                            const baseIdx = lookups.sizes?.indexOf(currentOrder.sizeFrom);
+                            return lookups.sizes?.filter((s, idx) => {
+                              const sIsNumeric = !isNaN(parseFloat(s)) && isFinite(s);
+                              if (sIsNumeric !== isNumeric) return false;
+                              if (isNumeric) return parseFloat(s) >= parseFloat(currentOrder.sizeFrom);
+                              return idx >= baseIdx;
+                            });
+                          })()?.map((s, i) => <option key={i} value={s}>{s}</option>)}
+                        </ClearableSelect>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="fade-in" style={{ 
+                      padding: '1rem', 
+                      background: 'rgba(212, 175, 55, 0.05)', 
+                      borderRadius: '8px', 
+                      border: '1px dashed var(--accent-color)',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: 'var(--accent-color)' }}>
+                        <CheckSquare size={18} />
+                        <span style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>{t('entry.dates.manual_sizes_active')}</span>
+                      </div>
+                      <button 
+                        type="button" 
+                        className="btn btn-outline"
+                        style={{ padding: '4px 12px', fontSize: '0.8rem', borderColor: '#ef4444', color: '#ef4444' }}
+                        onClick={() => {
+                          updateOrder('manualSizes', []);
+                          toast(t('entry.dates.cancel_manual'), { icon: '🔄' });
+                        }}
+                      >
+                        {t('entry.dates.cancel_manual')}
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* ═══ Manual Sizes Section ═══ */}
+                {hasManual && (
+                  <div className="form-group fade-in" style={{ gridColumn: '1 / -1', marginTop: '0.5rem' }}>
+                    <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <Edit3 size={16} color="var(--accent-color)" />
+                      {t('entry.dates.custom_sizes')}
+                    </label>
+                    
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
+                      {(currentOrder.manualSizes || []).map((s, idx) => (
+                        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <input 
+                            type="text" 
+                            className="form-control" 
+                            style={{ width: '100px', textAlign: 'center', border: '1px solid var(--accent-color)' }}
+                            value={s}
+                            autoFocus={autoFocusLastSize && idx === (currentOrder.manualSizes?.length - 1)}
+                            onFocus={() => setAutoFocusLastSize(false)}
+                            placeholder={t('entry.dates.size_placeholder')}
+                            onChange={(e) => {
+                              const newManual = [...(currentOrder.manualSizes || [])];
+                              newManual[idx] = e.target.value;
+                              updateOrder('manualSizes', newManual);
+                            }}
+                          />
+                          <button 
+                            type="button" 
+                            onClick={() => {
+                              const newManual = (currentOrder.manualSizes || []).filter((_, i) => i !== idx);
+                              updateOrder('manualSizes', newManual);
+                            }}
+                            style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}
+                          >
+                            <X size={16} />
+                          </button>
+                        </div>
+                      ))}
+                      
+                      <button 
+                        type="button"
+                        className="btn btn-outline"
+                        style={{ 
+                          padding: '0.4rem 1rem', 
+                          fontSize: '0.85rem', 
+                          borderColor: 'rgba(212, 175, 55, 0.4)',
+                          borderStyle: 'dashed',
+                          color: 'var(--accent-color)'
+                        }}
+                        onClick={() => {
+                          setAutoFocusLastSize(true);
+                          updateOrder('manualSizes', [...(currentOrder.manualSizes || []), '']);
+                        }}
+                      >
+                        {t('entry.dates.add_another_size')}
+                      </button>
+                    </div>
+                  </div>
+                )}
+        </div>
+
+        {/* ═══ 9. المقاسات التفصيلية ═══ */}
+        <div className="card" id="section-measurements" style={{ scrollMarginTop: '5.5rem', marginBottom: 0 }}>
+          <div className="sub-section-header" style={{ marginBottom: '1.25rem' }}>
                 <h4 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--accent-color)', margin: 0, fontSize: '1.05rem', fontWeight: '600' }}>
                   <Ruler size={18} /> {t('entry.measurements.section_title')}
                 </h4>
@@ -2229,22 +2193,255 @@ const DataEntryWizard = () => {
                 );
               })
             )}
+          
+        </div>
+
+        {/* ═══ 10. تواريخ طلب المشتري وطلب التسليم من المصنع ═══ */}
+        <div className="card" id="section-dates" style={{ scrollMarginTop: '5.5rem', marginBottom: 0 }}>
+          <div className="tab-section-header" style={{ marginBottom: '1.25rem' }}>
+            <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+              <Calendar size={20} color="var(--accent-color)" />
+              <span>{t('entry.dates.section_title')}</span>
+            </h3>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <CustomDateInput 
+                  label={t('entry.dates.request_date')} 
+                  value={currentOrder.requestDate} 
+                  onChange={(val) => {
+                    updateOrder('requestDate', val);
+                    // If delivery date is now before request date, clear it or adjust it
+                    if (currentOrder.deliveryDate && val && currentOrder.deliveryDate < val) {
+                      updateOrder('deliveryDate', '');
+                      toast(t('entry.messages.delivery_date_reset'), { icon: 'ℹ️' });
+                    }
+                  }} 
+                />
+                <CustomDateInput 
+                  label={t('entry.dates.delivery_date')} 
+                  value={currentOrder.deliveryDate} 
+                  onChange={(val) => updateOrder('deliveryDate', val)} 
+                  min={currentOrder.requestDate}
+                />
+                
           </div>
         </div>
-      );
-    }
 
-      case 'packaging': {
-        const selectedConditions = (lookups.packagingConditionsList || [])
-          .map(c => (typeof c === 'object' ? c.name : c))
-          .filter(cond => !!currentOrder?.packagingConditions?.[cond]);
-        const fixedSelected = selectedConditions.filter(c => fixedPackagingTerms.includes(c));
-        const extraSelected = selectedConditions.filter(c => !fixedPackagingTerms.includes(c));
+        {/* ═══ 11. تحديد صورة الشعار ═══ */}
+        <div className="card" id="section-trademark" style={{ scrollMarginTop: '5.5rem', marginBottom: 0 }}>
+          <div className="tab-section-header" style={{ marginBottom: '1.25rem' }}>
+            <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+              <Award size={20} color="var(--accent-color)" />
+              <span>{t('entry.fabrics.trade_mark')}</span>
+            </h3>
+          </div>
+          <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+            <div className="form-group" style={{ flex: 1 }}>
+                  <label className="form-label">{t('entry.fabrics.trade_mark')}</label>
+                  <ClearableSelect className="form-control" value={currentOrder.tradeMark || ''} onChange={(e) => updateOrder('tradeMark', e.target.value)} clearTitle={t('entry.actions.clear_btn')}>
+                    <option value="">{t('entry.fabrics.select_trademark_placeholder')}</option>
+                    {lookups.tradeMarks?.map((t, i) => {
+                      const tmName = typeof t === 'object' ? t.name : t;
+                      return <option key={i} value={tmName}>{tmName}</option>;
+                    })}
+                  </ClearableSelect>
+                </div>
+                {/* Show trademark image */}
+                {currentOrder.tradeMark && (() => {
+                  const tmObj = lookups.tradeMarks?.find(t => (typeof t === 'object' ? t.name : t) === currentOrder.tradeMark);
+                  const tmImage = tmObj && typeof tmObj === 'object' ? tmObj.imageUrl : null;
+                  if (tmImage) {
+                    return (
+                      <div style={{ 
+                        width: '120px', height: '120px', borderRadius: 'var(--radius-md)', 
+                        overflow: 'hidden', border: '2px solid rgba(212, 175, 55, 0.3)', 
+                        background: '#fff', flexShrink: 0, marginTop: '1.5rem',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
+                      }}>
+                        <img src={tmImage} alt={currentOrder.tradeMark} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+          </div>
+        </div>
 
-        return (
-          <div className="tab-panel" key={tabKey}>
-            <div className="card">
-              <div className="tab-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+        {/* ═══ 12. الاشياء الاخرى ═══ */}
+        <div className="card" id="section-other-info" style={{ scrollMarginTop: '5.5rem', marginBottom: 0 }}>
+          <div className="tab-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+            <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+              <Info size={20} color="var(--accent-color)" />
+              <span>{t('entry.buyer.section_title')}</span>
+            </h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(212, 175, 55, 0.1)', padding: '0.4rem 1rem', borderRadius: '8px', border: '1px dashed var(--accent-color)' }}>
+              <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>{t('entry.buyer.order_no')}</span>
+              <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--accent-color)' }}>{currentOrder.orderNumber || '---'}</span>
+            </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem' }}>
+            <div className="form-group">
+              <label className="form-label">{t('entry.buyer.product_name')}</label>
+              <ClearableSelect className="form-control" value={currentOrder.productName} onChange={(e) => updateOrder('productName', e.target.value)} clearTitle={t('entry.actions.clear_btn')}>
+                <option value="">{t('entry.buyer.product_name_placeholder')}</option>
+                {lookups.products?.map((p, i) => {
+                  const val = typeof p === 'object' ? p.name : p;
+                  return <option key={i} value={val}>{val}</option>;
+                })}
+              </ClearableSelect>
+            </div>
+                <div className="form-group">
+                   <label className="form-label">{t('entry.buyer.buyer_code')}</label>
+                   <ClearableSelect className="form-control" value={currentOrder.buyerMobile || ''} onChange={(e) => updateOrder('buyerMobile', e.target.value)} clearTitle={t('entry.actions.clear_btn')}>
+                    <option value="">{t('entry.buyer.buyer_code_placeholder')}</option>
+                    {lookups.buyerCodes?.map((code, i) => {
+                      const val = typeof code === 'object' ? code.name : code;
+                      return <option key={i} value={val}>{val}</option>;
+                    })}
+                  </ClearableSelect>
+                </div>
+                <div className="form-group">
+                   <label className="form-label">{t('entry.buyer.buyer_number')}</label>
+                  <input type="text" className="form-control" value={currentOrder.buyerNumber || ''} onChange={(e) => updateOrder('buyerNumber', e.target.value)} />
+                </div>
+
+                <div className="form-group">
+                   <label className="form-label">{t('entry.buyer.company_name')}</label>
+                     <select className="form-control" value={currentOrder.buyerCompany || ''} onChange={(e) => updateOrder('buyerCompany', e.target.value)}>
+                        <option value="">{t('entry.actions.select_company_placeholder')}</option>
+                       {filteredLookups.companies?.map((c, i) => <option key={i} value={typeof c === 'object' ? c.name : c}>{typeof c === 'object' ? c.name : c}</option>)}
+                     </select>
+                </div>
+                {currentOrder.buyerCompany && (() => {
+                  const selectedCompanyObj = Array.isArray(lookups.companies) ? lookups.companies.find(c => (c.name === currentOrder.buyerCompany || c === currentOrder.buyerCompany)) : null;
+                  if (selectedCompanyObj && (selectedCompanyObj.mobile || selectedCompanyObj.fax || selectedCompanyObj.address)) {
+                    return (
+                      <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+                        {selectedCompanyObj.mobile && (
+                          <div className="form-group" style={{ flex: 1, minWidth: '150px', marginBottom: 0 }}>
+                            <label className="form-label" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('admin.company_mobile') || 'Company Mobile'}</label>
+                            <input type="text" className="form-control" value={selectedCompanyObj.mobile} readOnly style={{ backgroundColor: 'var(--bg-color)', opacity: 0.8, borderStyle: 'dashed' }} />
+                          </div>
+                        )}
+                        {selectedCompanyObj.fax && (
+                          <div className="form-group" style={{ flex: 1, minWidth: '150px', marginBottom: 0 }}>
+                            <label className="form-label" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('admin.company_fax') || 'Company Fax'}</label>
+                            <input type="text" className="form-control" value={selectedCompanyObj.fax} readOnly style={{ backgroundColor: 'var(--bg-color)', opacity: 0.8, borderStyle: 'dashed' }} />
+                          </div>
+                        )}
+                        {selectedCompanyObj.address && (
+                          <div className="form-group" style={{ flex: 2, minWidth: '200px', marginBottom: 0 }}>
+                            <label className="form-label" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('admin.company_address') || 'Company Address'}</label>
+                            <input type="text" className="form-control" value={selectedCompanyObj.address} readOnly style={{ backgroundColor: 'var(--bg-color)', opacity: 0.8, borderStyle: 'dashed' }} />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+
+                            <div className="form-group">
+                   <label className="form-label">{t('entry.buyer.price_currency')}</label>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                     <input type="text" inputMode="decimal" className="form-control" placeholder={t('entry.buyer.price_placeholder')} style={{ flex: 2, textAlign: 'right' }} value={currentOrder.productPrice || ''} onChange={(e) => updateOrder('productPrice', e.target.value.replace(/[^0-9.]/g, ''))} />
+                     <ClearableSelect className="form-control" style={{ flex: 1 }} value={currentOrder.currency || ''} onChange={(e) => updateOrder('currency', e.target.value)} clearTitle={t('entry.actions.clear_btn')}>
+                       <option value="">{t('entry.buyer.currency_placeholder')}</option>
+                      {lookups.currencies?.map((c, i) => <option key={i} value={c}>{c}</option>)}
+                    </ClearableSelect>
+                  </div>
+                </div>
+
+                <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                   <label className="form-label">{t('entry.buyer.sale_type')}</label>
+                  <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                     <ClearableSelect className="form-control" style={{ flex: '0 0 200px' }} value={currentOrder.saleType || ''} onChange={(e) => {
+                       const val = e.target.value;
+                       updateOrder('saleType', val);
+                       if (val === 'تجزئة') {
+                          updateOrder('retailPercentage', '100');
+                          updateOrder('wholesalePercentage', '0');
+                       } else if (val === 'جملة') {
+                          updateOrder('wholesalePercentage', '100');
+                          updateOrder('retailPercentage', '0');
+                       } else {
+                          updateOrder('retailPercentage', '');
+                          updateOrder('wholesalePercentage', '');
+                       }
+                     }} clearTitle={t('entry.actions.clear_btn')}>
+                       <option value="">{t('entry.buyer.sale_type_placeholder')}</option>
+                       <option value="تجزئة">{t('entry.buyer.retail')}</option>
+                       <option value="جملة">{t('entry.buyer.wholesale')}</option>
+                       <option value="جملة وتجزئة">{t('entry.buyer.both')}</option>
+                    </ClearableSelect>
+
+                    {currentOrder.saleType === 'تجزئة' && (
+                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                           <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{t('entry.buyer.retail_percentage')}</span>
+                          <input type="text" className="form-control" value="100%" readOnly style={{ width: '80px', backgroundColor: 'var(--bg-color)', color: 'var(--accent-color)', fontWeight: 'bold', textAlign: 'center' }} />
+                       </div>
+                    )}
+                    
+                    {currentOrder.saleType === 'جملة' && (
+                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                           <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{t('entry.buyer.wholesale_percentage')}</span>
+                          <input type="text" className="form-control" value="100%" readOnly style={{ width: '80px', backgroundColor: 'var(--bg-color)', color: 'var(--accent-color)', fontWeight: 'bold', textAlign: 'center' }} />
+                       </div>
+                    )}
+
+                    {currentOrder.saleType === 'جملة وتجزئة' && (
+                       <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <span style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}>{t('entry.buyer.wholesale')} %:</span>
+                             <input type="number" min="0" max="100" className="form-control" placeholder={t('entry.buyer.example', { value: 60 })} 
+                               style={{ width: '100px' }}
+                               value={currentOrder.wholesalePercentage || ''} 
+                               onChange={(e) => {
+                                  let val = e.target.value;
+                                  let num = parseInt(val) || 0;
+                                  let other = parseInt(currentOrder.retailPercentage) || 0;
+                                  if (num + other > 100) {
+                                     toast.error(t('entry.messages.material_limit_error', { allowed: 100 - other }));
+                                     return;
+                                  }
+                                  updateOrder('wholesalePercentage', val);
+                               }} 
+                             />
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <span style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}>{t('entry.buyer.retail')} %:</span>
+                             <input type="number" min="0" max="100" className="form-control" placeholder={t('entry.buyer.example', { value: 40 })} 
+                               style={{ width: '100px' }}
+                               value={currentOrder.retailPercentage || ''}
+                               onChange={(e) => {
+                                  let val = e.target.value;
+                                  let num = parseInt(val) || 0;
+                                  let other = parseInt(currentOrder.wholesalePercentage) || 0;
+                                  if (num + other > 100) {
+                                     toast.error(t('entry.messages.material_limit_error', { allowed: 100 - other }));
+                                     return;
+                                  }
+                                  updateOrder('retailPercentage', val);
+                               }} 
+                             />
+                          </div>
+                       </div>
+                    )}
+                  </div>
+                </div>
+
+
+                            <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                  <label className="form-label">{t('entry.dates.total_quantity')}</label>
+                  <input type="text" inputMode="numeric" className="form-control" style={{ textAlign: 'right' }} value={currentOrder.totalQuantity || ''} onChange={(e) => updateOrder('totalQuantity', e.target.value.replace(/[^0-9]/g, ''))} />
+                </div>
+
+          </div>
+        </div>
+
+        {/* ═══ 13. الشروط المطلوبة ═══ */}
+        <div className="card" id="section-conditions" style={{ scrollMarginTop: '5.5rem', marginBottom: 0 }}>
+          <div className="tab-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
                 <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <CheckSquare size={22} color="var(--accent-color)" />
                   <span>{t('entry.packaging.section_title')}</span>
@@ -2564,18 +2761,14 @@ const DataEntryWizard = () => {
                   </div>
                 )}
               </div>
-            </div>
-          </div>
-        );
-      }
+        </div>
 
-      default:
-        return null;
-    }
+      </div>
+    );
   };
 
-
-  return (
+  const renderTabContent = () => renderAllSections();
+return (
     <div className="wizard-tabs-container">
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }} className="fade-in">
@@ -2791,222 +2984,92 @@ const DataEntryWizard = () => {
           </div>
         </div>
 
-        <button
-          onClick={toggleViewMode}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.6rem',
-            padding: '0.6rem 1.2rem',
-            background: viewMode === 'scroll'
-              ? 'linear-gradient(135deg, rgba(212, 175, 55, 0.2), rgba(212, 175, 55, 0.08))'
-              : 'rgba(255, 255, 255, 0.04)',
-            border: viewMode === 'scroll'
-              ? '1px solid rgba(212, 175, 55, 0.4)'
-              : '1px solid var(--border-color)',
-            borderRadius: 'var(--radius-md)',
-            color: viewMode === 'scroll' ? 'var(--accent-color)' : 'var(--text-muted)',
-            cursor: 'pointer',
-            fontSize: '0.85rem',
-            fontWeight: '600',
-            transition: 'all 0.3s ease',
-            boxShadow: viewMode === 'scroll' ? '0 2px 12px rgba(212, 175, 55, 0.15)' : 'none',
-          }}
-          onMouseEnter={e => {
-            e.currentTarget.style.borderColor = 'rgba(212, 175, 55, 0.5)';
-            e.currentTarget.style.color = 'var(--accent-color)';
-            e.currentTarget.style.transform = 'translateY(-1px)';
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.borderColor = viewMode === 'scroll' ? 'rgba(212, 175, 55, 0.4)' : 'var(--border-color)';
-            e.currentTarget.style.color = viewMode === 'scroll' ? 'var(--accent-color)' : 'var(--text-muted)';
-            e.currentTarget.style.transform = 'translateY(0)';
-          }}
-          title={viewMode === 'tabs' ? t('entry.actions.view_full_page') : t('entry.actions.view_tabs')}
-        >
-          {viewMode === 'tabs' ? (
-            <><Layers size={17} /> {t('entry.actions.view_full_page')}</>
-          ) : (
-            <><PanelTop size={17} /> {t('entry.actions.view_tabs')}</>
-          )}
-        </button>
+              </div>
+
+      {/* ═══ Sticky Section Navigation Bar ═══ */}
+      <div style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: '0.45rem',
+        padding: '0.65rem 0.85rem',
+        background: 'var(--glass-bg, rgba(20, 20, 25, 0.88))',
+        backdropFilter: 'blur(16px)',
+        border: '1px solid rgba(212, 175, 55, 0.22)',
+        borderRadius: 'var(--radius-lg)',
+        position: 'sticky',
+        top: '0.5rem',
+        zIndex: 25,
+        boxShadow: '0 4px 20px rgba(0, 0, 0, 0.4)',
+        marginBottom: '1.5rem'
+      }}>
+        {SECTIONS.map((sec, idx) => {
+          const Icon = sec.icon;
+          return (
+            <button
+              key={sec.id}
+              type="button"
+              onClick={() => {
+                const el = document.getElementById(sec.id);
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                padding: '0.4rem 0.75rem',
+                border: '1px solid rgba(212, 175, 55, 0.18)',
+                background: 'rgba(212, 175, 55, 0.07)',
+                color: 'var(--text-muted)',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontSize: '0.8rem',
+                fontWeight: '600',
+                transition: 'all 0.2s ease',
+                flexShrink: 0,
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = 'rgba(212, 175, 55, 0.2)';
+                e.currentTarget.style.color = 'var(--accent-color)';
+                e.currentTarget.style.borderColor = 'rgba(212, 175, 55, 0.5)';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'rgba(212, 175, 55, 0.07)';
+                e.currentTarget.style.color = 'var(--text-muted)';
+                e.currentTarget.style.borderColor = 'rgba(212, 175, 55, 0.18)';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
+            >
+              <span style={{ 
+                fontSize: '0.72rem', 
+                backgroundColor: 'rgba(212, 175, 55, 0.25)', 
+                color: 'var(--accent-color)', 
+                borderRadius: '50%', 
+                width: '18px', 
+                height: '18px', 
+                display: 'inline-flex', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                fontWeight: 'bold'
+              }}>
+                {idx + 1}
+              </span>
+              <Icon size={14} />
+              {sec.label}
+            </button>
+          );
+        })}
       </div>
 
-      {viewMode === 'tabs' ? (
-        <>
-          <div style={{ position: 'relative' }}>
-            {canScrollLeft && (
-              <button
-                onClick={() => scrollTabNav('left')}
-                style={{
-                  position: 'absolute',
-                  left: 0,
-                  top: 0,
-                  bottom: 0,
-                  width: '44px',
-                  zIndex: 25,
-                  border: 'none',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  background: 'linear-gradient(to right, var(--surface-color) 60%, transparent)',
-                  color: 'var(--accent-color)',
-                  borderRadius: 'var(--radius-lg) 0 0 var(--radius-lg)',
-                  transition: 'all 0.2s ease',
-                }}
-                onMouseEnter={e => e.currentTarget.style.width = '52px'}
-                onMouseLeave={e => e.currentTarget.style.width = '44px'}
-              >
-                <ChevronLeft size={20} />
-              </button>
-            )}
+      <div className="tab-content-wrapper" style={{ 
+        pointerEvents: (isEditMode && !hasPermission('entry', 'edit')) || (!isEditMode && !hasPermission('entry', 'add')) ? 'none' : 'auto', 
+        opacity: (isEditMode && !hasPermission('entry', 'edit')) || (!isEditMode && !hasPermission('entry', 'add')) ? 0.7 : 1,
+        marginBottom: '1.5rem'
+      }}>
+        {renderAllSections()}
+      </div>
 
-            <nav className="tab-nav" ref={tabNavRef} style={{ position: 'relative', zIndex: 1 }}>
-              {TABS.map((tab) => {
-                const Icon = tab.icon;
-                return (
-                  <button
-                    key={tab.id}
-                    className={`tab-btn ${activeTab === tab.id ? 'active' : ''}`}
-                    onClick={() => switchTab(tab.id)}
-                  >
-                    <span className="tab-num">{tab.num}</span>
-                    <span className="tab-icon"><Icon size={16} /></span>
-                    <span className="tab-label">{tab.label}</span>
-                  </button>
-                );
-              })}
-            </nav>
-
-            {canScrollRight && (
-              <button
-                onClick={() => scrollTabNav('right')}
-                style={{
-                  position: 'absolute',
-                  right: 0,
-                  top: 0,
-                  bottom: 0,
-                  width: '44px',
-                  zIndex: 25,
-                  border: 'none',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  background: 'linear-gradient(to left, var(--surface-color) 60%, transparent)',
-                  color: 'var(--accent-color)',
-                  borderRadius: '0 var(--radius-lg) var(--radius-lg) 0',
-                  transition: 'all 0.2s ease',
-                }}
-                onMouseEnter={e => e.currentTarget.style.width = '52px'}
-                onMouseLeave={e => e.currentTarget.style.width = '44px'}
-              >
-                <ChevronRight size={20} />
-              </button>
-            )}
-          </div>
-
-          <div className="tab-progress">
-            {TABS.map((tab, i) => (
-              <div
-                key={tab.id}
-                className={`tab-progress-dot ${activeTab === tab.id ? 'active' : i < currentTabIdx ? 'completed' : ''}`}
-              />
-            ))}
-          </div>
-
-          <div className="tab-content-wrapper">
-            <div style={{ 
-              pointerEvents: (isEditMode && !hasPermission('entry', 'edit')) || (!isEditMode && !hasPermission('entry', 'add')) ? 'none' : 'auto', 
-              opacity: (isEditMode && !hasPermission('entry', 'edit')) || (!isEditMode && !hasPermission('entry', 'add')) ? 0.7 : 1 
-            }}>
-              {renderTabContent()}
-            </div>
-
-            <div className="tab-nav-arrows">
-              <button className="tab-nav-arrow" onClick={goPrev} disabled={currentTabIdx === 0}>
-                <ChevronRight size={18} />
-                {currentTabIdx > 0 ? TABS[currentTabIdx - 1].label : t('entry.actions.prev')}
-              </button>
-              <button className="tab-nav-arrow" onClick={goNext} disabled={currentTabIdx === TABS.length - 1}>
-                {currentTabIdx < TABS.length - 1 ? TABS[currentTabIdx + 1].label : t('entry.actions.next')}
-                <ChevronLeft size={18} />
-              </button>
-            </div>
-          </div>
-        </>
-      ) : (
-        <div className="tab-content-wrapper fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          <div style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: '0.4rem',
-            padding: '0.75rem 1rem',
-            background: 'var(--glass-bg)',
-            backdropFilter: 'blur(16px)',
-            border: '1px solid rgba(212, 175, 55, 0.15)',
-            borderRadius: 'var(--radius-lg)',
-            position: 'sticky',
-            top: 0,
-            zIndex: 20,
-            boxShadow: '0 4px 24px rgba(0, 0, 0, 0.4)',
-          }}>
-            {TABS.map((tab) => {
-              const Icon = tab.icon;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => {
-                    const el = document.getElementById(`scroll-section-${tab.id}`);
-                    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                  }}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.4rem',
-                    padding: '0.45rem 0.85rem',
-                    border: '1px solid rgba(212, 175, 55, 0.15)',
-                    background: 'rgba(212, 175, 55, 0.06)',
-                    color: 'var(--text-muted)',
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                    fontSize: '0.8rem',
-                    fontWeight: '500',
-                    transition: 'all 0.2s ease',
-                    flexShrink: 0,
-                  }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.background = 'rgba(212, 175, 55, 0.15)';
-                    e.currentTarget.style.color = 'var(--accent-color)';
-                    e.currentTarget.style.borderColor = 'rgba(212, 175, 55, 0.4)';
-                  }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.background = 'rgba(212, 175, 55, 0.06)';
-                    e.currentTarget.style.color = 'var(--text-muted)';
-                    e.currentTarget.style.borderColor = 'rgba(212, 175, 55, 0.15)';
-                  }}
-                >
-                  <Icon size={13} />
-                  {tab.label}
-                </button>
-              );
-            })}
-          </div>
-
-          {TABS.map((tab) => (
-            <div key={tab.id} id={`scroll-section-${tab.id}`} style={{ 
-              scrollMarginTop: '5rem',
-              pointerEvents: (isEditMode && !hasPermission('entry', 'edit')) || (!isEditMode && !hasPermission('entry', 'add')) ? 'none' : 'auto', 
-              opacity: (isEditMode && !hasPermission('entry', 'edit')) || (!isEditMode && !hasPermission('entry', 'add')) ? 0.7 : 1 
-            }}>
-              {renderTabContent(tab.id)}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {isEditMode && (
+{isEditMode && (
         <div style={{
           display: 'flex',
           alignItems: 'center',

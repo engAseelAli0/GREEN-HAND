@@ -1123,7 +1123,7 @@ ${imgInfo.base64Data}
           </p>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-          {hasPermission('packing', 'export') && (
+          {hasPermission('packing-list', 'export') && (
             <>
               <button onClick={exportToExcel} className="btn" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', backgroundColor: '#10b981', color: 'white', border: 'none', padding: '10px 20px', fontSize: '1.1rem', boxShadow: '0 4px 15px rgba(16, 185, 129, 0.3)' }}>
                 <FileSpreadsheet size={20} /> {t('packing.excel_btn')}

@@ -1,6 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
+import { logAuditEvent } from '../utils/auditLogger';
 
 const AppDataContext = createContext();
 
@@ -131,6 +132,16 @@ export const AppDataProvider = ({ children }) => {
          setLookups(previousLookups);
          return { error };
        }
+
+       logAuditEvent({
+         action: 'UPDATE_LOOKUP',
+         actionType: 'SETTINGS',
+         entityType: 'lookup',
+         entityId: category,
+         summary: `تم تحديث قائمة وبيانات ${category} في إعدادات النظام`,
+         details: { category },
+       }).catch(() => {});
+
        return { error: null };
      } catch (err) {
        console.error("Error saving lookups to supabase:", err);

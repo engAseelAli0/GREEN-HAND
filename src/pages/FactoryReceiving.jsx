@@ -8,6 +8,7 @@ import * as XLSX from 'xlsx';
 import { useTranslation } from 'react-i18next';
 import { extractColorCSS } from '../utils/textUtils';
 import { appendActivity, createActivityItem } from '../utils/activityLog';
+import { logAuditEvent } from '../utils/auditLogger';
 
 const FactoryReceiving = () => {
   const { t } = useTranslation();
@@ -331,6 +332,27 @@ const FactoryReceiving = () => {
           .update({ order_data: orderWithActivity })
           .ilike('serial_number', modelNo.trim());
       }
+
+      await logAuditEvent({
+        action: 'RECEIVE_GOODS',
+        actionType: 'RECEIVE',
+        entityType: 'receiving',
+        entityId: modelNo.trim(),
+        user,
+        screenKey: 'receiving',
+        screenName: 'استلام بضائع الشركة',
+        summary: `قام الموظف بتسجيل استلام كراتين بضاعة للموديل #${modelNo.trim()} من شاشة استلام بضائع الشركة (عدد ${totals.totalCtn} كرتون و ${totals.totalProd} قطعة - المصنع: ${productInfo.factoryName || productInfo.factoryId || '-'})`,
+        details: {
+          screenKey: 'receiving',
+          screenName: 'استلام بضائع الشركة',
+          serialNumber: modelNo.trim(),
+          totalCartons: totals.totalCtn,
+          totalPieces: totals.totalProd,
+          factoryId: productInfo.factoryId,
+          factoryName: productInfo.factoryName,
+        },
+      });
+
       toast.success(t('receiving.messages.save_success'), { id: toastId });
       
       // Reset form to allow entering a new model

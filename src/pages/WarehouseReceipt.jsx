@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../supabaseClient';
 import { useAppData } from '../context/AppDataContext';
@@ -7,73 +7,9 @@ import toast from 'react-hot-toast';
 import { CustomDateInput } from '../components/CustomDateInput';
 import { englishOnly } from '../utils/textUtils';
 import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import html2canvas from 'html2canvas';
 import { useAuth } from '../context/AuthContext';
 import { useFilteredLookups } from '../hooks/useFilteredLookups';
-
-const EN_PDF = {
-  title: 'Warehouse Receipt Report',
-  buyerNo: 'Buyer No',
-  supplier: 'Supplier',
-  consignee: 'Consignee',
-  receiptDate: 'Receipt Date',
-  orderNo: 'Order No',
-  inspector: 'Inspector',
-  cartonNo: 'Carton No',
-  serial: 'Serial',
-  receivedAt: 'Received At',
-  product: 'Product',
-  ctnsQty: 'CTNs Qty',
-  ctnPcs: 'CTN/Pcs',
-  itemQty: 'Item Qty',
-  totalQty: 'Total Qty',
-  ccy: 'CCY',
-  unitPrice: 'Unit Price',
-  totalPrice: 'Total Price',
-  totalAmount: 'Tot. Amount',
-  cartonSize: 'Carton Size',
-  cbm: 'CBM',
-  remarks: 'Remarks',
-  total: 'Total',
-  models: 'Models',
-  ctn: 'CTN',
-  pcs: 'Pcs',
-  shippingDate: 'Shipping Date',
-  cabinetNo: 'Cabinet Number',
-  shipper: 'Shipper'
-};
-
-const latinPdfText = (value) => {
-  if (value === null || value === undefined) return '-';
-  const str = String(value);
-  const latin = englishOnly(str).trim();
-  return (latin || str.replace(/[^\x20-\x7E]/g, '').trim() || '-');
-};
-
-let droidSansFallbackBase64 = null;
-
-const arrayBufferToBase64 = (buffer) => {
-  const bytes = new Uint8Array(buffer);
-  let binary = '';
-  const chunkSize = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    const chunk = bytes.subarray(i, i + chunkSize);
-    binary += String.fromCharCode.apply(null, chunk);
-  }
-  return btoa(binary);
-};
-
-const registerChinesePdfFont = async (pdf) => {
-  if (!droidSansFallbackBase64) {
-    const baseUrl = import.meta.env.BASE_URL || '/';
-    const response = await fetch(`${baseUrl}fonts/DroidSansFallbackFull.ttf`);
-    if (!response.ok) throw new Error('Chinese PDF font could not be loaded');
-    droidSansFallbackBase64 = arrayBufferToBase64(await response.arrayBuffer());
-  }
-  pdf.addFileToVFS('DroidSansFallbackFull.ttf', droidSansFallbackBase64);
-  pdf.addFont('DroidSansFallbackFull.ttf', 'DroidSansFallback', 'normal');
-  pdf.addFont('DroidSansFallbackFull.ttf', 'DroidSansFallback', 'bold');
-};
 
 const WarehouseReceipt = () => {
   const { t, i18n } = useTranslation();
@@ -294,209 +230,117 @@ const WarehouseReceipt = () => {
   const grandTotalPcs = filteredData.reduce((acc, row) => acc + row.totalProd, 0);
   const grandTotalAmount = filteredData.reduce((acc, row) => acc + row.totalAmount, 0);
 
-  // Export Handlers
+  // Export Handlers - تصدير نفس تصميم الطباعة بالكامل بدقة متناهية
   const exportToPDF = async () => {
     if (filteredData.length === 0) return toast.error(t('warehouse.messages.no_data_export'));
     const toastId = toast.loading(t('warehouse.messages.exporting_pdf'));
     try {
-       const isChinesePdf = (i18n.language || '').startsWith('zh');
-       const label = isChinesePdf
-         ? {
-             title: t('warehouse.title'),
-             buyerNo: t('warehouse.header.buyer_no'),
-             supplier: t('warehouse.header.supplier'),
-             consignee: t('warehouse.header.consignee'),
-             receiptDate: t('warehouse.header.receipt_date'),
-             orderNo: t('warehouse.header.order_no'),
-             inspector: t('warehouse.header.inspector'),
-             cartonNo: t('warehouse.table.cols.carton_no_zh'),
-             serial: t('warehouse.table.cols.item_no_zh'),
-             receivedAt: t('warehouse.table.cols.received_at_zh'),
-             product: t('warehouse.table.cols.product_name_zh'),
-             ctnsQty: t('warehouse.table.cols.ctns_qty_zh'),
-             ctnPcs: t('warehouse.table.cols.ctn_pcs_zh'),
-             itemQty: t('warehouse.table.cols.item_qty_zh'),
-             totalQty: t('warehouse.table.cols.total_qty_zh'),
-             ccy: t('warehouse.table.cols.ccy_zh'),
-             unitPrice: t('warehouse.table.cols.unit_price_zh'),
-             totalPrice: t('warehouse.table.cols.total_price_zh'),
-             totalAmount: t('warehouse.table.cols.tot_amount_zh'),
-             cartonSize: t('warehouse.table.cols.carton_size_zh'),
-             cbm: t('warehouse.table.cols.cbm_zh'),
-             remarks: t('warehouse.table.cols.remarks_zh'),
-             total: t('packing.footer.total'),
-             models: t('warehouse.results.models_count'),
-             ctn: t('shipping.footer.ctn'),
-             pcs: t('shipping.footer.pcs'),
-             shippingDate: t('warehouse.footer.shipping_date'),
-             cabinetNo: t('warehouse.footer.cabinet_no'),
-             shipper: t('warehouse.footer.shipper')
-           }
-         : EN_PDF;
-       const pdfText = (value) => {
-         if (value === null || value === undefined || value === '') return '-';
-         return isChinesePdf ? String(value) : latinPdfText(value);
-       };
-       const containsCjk = (value) => /[\u3400-\u9FFF\uF900-\uFAFF]/.test(String(value || ''));
-       const pdfCell = (value, styles = {}) => {
-         const content = pdfText(value);
-         const { colSpan, rowSpan, ...cellStyles } = styles;
-         return {
-           content,
-           ...(colSpan ? { colSpan } : {}),
-           ...(rowSpan ? { rowSpan } : {}),
-           styles: {
-             font: isChinesePdf && containsCjk(content) ? 'DroidSansFallback' : 'helvetica',
-             ...cellStyles
-           }
-         };
-       };
+      const originalElement = document.getElementById('receipt-print-area');
+      if (!originalElement) throw new Error('Receipt element not found');
 
-       const tblHead = [[
-         label.cartonNo,
-         label.serial,
-         label.receivedAt,
-         label.product,
-         label.ctnsQty,
-         label.ctnPcs,
-         label.itemQty,
-         label.totalQty,
-         label.ccy,
-         label.unitPrice,
-         label.totalPrice,
-         label.totalAmount,
-         label.cartonSize,
-         label.cbm,
-         label.remarks
-       ]];
-       const tblBody = [];
-       filteredData.forEach((order) => {
-         order.packages.forEach((pkg) => {
-           const row = [
-             pdfCell(pkg.cartonNo),
-             pdfCell(order.serial),
-             pdfCell(formatReceivedAt(order.receivedAt)),
-             pdfCell(order.productName, { halign: 'left' }),
-             pdfCell(pkg.ctnQty || 0),
-             pdfCell(pkg.ctnPcs || 0),
-             pdfCell(pkg.itemQty || 0),
-             pdfCell(order.totalProd || 0),
-             pdfCell(order.ccy),
-             pdfCell((pkg.unitPrice || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })),
-             pdfCell((pkg.totalPrice || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })),
-             pdfCell((order.totalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })),
-             pdfCell(order.cartonSize),
-             pdfCell(pkg.cbm),
-             pdfCell(order.remarks, { halign: 'left' }),
-           ];
-           tblBody.push(isChinesePdf ? row : row.map(cell => cell.content));
-         });
-       });
-       tblBody.push([
-         pdfCell(label.total, { colSpan: 4, fontStyle: 'bold', fillColor: [220, 230, 241], fontSize: isChinesePdf ? 6.5 : 8 }),
-         pdfCell(grandTotalCtn, { fontStyle: 'bold', fillColor: [220, 230, 241] }),
-         pdfCell('', { fillColor: [220, 230, 241] }),
-         pdfCell('', { fillColor: [220, 230, 241] }),
-         pdfCell(grandTotalPcs, { fontStyle: 'bold', fillColor: [220, 230, 241] }),
-         pdfCell('', { fillColor: [220, 230, 241] }),
-         pdfCell('', { fillColor: [220, 230, 241] }),
-         pdfCell('', { fillColor: [220, 230, 241] }),
-         pdfCell(grandTotalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 }), { fontStyle: 'bold', fillColor: [220, 230, 241], fontSize: 8 }),
-         pdfCell('', { fillColor: [220, 230, 241] }),
-         pdfCell('', { fillColor: [220, 230, 241] }),
-         pdfCell(grandTotalItems + ' ' + label.models, { fontStyle: 'bold', fillColor: [220, 230, 241] }),
-       ]);
-       var contentH = 58 + (tblBody.length * 5.2) + 42;
-       var pdfH = Math.max(210, contentH);
-       var pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [297, pdfH] });
-       const pdfFont = isChinesePdf ? 'DroidSansFallback' : 'helvetica';
-       if (isChinesePdf) await registerChinesePdfFont(pdf);
-       var pageW = pdf.internal.pageSize.getWidth();
-       var mg = 8;
-       pdf.setFontSize(isChinesePdf ? 15 : 17);
-       pdf.setFont(pdfFont, 'bold');
-       pdf.text(label.title, pageW / 2, 12, { align: 'center' });
-       pdf.setDrawColor(15, 23, 42);
-       pdf.setLineWidth(0.8);
-       pdf.line(mg, 15, pageW - mg, 15);
-       autoTable(pdf, {
-         startY: 17,
-         body: [
-           [
-             pdfCell(label.buyerNo + ':', { font: pdfFont, fontStyle: 'bold', fillColor: [230, 236, 245] }),
-             pdfCell(headerInfo.buyerNo),
-             pdfCell(label.supplier + ':', { font: pdfFont, fontStyle: 'bold', fillColor: [230, 236, 245] }),
-             pdfCell(headerInfo.supplier),
-             pdfCell(label.consignee + ':', { font: pdfFont, fontStyle: 'bold', fillColor: [230, 236, 245] }),
-             pdfCell(headerInfo.consignee)
-           ],
-           [
-             pdfCell(label.receiptDate + ':', { font: pdfFont, fontStyle: 'bold', fillColor: [230, 236, 245] }),
-             pdfCell(headerInfo.receiptDate || '-'),
-             pdfCell(label.orderNo + ':', { font: pdfFont, fontStyle: 'bold', fillColor: [230, 236, 245] }),
-             pdfCell(headerInfo.orderNo),
-             pdfCell(label.inspector + ':', { font: pdfFont, fontStyle: 'bold', fillColor: [230, 236, 245] }),
-             pdfCell(headerInfo.inspector)
-           ],
-         ],
-         theme: 'grid',
-         styles: { fontSize: isChinesePdf ? 7 : 7.5, cellPadding: 2.2, halign: 'center', font: isChinesePdf ? 'helvetica' : pdfFont, textColor: [15, 23, 42], lineColor: [100, 116, 139], lineWidth: 0.25 },
-         columnStyles: {
-           0: { fontStyle: 'bold', fillColor: [230, 236, 245], cellWidth: 28 },
-           1: { cellWidth: 32 }, 2: { fontStyle: 'bold', fillColor: [230, 236, 245], cellWidth: 28 },
-           3: { cellWidth: 32 }, 4: { fontStyle: 'bold', fillColor: [230, 236, 245], cellWidth: 28 },
-           5: { cellWidth: 32 },
-         },
-         margin: { left: mg, right: mg }, tableWidth: 'wrap',
-       });
-       var tableY = (pdf.lastAutoTable ? pdf.lastAutoTable.finalY : 35) + 2;
-       autoTable(pdf, {
-         startY: tableY, head: tblHead, body: tblBody, theme: 'grid',
-         headStyles: { fillColor: [30, 64, 100], textColor: [255, 255, 255], font: pdfFont, fontStyle: 'bold', fontSize: isChinesePdf ? 5.9 : 6.4, halign: 'center', cellPadding: 2 },
-         styles: { fontSize: isChinesePdf ? 5.8 : 6.3, cellPadding: 1.7, halign: 'center', font: isChinesePdf ? 'helvetica' : pdfFont, overflow: 'linebreak', lineWidth: 0.25, lineColor: [100, 116, 139], textColor: [15, 23, 42] },
-         alternateRowStyles: { fillColor: [241, 245, 249] },
-         columnStyles: {
-           0: { cellWidth: 13 }, 1: { cellWidth: 13 }, 2: { cellWidth: 20, fontSize: 5.2 }, 3: { cellWidth: 31, halign: 'left' },
-           4: { cellWidth: 11 }, 5: { cellWidth: 12 }, 6: { cellWidth: 14 }, 7: { cellWidth: 14 },
-           8: { cellWidth: 10 }, 9: { cellWidth: 14 }, 10: { cellWidth: 17 }, 11: { cellWidth: 19 },
-           12: { cellWidth: 21, fontSize: 5.2 }, 13: { cellWidth: 11 }, 14: { cellWidth: 18, halign: 'left', fontSize: 5.2 },
-         },
-         margin: { left: mg, right: mg },
-       });
-       var tableEndY = pdf.lastAutoTable ? pdf.lastAutoTable.finalY : 180;
-       var fY = Math.max(tableEndY + 8, pdfH - 18);
-       pdf.setFontSize(8.5);
-       pdf.setFont(pdfFont, 'bold');
-       pdf.setDrawColor(15, 23, 42);
-       pdf.setLineWidth(0.5);
-       pdf.line(mg, fY - 2, pageW - mg, fY - 2);
-       if (isChinesePdf) {
-         const drawFooterPair = (x, y, name, value) => {
-           pdf.setFont('DroidSansFallback', 'bold');
-           pdf.text(`${name}:`, x, y);
-           pdf.setFont('helvetica', 'bold');
-           pdf.text(String(value || '____________'), x + 24, y);
-         };
-         drawFooterPair(mg, fY + 2, label.shippingDate, headerInfo.shippingDate);
-         drawFooterPair(mg + 90, fY + 2, label.cabinetNo, pdfText(headerInfo.cabinetNumber));
-         drawFooterPair(mg + 180, fY + 2, label.shipper, pdfText(headerInfo.shipper));
-         pdf.setFontSize(7);
-         pdf.setFont('helvetica', 'normal');
-         pdf.text('Tel: ' + pdfText(headerInfo.companyPhone), mg, fY + 7);
-       } else {
-         pdf.text(label.shippingDate + ': ' + (headerInfo.shippingDate || '____________'), mg, fY + 2);
-         pdf.text(label.cabinetNo + ': ' + (pdfText(headerInfo.cabinetNumber) || '____________'), mg + 90, fY + 2);
-         pdf.text(label.shipper + ': ' + (pdfText(headerInfo.shipper) || '____________'), mg + 180, fY + 2);
-         pdf.setFontSize(7);
-         pdf.setFont(pdfFont, 'normal');
-         pdf.text('Tel: ' + pdfText(headerInfo.companyPhone), mg, fY + 7);
-       }
-       pdf.save('Warehouse_Receipt_' + new Date().toISOString().split('T')[0] + '.pdf');
-       toast.success(t('warehouse.messages.export_success'), { id: toastId });
+      // 1. استنساخ عنصر الفاتورة المعروضة
+      const clone = originalElement.cloneNode(true);
+
+      // 2. إخفاء حقول الإدخال وإظهار النصوص كما في أمر الطباعة تماماً
+      clone.querySelectorAll('.hide-on-print').forEach(el => el.remove());
+      clone.querySelectorAll('.print-only-inline').forEach(el => {
+        el.style.display = 'inline';
+      });
+
+      // 3. إزالة الثيم الداكن في المستنسخ لضمان طباعة نقية بخلفية بيضاء
+      clone.classList.remove('dark-theme-receipt');
+
+      // 4. ضبط أبعاد ومظهر المستنسخ ليتطابق بنسبة 100% مع ورقة الطباعة الأفقية
+      clone.style.position = 'fixed';
+      clone.style.left = '-9999px';
+      clone.style.top = '0';
+      clone.style.width = '1250px';
+      clone.style.maxWidth = '1250px';
+      clone.style.backgroundColor = '#ffffff';
+      clone.style.color = '#0f172a';
+      clone.style.boxShadow = 'none';
+      clone.style.borderRadius = '0';
+      clone.style.border = 'none';
+      clone.style.padding = '15px 20px 25px 20px';
+      clone.style.margin = '0';
+      clone.style.display = 'flex';
+      clone.style.flexDirection = 'column';
+      clone.style.minHeight = '780px';
+      clone.style.boxSizing = 'border-box';
+      clone.style.direction = 'ltr';
+
+      // معالجة الجدول داخل المستنسخ لضمان عدم تكسر خلايا rowspan في html2canvas
+      clone.querySelectorAll('table.data-table').forEach(tbl => {
+        tbl.style.borderCollapse = 'separate';
+        tbl.style.borderSpacing = '0';
+      });
+
+      clone.querySelectorAll('tbody tr').forEach(tr => {
+        tr.style.backgroundColor = 'transparent';
+        tr.style.border = 'none';
+      });
+
+      const footerBlock = clone.querySelector('.receipt-footer-block');
+      if (footerBlock) {
+        footerBlock.style.marginTop = 'auto'; // ضمان دفع التذييل لأسفل الصفحة تماماً وعدم ارتباطه بالجدول
+        footerBlock.style.paddingTop = '15px';
+      }
+
+      document.body.appendChild(clone);
+      await document.fonts?.ready;
+
+      // 5. التقاط نسخة عالية الدقة من المستند
+      const canvas = await html2canvas(clone, {
+        scale: 2.5,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff'
+      });
+
+      document.body.removeChild(clone);
+
+      const imgData = canvas.toDataURL('image/jpeg', 0.98);
+
+      // 6. إنشاء ملف PDF قياسي ورقة واحدة A4 Landscape دائماً دون أي انقسام
+      const pdfWidthMM = 297;
+      const pdfHeightMM = 210;
+      const margin = 4;
+      const maxContentWidthMM = pdfWidthMM - (margin * 2); // 289mm
+      const maxContentHeightMM = pdfHeightMM - (margin * 2); // 202mm
+
+      const scaleRatio = Math.min(
+        maxContentWidthMM / canvas.width,
+        maxContentHeightMM / canvas.height
+      );
+
+      const renderWidthMM = canvas.width * scaleRatio;
+      const renderHeightMM = canvas.height * scaleRatio;
+
+      const posX = margin + (maxContentWidthMM - renderWidthMM) / 2;
+      const posY = margin + (maxContentHeightMM - renderHeightMM) / 2;
+
+      const pdf = new jsPDF({
+        orientation: 'landscape',
+        unit: 'mm',
+        format: 'a4',
+        compress: true
+      });
+
+      pdf.addImage(imgData, 'JPEG', posX, posY, renderWidthMM, renderHeightMM, undefined, 'FAST');
+
+      const fileName = `Warehouse_Receipt_${headerInfo.orderNo || headerInfo.buyerNo || new Date().toISOString().split('T')[0]}.pdf`;
+      pdf.save(fileName);
+
+      toast.success(t('warehouse.messages.export_success', { defaultValue: 'تم تصدير ملف الـ PDF بنجاح!' }), { id: toastId });
     } catch (err) {
-       toast.error(t('warehouse.messages.export_failed'), { id: toastId });
-       console.error('PDF Export Error:', err);
+      console.error('PDF Export Error:', err);
+      toast.error(t('warehouse.messages.export_failed', { defaultValue: 'حدث خطأ أثناء تحميل ملف الـ PDF' }), { id: toastId });
     }
+  };
+
+  // طباعة الورقة في صفحة A4 أفقية واحدة دائماً
+  const handlePrint = () => {
+    window.print();
   };
 
 
@@ -569,7 +413,7 @@ const WarehouseReceipt = () => {
            </h3>
            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
               {hasPermission('warehouse-receipt', 'export') && (<>
-              <button className="btn btn-outline" onClick={() => window.print()} style={{ color: 'var(--text-main)', borderColor: 'var(--border-color)' }}>
+              <button className="btn btn-outline" onClick={handlePrint} style={{ color: 'var(--text-main)', borderColor: 'var(--border-color)' }}>
                   <Printer size={20} /> {t('warehouse.results.print_btn')}
               </button>
               <button className="btn" onClick={exportToPDF} style={{ backgroundColor: '#ef4444', color: 'white', boxShadow: '0 4px 15px rgba(239, 68, 68, 0.3)' }}>
@@ -682,66 +526,66 @@ const WarehouseReceipt = () => {
             </div>
 
             {/* Data Table */}
-            <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', border: '2px solid #0f172a', fontSize: '0.92rem', color: '#0f172a', tableLayout: 'fixed' }}>
+            <table className="data-table" style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, border: '2px solid #0f172a', fontSize: '0.92rem', color: '#0f172a', tableLayout: 'fixed' }}>
                 <thead>
-                    <tr style={{ backgroundColor: '#cbd5e1', textAlign: 'center', borderBottom: '2px solid #0f172a' }}>
-                        <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', width: '6%' }}>
+                    <tr style={{ backgroundColor: '#cbd5e1', textAlign: 'center' }}>
+                        <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', borderBottom: '2px solid #0f172a', width: '6%' }}>
                             <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.carton_no_zh')}</div>
                             <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.carton_no')}</div>
                         </th>
-                        <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', width: '8%' }}>
+                        <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', borderBottom: '2px solid #0f172a', width: '8%' }}>
                             <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.item_no_zh')}</div>
                             <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.item_no')}</div>
                         </th>
-                        <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', width: '8%' }}>
+                        <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', borderBottom: '2px solid #0f172a', width: '8%' }}>
                             <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.received_at_zh')}</div>
                             <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.received_at')}</div>
                         </th>
-                        <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', width: '8%' }}>
+                        <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', borderBottom: '2px solid #0f172a', width: '8%' }}>
                             <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.product_name_zh')}</div>
                             <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.product_name')}</div>
                         </th>
-                        <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', width: '5%' }}>
+                        <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', borderBottom: '2px solid #0f172a', width: '5%' }}>
                             <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.ctns_qty_zh')}</div>
                             <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.ctns_qty')}</div>
                         </th>
-                        <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', width: '6%' }}>
+                        <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', borderBottom: '2px solid #0f172a', width: '6%' }}>
                             <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.ctn_pcs_zh')}</div>
                             <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.ctn_pcs')}</div>
                         </th>
-                        <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', width: '6%' }}>
+                        <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', borderBottom: '2px solid #0f172a', width: '6%' }}>
                             <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.item_qty_zh')}</div>
                             <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.item_qty')}</div>
                         </th>
-                        <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', width: '6%' }}>
+                        <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', borderBottom: '2px solid #0f172a', width: '6%' }}>
                             <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.total_qty_zh')}</div>
                             <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.total_qty')}</div>
                         </th>
-                        <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', width: '4%' }}>
+                        <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', borderBottom: '2px solid #0f172a', width: '4%' }}>
                             <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.ccy_zh')}</div>
                             <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.ccy')}</div>
                         </th>
-                        <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', width: '7%' }}>
+                        <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', borderBottom: '2px solid #0f172a', width: '7%' }}>
                             <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.unit_price_zh')}</div>
                             <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.unit_price')}</div>
                         </th>
-                        <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', width: '8%' }}>
+                        <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', borderBottom: '2px solid #0f172a', width: '8%' }}>
                             <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.total_price_zh')}</div>
                             <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.total_price')}</div>
                         </th>
-                        <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', width: '8%' }}>
+                        <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', borderBottom: '2px solid #0f172a', width: '8%' }}>
                             <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.tot_amount_zh')}</div>
                             <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.tot_amount')}</div>
                         </th>
-                        <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', width: '8%' }}>
+                        <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', borderBottom: '2px solid #0f172a', width: '8%' }}>
                             <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.carton_size_zh')}</div>
                             <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.carton_size')}</div>
                         </th>
-                        <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', width: '5%' }}>
+                        <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', borderBottom: '2px solid #0f172a', width: '5%' }}>
                             <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.cbm_zh')}</div>
                             <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.cbm')}</div>
                         </th>
-                        <th style={{ padding: '8px 4px', width: '5%' }}>
+                        <th style={{ padding: '8px 4px', borderBottom: '2px solid #0f172a', width: '5%' }}>
                             <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.remarks_zh')}</div>
                             <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.remarks')}</div>
                         </th>
@@ -749,49 +593,52 @@ const WarehouseReceipt = () => {
                 </thead>
                 <tbody>
                     {filteredData.map((order, oIdx) => {
+                        const rowBg = oIdx % 2 === 0 ? '#ffffff' : '#f8fafc';
                         return order.packages.map((pkg, pIdx) => {
                             const isFirstPkg = pIdx === 0;
+                            const isLastPkg = pIdx === order.packages.length - 1;
                             const rowSpan = order.packages.length;
                             const tBorderStyle = '1px solid #cbd5e1';
+                            const bottomBorder = isLastPkg ? '1px solid #334155' : tBorderStyle;
 
                             return (
-                                <tr key={`${oIdx}-${pIdx}`} style={{ textAlign: 'center', backgroundColor: oIdx % 2 === 0 ? '#ffffff' : '#f1f5f9', borderBottom: pIdx === rowSpan - 1 ? '1px solid #334155' : 'none' }}>
-                                    <td style={{ padding: '4px', borderRight: tBorderStyle, borderBottom: tBorderStyle }}>{pkg.cartonNo}</td>
+                                <tr key={`${oIdx}-${pIdx}`} style={{ textAlign: 'center', backgroundColor: 'transparent' }}>
+                                    <td style={{ padding: '4px', borderRight: tBorderStyle, borderBottom: bottomBorder, backgroundColor: rowBg, verticalAlign: 'middle' }}>{pkg.cartonNo}</td>
                                     
                                     {isFirstPkg && (
                                         <>
-                                            <td rowSpan={rowSpan} style={{ padding: '4px', borderRight: tBorderStyle, fontWeight: 'bold', borderBottom: '1px solid #334155' }}>{order.serial}</td>
-                                            <td rowSpan={rowSpan} style={{ padding: '4px', borderRight: tBorderStyle, fontSize: '0.72rem', fontWeight: 'bold', borderBottom: '1px solid #334155' }}>{formatReceivedAt(order.receivedAt)}</td>
-                                            <td rowSpan={rowSpan} style={{ padding: '4px', borderRight: tBorderStyle, borderBottom: '1px solid #334155' }}>{englishOnly(order.productName)}</td>
+                                            <td rowSpan={rowSpan} style={{ padding: '4px', borderRight: tBorderStyle, fontWeight: 'bold', borderBottom: '1px solid #334155', backgroundColor: rowBg, verticalAlign: 'middle', position: 'relative', zIndex: 2 }}>{order.serial}</td>
+                                            <td rowSpan={rowSpan} style={{ padding: '4px', borderRight: tBorderStyle, fontSize: '0.72rem', fontWeight: 'bold', borderBottom: '1px solid #334155', backgroundColor: rowBg, verticalAlign: 'middle', position: 'relative', zIndex: 2 }}>{formatReceivedAt(order.receivedAt)}</td>
+                                            <td rowSpan={rowSpan} style={{ padding: '4px', borderRight: tBorderStyle, borderBottom: '1px solid #334155', backgroundColor: rowBg, verticalAlign: 'middle', position: 'relative', zIndex: 2 }}>{englishOnly(order.productName)}</td>
                                         </>
                                     )}
 
-                                    <td style={{ padding: '4px', borderRight: tBorderStyle, borderBottom: tBorderStyle }}>{pkg.ctnQty}</td>
-                                    <td style={{ padding: '4px', borderRight: tBorderStyle, borderBottom: tBorderStyle }}>{pkg.ctnPcs}</td>
-                                    <td style={{ padding: '4px', borderRight: tBorderStyle, borderBottom: tBorderStyle }}>{pkg.itemQty}</td>
+                                    <td style={{ padding: '4px', borderRight: tBorderStyle, borderBottom: bottomBorder, backgroundColor: rowBg, verticalAlign: 'middle' }}>{pkg.ctnQty}</td>
+                                    <td style={{ padding: '4px', borderRight: tBorderStyle, borderBottom: bottomBorder, backgroundColor: rowBg, verticalAlign: 'middle' }}>{pkg.ctnPcs}</td>
+                                    <td style={{ padding: '4px', borderRight: tBorderStyle, borderBottom: bottomBorder, backgroundColor: rowBg, verticalAlign: 'middle' }}>{pkg.itemQty}</td>
 
                                     {isFirstPkg && (
                                         <>
-                                            <td rowSpan={rowSpan} style={{ padding: '4px', borderRight: tBorderStyle, fontWeight: 'bold', borderBottom: '1px solid #334155' }}>{order.totalProd}</td>
-                                            <td rowSpan={rowSpan} style={{ padding: '4px', borderRight: tBorderStyle, fontSize: '0.7rem', borderBottom: '1px solid #334155' }}>¥ {order.ccy}</td>
+                                            <td rowSpan={rowSpan} style={{ padding: '4px', borderRight: tBorderStyle, fontWeight: 'bold', borderBottom: '1px solid #334155', backgroundColor: rowBg, verticalAlign: 'middle', position: 'relative', zIndex: 2 }}>{order.totalProd}</td>
+                                            <td rowSpan={rowSpan} style={{ padding: '4px', borderRight: tBorderStyle, fontSize: '0.7rem', borderBottom: '1px solid #334155', backgroundColor: rowBg, verticalAlign: 'middle', position: 'relative', zIndex: 2 }}>¥ {order.ccy}</td>
                                         </>
                                     )}
 
-                                    <td style={{ padding: '4px', borderRight: tBorderStyle, borderBottom: tBorderStyle }}>{pkg.unitPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                                    <td style={{ padding: '4px', borderRight: tBorderStyle, borderBottom: tBorderStyle }}>{pkg.totalPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                    <td style={{ padding: '4px', borderRight: tBorderStyle, borderBottom: bottomBorder, backgroundColor: rowBg, verticalAlign: 'middle' }}>{pkg.unitPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                    <td style={{ padding: '4px', borderRight: tBorderStyle, borderBottom: bottomBorder, backgroundColor: rowBg, verticalAlign: 'middle' }}>{pkg.totalPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
 
                                     {isFirstPkg && (
                                         <>
-                                            <td rowSpan={rowSpan} style={{ padding: '4px', borderRight: tBorderStyle, fontWeight: 'bold', borderBottom: '1px solid #334155' }}>{order.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                            <td rowSpan={rowSpan} style={{ padding: '4px', borderRight: tBorderStyle, fontWeight: 'bold', borderBottom: '1px solid #334155', backgroundColor: rowBg, verticalAlign: 'middle', position: 'relative', zIndex: 2 }}>{order.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                                         </>
                                     )}
 
-                                    <td style={{ padding: '4px', borderRight: tBorderStyle, fontSize: '0.75rem', borderBottom: tBorderStyle }}>{order.cartonSize}</td>
+                                    <td style={{ padding: '4px', borderRight: tBorderStyle, fontSize: '0.75rem', borderBottom: bottomBorder, backgroundColor: rowBg, verticalAlign: 'middle' }}>{order.cartonSize}</td>
                                     
                                     {isFirstPkg && (
                                         <>
-                                            <td rowSpan={rowSpan} style={{ padding: '4px', borderRight: tBorderStyle, borderBottom: '1px solid #334155' }}>{pkg.cbm}</td>
-                                            <td rowSpan={rowSpan} style={{ padding: '4px', fontSize: '0.75rem', borderBottom: '1px solid #334155' }}>{order.remarks}</td>
+                                            <td rowSpan={rowSpan} style={{ padding: '4px', borderRight: tBorderStyle, borderBottom: '1px solid #334155', backgroundColor: rowBg, verticalAlign: 'middle', position: 'relative', zIndex: 2 }}>{pkg.cbm}</td>
+                                            <td rowSpan={rowSpan} style={{ padding: '4px', fontSize: '0.75rem', borderBottom: '1px solid #334155', backgroundColor: rowBg, verticalAlign: 'middle', position: 'relative', zIndex: 2 }}>{order.remarks}</td>
                                         </>
                                     )}
                                 </tr>
@@ -800,49 +647,55 @@ const WarehouseReceipt = () => {
                     })}
 
                     {/* Totals Row */}
-                    <tr className="totals-row" style={{ backgroundColor: '#cbd5e1', textAlign: 'center', fontWeight: 'bold', borderBottom: '2px solid #0f172a', borderTop: '2px solid #0f172a' }}>
-                        <td colSpan={3} style={{ padding: '10px 4px', borderRight: '1px solid #94a3b8', fontSize: '1rem' }}>{t('packing.footer.total')}</td>
-                        <td style={{ padding: '10px 4px', borderRight: '1px solid #94a3b8', color: '#1e293b' }}>{grandTotalItems} {t('warehouse.results.models_count')}</td>
-                        <td colSpan={2} style={{ padding: '10px 4px', borderRight: '1px solid #94a3b8', color: '#1e293b' }}>{grandTotalCtn} {t('shipping.footer.ctn')}</td>
-                        <td colSpan={2} style={{ padding: '10px 4px', borderRight: '1px solid #94a3b8', color: '#1e293b' }}>{grandTotalPcs} {t('shipping.footer.pcs')}</td>
-                        <td colSpan={7} style={{ padding: '10px 4px', color: '#1e293b', fontSize: '1.1rem' }}>{grandTotalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })} ¥ RMB</td>
+                    <tr className="totals-row" style={{ backgroundColor: '#cbd5e1', textAlign: 'center', fontWeight: 'bold' }}>
+                        <td colSpan={3} style={{ padding: '10px 4px', borderRight: '1px solid #94a3b8', borderBottom: '2px solid #0f172a', borderTop: '2px solid #0f172a', fontSize: '1rem', backgroundColor: '#cbd5e1' }}>{t('packing.footer.total')}</td>
+                        <td style={{ padding: '10px 4px', borderRight: '1px solid #94a3b8', borderBottom: '2px solid #0f172a', borderTop: '2px solid #0f172a', color: '#1e293b', backgroundColor: '#cbd5e1' }}>{grandTotalItems} {t('warehouse.results.models_count')}</td>
+                        <td colSpan={2} style={{ padding: '10px 4px', borderRight: '1px solid #94a3b8', borderBottom: '2px solid #0f172a', borderTop: '2px solid #0f172a', color: '#1e293b', backgroundColor: '#cbd5e1' }}>{grandTotalCtn} {t('shipping.footer.ctn', { defaultValue: 'كرتون CTN' })}</td>
+                        <td colSpan={2} style={{ padding: '10px 4px', borderRight: '1px solid #94a3b8', borderBottom: '2px solid #0f172a', borderTop: '2px solid #0f172a', color: '#1e293b', backgroundColor: '#cbd5e1' }}>{grandTotalPcs} {t('shipping.footer.pcs', { defaultValue: 'قطعة PCS' })}</td>
+                        <td colSpan={7} style={{ padding: '10px 4px', borderBottom: '2px solid #0f172a', borderTop: '2px solid #0f172a', color: '#1e293b', fontSize: '1.1rem', backgroundColor: '#cbd5e1' }}>{grandTotalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })} ¥ RMB</td>
                     </tr>
                 </tbody>
             </table>
 
             {/* Footer Summary */}
             <div className="receipt-footer-block" style={{ marginTop: 'auto', paddingTop: '1.5rem' }}>
-            <div className="footer-summary" style={{ display: 'flex', justifyContent: 'space-between', padding: '1rem', backgroundColor: '#e2e8f0', border: '2px solid #334155', borderRadius: '6px', fontSize: '1rem', fontWeight: 'bold', color: '#0f172a', flexWrap: 'wrap', gap: '1rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <span style={{ color: '#ef4444' }}>{t('warehouse.footer.shipping_date_zh')}</span>
-                    <span>{t('warehouse.footer.shipping_date')}:</span>
-                    <input className="hide-on-print" type="date" value={headerInfo.shippingDate} onChange={e => updateHeaderInfo('shippingDate', e.target.value)} style={{ padding: '0.2rem', border: '1px solid #cbd5e1', borderRadius: '4px' }} />
-                    <span className="print-only-inline" style={{ display: 'none' }}>{headerInfo.shippingDate || '------------------'}</span>
+                <div className="footer-summary" style={{ display: 'flex', justifyContent: 'space-between', padding: '1rem', backgroundColor: '#e2e8f0', border: '2px solid #334155', borderRadius: '6px', fontSize: '1rem', fontWeight: 'bold', color: '#0f172a', flexWrap: 'wrap', gap: '1rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span style={{ color: '#ef4444' }}>{t('warehouse.footer.shipping_date_zh')}</span>
+                        <span>{t('warehouse.footer.shipping_date')}:</span>
+                        <input className="hide-on-print" type="date" value={headerInfo.shippingDate} onChange={e => updateHeaderInfo('shippingDate', e.target.value)} style={{ padding: '0.2rem', border: '1px solid #cbd5e1', borderRadius: '4px' }} />
+                        <span className="print-only-inline" style={{ display: 'none' }}>{headerInfo.shippingDate || '------------------'}</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span style={{ color: '#ef4444' }}>{t('warehouse.footer.cabinet_no_zh')}</span>
+                        <span>{t('warehouse.footer.cabinet_no')}:</span>
+                        <input className="hide-on-print" type="text" value={headerInfo.cabinetNumber} onChange={e => updateHeaderInfo('cabinetNumber', e.target.value)} style={{ padding: '0.2rem', border: '1px solid #cbd5e1', borderRadius: '4px' }} />
+                        <span className="print-only-inline" style={{ display: 'none' }}>{headerInfo.cabinetNumber || '------------------'}</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span style={{ color: '#ef4444' }}>{t('warehouse.footer.shipper_zh')}</span>
+                        <span>{t('warehouse.footer.shipper')}:</span>
+                        <input className="hide-on-print" type="text" value={headerInfo.shipper} onChange={e => updateHeaderInfo('shipper', e.target.value)} style={{ padding: '0.2rem', border: '1px solid #cbd5e1', borderRadius: '4px' }} />
+                        <span className="print-only-inline" style={{ display: 'none' }}>{headerInfo.shipper || '------------------'}</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span style={{ color: '#ef4444' }}>{t('warehouse.header.inspector_zh')}:</span>
+                        <span>{t('warehouse.header.inspector')}:</span>
+                        <input className="hide-on-print" type="text" value={headerInfo.inspector} onChange={e => updateHeaderInfo('inspector', e.target.value)} style={{ padding: '0.2rem', border: '1px solid #cbd5e1', borderRadius: '4px' }} />
+                        <span className="print-only-inline" style={{ display: 'none' }}>{headerInfo.inspector || '------------------'}</span>
+                    </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <span style={{ color: '#ef4444' }}>{t('warehouse.footer.cabinet_no_zh')}</span>
-                    <span>{t('warehouse.footer.cabinet_no')}:</span>
-                    <input className="hide-on-print" type="text" value={headerInfo.cabinetNumber} onChange={e => updateHeaderInfo('cabinetNumber', e.target.value)} style={{ padding: '0.2rem', border: '1px solid #cbd5e1', borderRadius: '4px' }} />
-                    <span className="print-only-inline" style={{ display: 'none' }}>{headerInfo.cabinetNumber || '------------------'}</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <span style={{ color: '#ef4444' }}>{t('warehouse.footer.shipper_zh')}</span>
-                    <span>{t('warehouse.footer.shipper')}:</span>
-                    <input className="hide-on-print" type="text" value={headerInfo.shipper} onChange={e => updateHeaderInfo('shipper', e.target.value)} style={{ padding: '0.2rem', border: '1px solid #cbd5e1', borderRadius: '4px' }} />
-                    <span className="print-only-inline" style={{ display: 'none' }}>{headerInfo.shipper || '------------------'}</span>
-                </div>
-            </div>
 
-            <div style={{ marginTop: '1rem', display: 'flex', gap: '1.5rem', alignItems: 'center', color: '#0f172a', fontWeight: 'bold' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <span>{t('warehouse.header.company_phone')}</span>
-                    <span style={{ color: '#ef4444' }}>{t('warehouse.header.company_phone_zh')}:</span>
+                <div style={{ marginTop: '1rem', display: 'flex', gap: '1.5rem', alignItems: 'center', color: '#0f172a', fontWeight: 'bold' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span>{t('warehouse.header.company_phone')}</span>
+                        <span style={{ color: '#ef4444' }}>{t('warehouse.header.company_phone_zh')}:</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: '2rem', fontSize: '1.1rem' }}>
+                        <input className="hide-on-print" type="text" value={headerInfo.companyPhone} onChange={e => updateHeaderInfo('companyPhone', e.target.value)} style={{ width: '300px', padding: '0.2rem', border: '1px solid #cbd5e1', borderRadius: '4px' }} />
+                        <span className="print-only-inline" style={{ display: 'none' }}>{headerInfo.companyPhone}</span>
+                    </div>
                 </div>
-                <div style={{ display: 'flex', gap: '2rem', fontSize: '1.1rem' }}>
-                    <input className="hide-on-print" type="text" value={headerInfo.companyPhone} onChange={e => updateHeaderInfo('companyPhone', e.target.value)} style={{ width: '300px', padding: '0.2rem', border: '1px solid #cbd5e1', borderRadius: '4px' }} />
-                    <span className="print-only-inline" style={{ display: 'none' }}>{headerInfo.companyPhone}</span>
-                </div>
-            </div>
             </div>
 
             <style>
@@ -940,20 +793,21 @@ const WarehouseReceipt = () => {
                     font-weight: 900 !important;
                 }
 
-                @page {
-                    size: A4 landscape;
-                    margin: 5mm;
-                }
-
                 @media print {
+                    @page {
+                        size: landscape;
+                        margin: 4mm 5mm;
+                    }
                     html, body {
+                        width: 100% !important;
+                        height: 100% !important;
                         margin: 0 !important;
                         padding: 0 !important;
                         background: #fff !important;
                         direction: ltr !important;
                         -webkit-print-color-adjust: exact !important;
                         print-color-adjust: exact !important;
-                        overflow: visible !important;
+                        overflow: hidden !important;
                     }
                     body * {
                         visibility: hidden;
@@ -965,26 +819,35 @@ const WarehouseReceipt = () => {
                         visibility: visible;
                     }
                     #receipt-print-area {
-                        position: absolute;
-                        left: 0;
-                        top: 0;
-                        width: 100%;
-                        min-height: calc(210mm - 10mm) !important;
-                        display: flex !important;
-                        flex-direction: column !important;
-                        box-sizing: border-box !important;
-                        background-color: #ffffff !important;
-                        color: #000000 !important;
-                        box-shadow: none !important;
-                        padding: 5mm !important;
+                        position: absolute !important;
+                        left: 0 !important;
+                        top: 0 !important;
+                        width: 100% !important;
+                        max-width: 100% !important;
+                        margin: 0 !important;
+                        padding: 0 !important;
                         border: none !important;
                         border-radius: 0 !important;
+                        box-shadow: none !important;
+                        background-color: #ffffff !important;
+                        color: #000000 !important;
+                        display: flex !important;
+                        flex-direction: column !important;
+                        height: calc(100vh - 8mm) !important;
+                        max-height: calc(100vh - 8mm) !important;
+                        box-sizing: border-box !important;
                         page-break-inside: avoid !important;
                         break-inside: avoid !important;
+                        page-break-after: avoid !important;
+                        break-after: avoid !important;
+                        page-break-before: avoid !important;
+                        break-before: avoid !important;
                     }
                     #receipt-print-area .receipt-footer-block {
                         margin-top: auto !important;
-                        padding-top: 6mm !important;
+                        padding-top: 3mm !important;
+                        page-break-inside: avoid !important;
+                        break-inside: avoid !important;
                     }
 
                     /* Force single page */
@@ -994,6 +857,7 @@ const WarehouseReceipt = () => {
                     }
                     #receipt-print-area .data-table {
                         page-break-inside: avoid !important;
+                        break-inside: avoid !important;
                     }
                     #receipt-print-area .data-table tr {
                         page-break-inside: avoid !important;
@@ -1004,22 +868,24 @@ const WarehouseReceipt = () => {
                     }
                     #receipt-print-area .print-header h1 {
                         color: #0f172a !important;
-                        font-size: 22pt !important;
+                        font-size: 17pt !important;
                     }
                     #receipt-print-area .print-header h2 {
                         color: #334155 !important;
-                        font-size: 14pt !important;
+                        font-size: 11pt !important;
+                        margin-top: 1mm !important;
                     }
                     #receipt-print-area .print-header {
-                        border-bottom: 3px solid #0f172a !important;
-                        margin-bottom: 5mm !important;
+                        border-bottom: 2px solid #0f172a !important;
+                        margin-bottom: 2.5mm !important;
+                        padding-bottom: 1.5mm !important;
                     }
 
                     /* Info grid print */
                     #receipt-print-area .info-grid {
                         background-color: #475569 !important;
                         border: 2px solid #0f172a !important;
-                        margin-bottom: 5mm !important;
+                        margin-bottom: 2.5mm !important;
                     }
                     #receipt-print-area .info-grid > div {
                         background-color: #fff !important;
@@ -1028,13 +894,18 @@ const WarehouseReceipt = () => {
                         background-color: #cbd5e1 !important;
                         color: #0f172a !important;
                         border-right: 1px solid #475569 !important;
+                        font-size: 8pt !important;
+                        padding: 3px 5px !important;
+                    }
+                    #receipt-print-area .info-grid > div > div:last-child {
+                        padding: 3px 5px !important;
                         font-size: 8.5pt !important;
                     }
 
                     /* Data table print */
                     #receipt-print-area .data-table {
                         border: 2px solid #0f172a !important;
-                        font-size: 8.5pt !important;
+                        font-size: 7.8pt !important;
                         table-layout: fixed !important;
                         width: 100% !important;
                     }
@@ -1042,14 +913,14 @@ const WarehouseReceipt = () => {
                         background-color: #cbd5e1 !important;
                         color: #0f172a !important;
                         border: 1px solid #64748b !important;
-                        padding: 4px 2px !important;
-                        font-size: 7.4pt !important;
+                        padding: 3px 1.5px !important;
+                        font-size: 7pt !important;
                     }
                     #receipt-print-area .data-table td {
                         border: 1px solid #94a3b8 !important;
-                        padding: 3px 2px !important;
+                        padding: 2.5px 1.5px !important;
                         color: #0f172a !important;
-                        font-size: 8pt !important;
+                        font-size: 7.5pt !important;
                         font-weight: 650 !important;
                         word-wrap: break-word !important;
                         overflow-wrap: break-word !important;
@@ -1064,7 +935,8 @@ const WarehouseReceipt = () => {
                     #receipt-print-area .data-table .totals-row td {
                         color: #0f172a !important;
                         font-weight: bold !important;
-                        font-size: 9pt !important;
+                        font-size: 8.5pt !important;
+                        padding: 4px 1.5px !important;
                     }
 
                     /* Footer print */
@@ -1072,7 +944,8 @@ const WarehouseReceipt = () => {
                         background-color: #e2e8f0 !important;
                         border: 2px solid #334155 !important;
                         color: #0f172a !important;
-                        font-size: 9pt !important;
+                        font-size: 8pt !important;
+                        padding: 5px 8px !important;
                     }
                 }
                 `}

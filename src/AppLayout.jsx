@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { Settings, Edit3, Printer, Truck, Factory, Barcode, FileSpreadsheet, Package, ChevronDown, BarChart3, ClipboardList, Search } from 'lucide-react';
+import { Settings, Edit3, Printer, Truck, Factory, Barcode, FileSpreadsheet, Package, ChevronDown, BarChart3, ClipboardList, Search, ShieldAlert } from 'lucide-react';
 import { Toaster, toast } from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
 import LanguageSelector from './components/LanguageSelector';
@@ -44,6 +44,7 @@ const NAV_GROUPS = [
     labelKey: 'groups.admin.title',
     pages: [
       { path: '/admin', labelKey: 'nav.admin', icon: Settings, color: '#a78bfa' },
+      { path: '/audit-log', labelKey: 'nav.audit_log', icon: ShieldAlert, color: '#f43f5e' },
     ]
   },
 ];

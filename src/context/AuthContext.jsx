@@ -1,6 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
+import { logAuditEvent } from '../utils/auditLogger';
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
 
@@ -218,6 +219,16 @@ export const AuthProvider = ({ children }) => {
 
       // Explicitly check for MFA challenge right after signing in
       await checkMfaAssurance();
+
+      logAuditEvent({
+        action: 'USER_LOGIN',
+        actionType: 'AUTH',
+        entityType: 'auth',
+        entityId: userObj.username,
+        user: userObj,
+        summary: `تسجيل دخول ناجح للمستخدم: ${userObj.username}`,
+        details: { role: userObj.role },
+      }).catch(() => {});
       
       return true;
     } catch (err) {
@@ -230,6 +241,17 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
+      if (user) {
+        logAuditEvent({
+          action: 'USER_LOGOUT',
+          actionType: 'AUTH',
+          entityType: 'auth',
+          entityId: user.username,
+          user,
+          summary: `تسجيل خروج للمستخدم: ${user.username}`,
+          details: { role: user.role },
+        }).catch(() => {});
+      }
       await supabase.auth.signOut();
       setUser(null);
       setMfaPending(false);

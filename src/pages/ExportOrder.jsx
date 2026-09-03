@@ -1,4 +1,4 @@
-import React, { useLayoutEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../supabaseClient';
 import toast from 'react-hot-toast';
@@ -9,6 +9,7 @@ import { useAppData } from '../context/AppDataContext';
 import { useAuth } from '../context/AuthContext';
 import { englishOnly, chineseOnly } from '../utils/textUtils';
 import { normalizeImageUrl } from '../utils/imageUtils';
+import { logAuditEvent } from '../utils/auditLogger';
 
 const getSizeRange = (orderData) => {
   if (!orderData) return '-';
@@ -198,6 +199,49 @@ const ExportOrder = () => {
   const [serialSearchQuery, setSerialSearchQuery] = useState('');
   const [fetchingSerials, setFetchingSerials] = useState(false);
   const serialSearchRef = React.useRef(null);
+
+  // حساب دقيق لنسبة التكبير/التصغير في الطباعة لضمان ظهور الفاتورة كاملة في صفحة واحدة مهما كان حجمها
+  const updatePrintZoom = () => {
+    const el = document.getElementById('export-doc');
+    if (el) {
+      const elHeight = el.scrollHeight || el.offsetHeight || 1100;
+      const targetHeight = 710;
+      const zoom = elHeight > targetHeight ? Math.max(0.5, Math.min(0.95, (targetHeight / elHeight) * 0.98)) : 0.95;
+      document.documentElement.style.setProperty('--print-zoom', zoom.toFixed(3));
+    }
+  };
+
+  useEffect(() => {
+    const onBeforePrint = () => {
+      updatePrintZoom();
+    };
+    window.addEventListener('beforeprint', onBeforePrint);
+    return () => window.removeEventListener('beforeprint', onBeforePrint);
+  }, [order]);
+
+  const handlePrint = () => {
+    updatePrintZoom();
+    if (order?.serialNumber) {
+      logAuditEvent({
+        action: 'PRINT_EXPORT_DOC',
+        actionType: 'PRINT',
+        entityType: 'order',
+        entityId: order.serialNumber,
+        user,
+        screenKey: 'export',
+        screenName: 'مستندات وفواتير التصدير',
+        summary: `قام الموظف بطباعة مستند وفاتورة التصدير الرسمية للموديل #${order.serialNumber} (المشتري: ${order.buyerCompany || order.buyerId || '-'}) من شاشة مستندات التصدير`,
+        details: {
+          screenKey: 'export',
+          screenName: 'مستندات وفواتير التصدير',
+          serialNumber: order.serialNumber,
+          productName: order.productName,
+          totalQuantity: order.totalQuantity,
+        }
+      }).catch(() => {});
+    }
+    window.print();
+  };
   
   const formatDate = (dateStr) => {
     if (!dateStr) return '-';
@@ -307,6 +351,9 @@ const ExportOrder = () => {
          top: 0;
          width: 1350px; /* العرض المثالي لاستيعاب الجدول الأفقي بالكامل بدون قص */
          max-width: none !important;
+         min-height: 820px;
+         display: flex;
+         flex-direction: column;
          background: #ffffff !important;
          box-shadow: none !important;
          padding: 15px !important;
@@ -330,20 +377,33 @@ const ExportOrder = () => {
        const imgWidthPx = canvas.width;
        const imgHeightPx = canvas.height;
 
-       // حساب الأبعاد والنسب الرياضية لـ PDF أفقي (Landscape) متناسق مع ورقة A4
+       // حساب الأبعاد والنسب لضمان أن ملف الـ PDF ورقة A4 أفقية قياسية واحدة تماماً (Single Page A4)
        const pdfWidthMM = 297;
-       const margin = 8; 
-       const contentWidthMM = pdfWidthMM - margin * 2;
-       const contentHeightMM = (imgHeightPx * contentWidthMM) / imgWidthPx;
-       const pdfHeightMM = contentHeightMM + margin * 2;
+       const pdfHeightMM = 210;
+       const margin = 5; 
+       const maxContentWidthMM = pdfWidthMM - margin * 2; // 287mm
+       const maxContentHeightMM = pdfHeightMM - margin * 2; // 200mm
+
+       const scaleRatio = Math.min(
+         maxContentWidthMM / imgWidthPx,
+         maxContentHeightMM / imgHeightPx
+       );
+
+       const renderWidthMM = imgWidthPx * scaleRatio;
+       const renderHeightMM = imgHeightPx * scaleRatio;
+
+       // توسيط الفاتورة بشكل متناسق في الورقة
+       const posX = margin + (maxContentWidthMM - renderWidthMM) / 2;
+       const posY = margin + (maxContentHeightMM - renderHeightMM) / 2;
 
        const pdf = new jsPDF({
          orientation: 'landscape',
          unit: 'mm',
-         format: [pdfWidthMM, pdfHeightMM],
+         format: 'a4',
+         compress: true,
        });
 
-       pdf.addImage(imgData, 'JPEG', margin, margin, contentWidthMM, contentHeightMM);
+       pdf.addImage(imgData, 'JPEG', posX, posY, renderWidthMM, renderHeightMM, undefined, 'FAST');
 
        const pdfBlob = pdf.output('blob');
        const blobUrl = URL.createObjectURL(new Blob([pdfBlob], { type: 'application/pdf' }));
@@ -405,20 +465,71 @@ const ExportOrder = () => {
     <div className="fade-in">
       <style>{`
         @media print {
-          @page { size: landscape; margin: 5mm; }
-          body * { visibility: hidden; }
-          .app-container, .main-content { margin:0!important; padding:0!important; background:white!important; }
-          .print-doc, .print-doc * { visibility: visible; }
-          .print-doc {
-            position: absolute; left:0; top:0; width:100%;
-            background:#fff!important; padding:0!important;
-            box-shadow:none!important; border:none!important;
-            max-width:none!important; border-radius:0!important;
-            zoom: 0.95;
+          @page {
+            size: landscape;
+            margin: 3mm 4mm;
           }
-          html, body { min-height: auto !important; height: auto !important; padding: 0 !important; margin: 0 !important; }
-          .no-print { display:none!important; }
-          .hdr-blue, .hdr-grey, .hdr-light, .title-cell, .bg-cyan { 
+          html, body {
+            width: 100% !important;
+            height: auto !important;
+            max-height: 100vh !important;
+            overflow: hidden !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: white !important;
+          }
+          body * {
+            visibility: hidden;
+          }
+          .app-container, .main-content {
+            margin: 0 !important;
+            padding: 0 !important;
+            background: white !important;
+          }
+          .no-print {
+            display: none !important;
+          }
+          .print-doc, .print-doc * {
+            visibility: visible;
+          }
+          .print-doc {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            min-height: calc(100vh - 6mm) !important;
+            display: flex !important;
+            flex-direction: column !important;
+            background: #fff !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            box-shadow: none !important;
+            border: none !important;
+            border-radius: 0 !important;
+            zoom: var(--print-zoom, 0.65) !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+            page-break-after: avoid !important;
+            break-after: avoid !important;
+            page-break-before: avoid !important;
+            break-before: avoid !important;
+          }
+          .export-signatures-footer {
+            margin-top: auto !important;
+            padding-top: 15px !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+          .inv-table-new {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+          .inv-table-new tr {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+          .hdr-blue, .hdr-grey, .hdr-light, .title-cell, .bg-cyan, .bg-light-blue { 
             -webkit-print-color-adjust: exact !important; 
             print-color-adjust: exact !important; 
           }
@@ -428,6 +539,9 @@ const ExportOrder = () => {
           background:#fff; color:#000; padding:10px; border-radius:8px;
           max-width:1400px; margin:0 auto; box-shadow:0 8px 30px rgba(0,0,0,0.45);
           font-family:'Inter','Tajawal',sans-serif;
+          display: flex;
+          flex-direction: column;
+          min-height: 800px;
         }
 
         .inv-table-new {
@@ -638,7 +752,7 @@ const ExportOrder = () => {
         </div>
         {order && hasPermission('export', 'export') && (
            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
-              <button className="btn btn-accent" style={{ padding: '0.8rem 2rem', fontSize: '1.15rem', gap: '0.75rem', borderRadius: '50px', background: 'linear-gradient(135deg, var(--accent-color), #b48c26)', color: '#000', fontWeight: 'bold', boxShadow: '0 4px 15px rgba(212, 175, 55, 0.4)' }} onClick={() => window.print()}>
+              <button className="btn btn-accent" style={{ padding: '0.8rem 2rem', fontSize: '1.15rem', gap: '0.75rem', borderRadius: '50px', background: 'linear-gradient(135deg, var(--accent-color), #b48c26)', color: '#000', fontWeight: 'bold', boxShadow: '0 4px 15px rgba(212, 175, 55, 0.4)' }} onClick={handlePrint}>
                <Printer size={22} /> {t('export.print_btn')}
               </button>
               <button className="btn btn-accent" style={{ padding: '0.8rem 2rem', fontSize: '1.15rem', gap: '0.75rem', borderRadius: '50px', background: 'linear-gradient(135deg, #1a5276, #2980b9)', color: '#fff', fontWeight: 'bold', boxShadow: '0 4px 15px rgba(26, 82, 118, 0.4)' }} onClick={handleDownloadPDF}>
@@ -1072,37 +1186,40 @@ const ExportOrder = () => {
                   );
                 });
               })()}
-
-              {/* ═══ SIGNATURES ═══ */}
-              <tr>
-                <td colSpan={11} style={{ borderTop: '3px solid #000', padding: '15px 30px', backgroundColor: '#fff' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', paddingTop: '10px' }}>
-                    
-                    <div>
-                      <div style={{ marginBottom: '25px', fontSize: '14px', fontWeight: 800 }}>
-                        {t('export.doc.name_zh')} <span style={{ color: '#c0392b', marginLeft: '40px' }}>{t('export.doc.buyer_sign')}</span>
-                      </div>
-                      <div style={{ fontSize: '14px', fontWeight: 800, display: 'flex', alignItems: 'flex-end' }}>
-                        {t('export.doc.signature_zh')} 
-                        <div style={{ display: 'inline-block', width: '180px', borderBottom: '2px solid #000', marginLeft: '15px' }}></div>
-                      </div>
-                    </div>
-                    
-                    <div style={{ textAlign: 'center' }}>
-                      <div style={{ color: '#c0392b', fontWeight: 800, fontSize: '14px', marginBottom: '25px' }}>{t('export.doc.coordinator_sign')}</div>
-                      <div style={{ display: 'inline-block', width: '220px', borderBottom: '2px solid #000' }}></div>
-                    </div>
-                    
-                    <div style={{ textAlign: 'center' }}>
-                      <div style={{ color: '#c0392b', fontWeight: 800, fontSize: '14px', marginBottom: '25px' }}>{t('export.doc.factory_sign')}</div>
-                      <div style={{ display: 'inline-block', width: '220px', borderBottom: '2px solid #000' }}></div>
-                    </div>
-
-                  </div>
-                </td>
-              </tr>
             </tbody>
           </table>
+
+          {/* ═══ FOOTER SIGNATURES (منفصلة تماماً في تذييل الصفحة) ═══ */}
+          <div className="export-signatures-footer" style={{ 
+            marginTop: 'auto', 
+            paddingTop: '15px', 
+            paddingBottom: '5px',
+            paddingLeft: '25px', 
+            paddingRight: '25px',
+            backgroundColor: '#ffffff'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+              <div>
+                <div style={{ marginBottom: '20px', fontSize: '13px', fontWeight: 800 }}>
+                  {t('export.doc.name_zh')} <span style={{ color: '#c0392b', marginLeft: '35px' }}>{t('export.doc.buyer_sign')}</span>
+                </div>
+                <div style={{ fontSize: '13px', fontWeight: 800, display: 'flex', alignItems: 'flex-end' }}>
+                  {t('export.doc.signature_zh')} 
+                  <div style={{ display: 'inline-block', width: '180px', borderBottom: '2px solid #000', marginLeft: '12px' }}></div>
+                </div>
+              </div>
+              
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ color: '#c0392b', fontWeight: 800, fontSize: '13px', marginBottom: '20px' }}>{t('export.doc.coordinator_sign')}</div>
+                <div style={{ display: 'inline-block', width: '210px', borderBottom: '2px solid #000' }}></div>
+              </div>
+              
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ color: '#c0392b', fontWeight: 800, fontSize: '13px', marginBottom: '20px' }}>{t('export.doc.factory_sign')}</div>
+                <div style={{ display: 'inline-block', width: '210px', borderBottom: '2px solid #000' }}></div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

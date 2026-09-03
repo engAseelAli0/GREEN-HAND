@@ -15,6 +15,7 @@ import PackingList from './pages/PackingList'
 import WarehouseReceipt from './pages/WarehouseReceipt'
 import AnalyticsDashboard from './pages/AnalyticsDashboard'
 import OrderReports from './pages/OrderReports'
+import AuditLog from './pages/AuditLog'
 import Login from './pages/Login'
 import Unauthorized from './pages/Unauthorized'
 import { AuthProvider } from './context/AuthContext'
@@ -152,6 +153,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                   <Route path="packing-list" element={<ProtectedRoute><PackingList /></ProtectedRoute>} />
                   <Route path="warehouse-receipt" element={<ProtectedRoute><WarehouseReceipt /></ProtectedRoute>} />
                   <Route path="analytics" element={<ProtectedRoute><AnalyticsDashboard /></ProtectedRoute>} />
+                  <Route path="audit-log" element={<ProtectedRoute><AuditLog /></ProtectedRoute>} />
                 </Route>
               </Routes>
             </BrowserRouter>

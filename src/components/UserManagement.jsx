@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
 import { useAppData } from '../context/AppDataContext';
+import { logAuditEvent } from '../utils/auditLogger';
 import { 
   User, Shield, Lock, Trash2, Edit2, Plus, Save, X, AlertTriangle, 
   Key, CheckCircle, Eye, Edit, Trash, Download, Settings, PauseCircle, 
@@ -30,6 +31,7 @@ const ALL_PAGES = [
   { id: 'shipping-invoice', nameKey: 'nav.shipping_invoice', icon: '🧾' },
   { id: 'packing-list', nameKey: 'nav.packing_list', icon: '📦' },
   { id: 'warehouse-receipt', nameKey: 'nav.warehouse_receipt', icon: '🏢' },
+  { id: 'audit-log', nameKey: 'nav.audit_log', icon: '📜' },
   { id: 'admin', nameKey: 'nav.admin', icon: '👑' }
 ];
 
@@ -131,8 +133,17 @@ const UserManagement = () => {
   const handleDelete = async (id) => {
     if (!window.confirm(t('auth.confirm_delete'))) return;
     try {
+      const targetUser = users.find(u => u.id === id);
       const { error } = await supabase.from('system_users').delete().eq('id', id);
       if (error) throw error;
+      await logAuditEvent({
+        action: 'USER_DELETE',
+        actionType: 'DELETE',
+        entityType: 'user',
+        entityId: targetUser?.username || String(id),
+        summary: `تم حذف المستخدم ${targetUser?.username || id}`,
+        details: { deletedUser: targetUser },
+      });
       toast.success(t('auth.user_deleted'));
       fetchUsers();
       if (editId === id) resetForm();
@@ -142,12 +153,20 @@ const UserManagement = () => {
     }
   };
 
-  const handleToggleSuspend = async (user) => {
+  const handleToggleSuspend = async (targetUser) => {
     try {
-      const isCurrentlySuspended = !!user.permissions?.__is_suspended;
-      const newPermissions = { ...user.permissions, __is_suspended: !isCurrentlySuspended };
-      const { error } = await supabase.from('system_users').update({ permissions: newPermissions }).eq('id', user.id);
+      const isCurrentlySuspended = !!targetUser.permissions?.__is_suspended;
+      const newPermissions = { ...targetUser.permissions, __is_suspended: !isCurrentlySuspended };
+      const { error } = await supabase.from('system_users').update({ permissions: newPermissions }).eq('id', targetUser.id);
       if (error) throw error;
+      await logAuditEvent({
+        action: isCurrentlySuspended ? 'USER_ACTIVATE' : 'USER_SUSPEND',
+        actionType: 'SECURITY',
+        entityType: 'user',
+        entityId: targetUser.username,
+        summary: isCurrentlySuspended ? `تم إلغاء إيقاف حساب المستخدم ${targetUser.username}` : `تم إيقاف حساب المستخدم ${targetUser.username}`,
+        details: { username: targetUser.username, role: targetUser.role, suspended: !isCurrentlySuspended },
+      });
       toast.success(!isCurrentlySuspended ? t('user_mgmt.messages.suspend_success') : t('user_mgmt.messages.activate_success'));
       fetchUsers();
     } catch (error) {
@@ -225,6 +244,14 @@ const UserManagement = () => {
         };
         const { error } = await supabase.from('system_users').update(updateData).eq('id', editId);
         if (error) throw error;
+        await logAuditEvent({
+          action: 'USER_UPDATE',
+          actionType: 'SECURITY',
+          entityType: 'user',
+          entityId: formData.username,
+          summary: `تم تعديل بيانات وصلاحيات المستخدم: ${formData.username}`,
+          details: { role: formData.role, allowed_pages: allowedPagesArray, permissions: formData.permissions },
+        });
         toast.success(t('auth.user_saved'));
       } else {
         if (!formData.password) {
@@ -259,6 +286,15 @@ const UserManagement = () => {
         
         if (dbError) throw dbError;
         
+        await logAuditEvent({
+          action: 'USER_CREATE',
+          actionType: 'CREATE',
+          entityType: 'user',
+          entityId: formData.username,
+          summary: `تم إنشاء مستخدم جديد: ${formData.username} بدور ${formData.role}`,
+          details: { role: formData.role, allowed_pages: allowedPagesArray, permissions: formData.permissions },
+        });
+
         toast.success(t('auth.user_saved'));
       }
       

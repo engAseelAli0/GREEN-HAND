@@ -12,6 +12,7 @@ import { CustomDateInput } from '../components/CustomDateInput';
 import ImageEditorModal from '../components/ImageEditorModal';
 import ExportOrderDocument, { downloadOrderPDF } from '../components/ExportOrderDocument';
 import { appendActivity, createActivityItem, summarizeOrderChanges } from '../utils/activityLog';
+import { logAuditEvent } from '../utils/auditLogger';
 
 const ClearableSelect = ({ value, onChange, children, className = "form-control", style, disabled, clearTitle }) => {
   const { t } = useTranslation();
@@ -834,6 +835,37 @@ const DataEntryWizard = () => {
       };
       const { error } = await supabase.from('orders').insert([payload]);
       if (error) throw error;
+
+      const buyerText = currentOrder.buyerCompany || currentOrder.buyerId ? `للمشتري (${currentOrder.buyerCompany || currentOrder.buyerId})` : '';
+      const factoryText = currentOrder.factoryId ? `بالمصنع (${currentOrder.factoryId})` : '';
+      const priceText = currentOrder.productPrice ? `بسعر (${currentOrder.productPrice} ${currentOrder.currency || ''})` : '';
+      const qtyText = currentOrder.totalQuantity ? `بإجمالي كمية (${currentOrder.totalQuantity} قطعة)` : '';
+
+      logAuditEvent({
+        action: 'CREATE_ORDER',
+        actionType: 'CREATE',
+        entityType: 'order',
+        entityId: currentOrder.serialNumber,
+        user,
+        screenKey: 'entry',
+        screenName: 'أوامر الإنتاج وتوثيق الطلبات',
+        summary: `قام الموظف بإضافة طلبية جديدة للموديل #${currentOrder.serialNumber} ${buyerText} ${factoryText} ${qtyText} ${priceText} من شاشة أوامر الإنتاج`,
+        details: {
+          screenKey: 'entry',
+          screenName: 'أوامر الإنتاج وتوثيق الطلبات',
+          serialNumber: currentOrder.serialNumber,
+          productName: currentOrder.productName,
+          buyerCompany: currentOrder.buyerCompany,
+          buyerId: currentOrder.buyerId,
+          totalQuantity: currentOrder.totalQuantity,
+          productPrice: currentOrder.productPrice,
+          currency: currentOrder.currency,
+          factoryId: currentOrder.factoryId,
+          deliveryDate: currentOrder.deliveryDate,
+          changes: summarizeOrderChanges({}, currentOrder),
+        },
+      }).catch(() => {});
+
       toast.success(t('entry.messages.save_success', { serial: currentOrder.serialNumber }), { id: toastId });
       await handleClear();
     } catch (err) {
@@ -891,6 +923,28 @@ const DataEntryWizard = () => {
       };
       const { error } = await supabase.from('orders').update(payload).eq('serial_number', originalSerial);
       if (error) throw error;
+
+      const changesList = summarizeOrderChanges(previous?.order_data, baseOrder) || [];
+      const changesSummary = changesList.map(c => `${c.label || c.field}: (${c.from || '-'} ➔ ${c.to || '-'})	`).join('، ');
+
+      logAuditEvent({
+        action: 'UPDATE_ORDER',
+        actionType: 'UPDATE',
+        entityType: 'order',
+        entityId: baseOrder.serialNumber,
+        user,
+        screenKey: 'entry',
+        screenName: 'أوامر الإنتاج وتوثيق الطلبات',
+        summary: `قام الموظف بتعديل بيانات الطلبية #${baseOrder.serialNumber} من شاشة أوامر الإنتاج ${changesSummary ? `(شملت: ${changesSummary})` : ''}`,
+        details: {
+          screenKey: 'entry',
+          screenName: 'أوامر الإنتاج وتوثيق الطلبات',
+          serialNumber: baseOrder.serialNumber,
+          previousSerial: originalSerial,
+          changes: changesList,
+        },
+      }).catch(() => {});
+
       toast.success(t('entry.messages.update_success', { serial: baseOrder.serialNumber }), { id: toastId });
       await handleClear();
     } catch (err) {
@@ -1039,13 +1093,15 @@ const DataEntryWizard = () => {
          productImages: copiedProductImages
        };
 
+       const sourceSerial = (originalSerial && originalSerial !== newSerial) ? originalSerial : 'موديل سابق';
+
        const newOrderData = appendActivity(
          updatedOrderState,
          createActivityItem({
            action: 'copy',
            user,
-           note: t('activity.notes.copied', { from: currentOrder.serialNumber, to: newSerial }),
-           meta: { source: 'data-entry', copiedFrom: currentOrder.serialNumber },
+           note: t('activity.notes.copied', { from: sourceSerial, to: newSerial }),
+           meta: { source: 'data-entry', copiedFrom: sourceSerial },
          })
        );
        const payload = {
@@ -1054,6 +1110,25 @@ const DataEntryWizard = () => {
        };
        const { error } = await supabase.from('orders').insert([payload]);
        if (error) throw error;
+
+        logAuditEvent({
+          action: 'COPY_ORDER',
+          actionType: 'COPY',
+          entityType: 'order',
+          entityId: newSerial,
+          user,
+          screenKey: 'entry',
+          screenName: 'أوامر الإنتاج وتوثيق الطلبات',
+          summary: `قام الموظف بنسخ بيانات الطلبية من الموديل #${sourceSerial} وتوليد موديل جديد برقم #${newSerial} من شاشة أوامر الإنتاج`,
+          details: {
+            screenKey: 'entry',
+            screenName: 'أوامر الإنتاج وتوثيق الطلبات',
+            copiedFrom: sourceSerial,
+            newSerial,
+            totalQuantity: updatedOrderState.totalQuantity,
+          },
+        }).catch(() => {});
+
        toast.success(t('entry.messages.copy_success', { serial: newSerial }), { id: toastId });
        setCurrentOrder(newOrderData);
        setProductImages(copiedProductImages.map(img => ({ ...img, preview: normalizeImageUrl(img) })));
@@ -1082,6 +1157,26 @@ const DataEntryWizard = () => {
         .single();
       const { error } = await supabase.from('orders').delete().eq('serial_number', originalSerial);
       if (error) throw error;
+
+      const snapshot = previous?.order_data || currentOrder;
+
+      logAuditEvent({
+        action: 'DELETE_ORDER',
+        actionType: 'DELETE',
+        entityType: 'order',
+        entityId: originalSerial,
+        user,
+        screenKey: 'entry',
+        screenName: 'أوامر الإنتاج وتوثيق الطلبات',
+        summary: `قام الموظف بحذف الطلبية رقم #${originalSerial} من شاشة أوامر الإنتاج (المنتج: ${snapshot.productName || '-'} - الكمية: ${snapshot.totalQuantity || '-'}`,
+        details: {
+          screenKey: 'entry',
+          screenName: 'أوامر الإنتاج وتوثيق الطلبات',
+          serialNumber: originalSerial,
+          fullSnapshot: snapshot,
+        },
+      }).catch(() => {});
+
       const archiveItem = appendActivity(previous?.order_data || currentOrder, createActivityItem({
         action: 'delete',
         user,

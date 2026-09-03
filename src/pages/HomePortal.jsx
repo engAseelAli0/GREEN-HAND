@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Edit3, Printer, Settings, Hexagon, Truck, Barcode, Factory, FileSpreadsheet, Package, ChevronRight, Sparkles, BarChart3, ClipboardList, ArrowUpRight } from 'lucide-react';
+import { Edit3, Printer, Settings, Hexagon, Truck, Barcode, Factory, FileSpreadsheet, Package, ChevronRight, Sparkles, BarChart3, ClipboardList, ArrowUpRight, ShieldAlert } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 
@@ -61,9 +61,9 @@ const PAGE_GROUPS = [
     accentColor: '#a78bfa',
     titleKey: 'groups.admin.title',
     descKey: 'groups.admin.desc',
-    directPath: '/admin',
     pages: [
       { path: '/admin', icon: Settings, color: '#a78bfa', titleKey: 'nav.admin' },
+      { path: '/audit-log', icon: ShieldAlert, color: '#f43f5e', titleKey: 'nav.audit_log' },
     ]
   },
 ];

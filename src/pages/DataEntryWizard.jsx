@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useAppData, defaultOrderState } from '../context/AppDataContext';
 import { useAuth } from '../context/AuthContext';
 import { useFilteredLookups } from '../hooks/useFilteredLookups';
-import { Save, RefreshCw, Hash, Calendar, Box, Scissors, Palette, LayoutGrid, ChevronRight, ChevronLeft, MessageSquare, CheckSquare, Square, Ruler, Camera, X, ImagePlus, Edit3, Copy, Trash2, Layers, PanelTop, Search, DownloadCloud, Pin, Sparkles, CheckCircle2, Package, Award, Info, FileText } from 'lucide-react';
+import { Save, RefreshCw, Hash, Calendar, Box, Scissors, Palette, LayoutGrid, ChevronRight, ChevronLeft, MessageSquare, CheckSquare, Square, Ruler, Camera, X, ImagePlus, Edit3, Copy, Trash2, Layers, PanelTop, Search, DownloadCloud, Pin, Sparkles, CheckCircle2, Package, Award, Info, FileText, Plus } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import toast from 'react-hot-toast';
 import { compressImage, normalizeImageUrl } from '../utils/imageUtils';
@@ -48,7 +48,7 @@ const DataEntryWizard = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
   const fetchedParamSerialRef = useRef(null);
-  const { lookups, currentOrder, updateOrder, setCurrentOrder } = useAppData();
+  const { lookups, updateLookup, currentOrder, updateOrder, setCurrentOrder } = useAppData();
   const { user, hasPermission } = useAuth();
   const filteredLookups = useFilteredLookups();
 
@@ -94,6 +94,9 @@ const DataEntryWizard = () => {
   const [showPackagingPicker, setShowPackagingPicker] = useState(false);
   const [tempPackagingConditions, setTempPackagingConditions] = useState({});
   const [packagingSearchQuery, setPackagingSearchQuery] = useState('');
+  const [showAddFactoryForm, setShowAddFactoryForm] = useState(false);
+  const [isAddingFactory, setIsAddingFactory] = useState(false);
+  const [newFactory, setNewFactory] = useState({ name: '', code: '', mobile: '', address: '' });
   const [fixedPackagingTerms, setFixedPackagingTerms] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem('gh_fixed_order_terms') || '[]');
@@ -117,6 +120,55 @@ const DataEntryWizard = () => {
       }
       return next;
     });
+  };
+
+  const resetNewFactoryForm = () => {
+    setNewFactory({ name: '', code: '', mobile: '', address: '' });
+    setShowAddFactoryForm(false);
+  };
+
+  const handleAddFactory = async () => {
+    const name = newFactory.name.trim();
+    const code = newFactory.code.trim();
+    const mobile = newFactory.mobile.trim();
+    const address = newFactory.address.trim();
+    const currentFactories = Array.isArray(lookups.factories) ? [...lookups.factories] : [];
+
+    if (!name) {
+      toast.error(t('entry.factory.add_name_required', { defaultValue: 'الرجاء إدخال اسم المصنع' }));
+      return;
+    }
+
+    if (!mobile || !address) {
+      toast.error(t('admin.messages.factory_info_required', { defaultValue: 'الرجاء تعبئة عنوان وجوال المصنع بوضوح' }));
+      return;
+    }
+
+    const nameExists = currentFactories.some(item => ((typeof item === 'object' ? item.name : item) || '').trim() === name);
+    if (nameExists) {
+      toast.error(t('entry.factory.add_duplicate_name', { defaultValue: 'هذا المصنع موجود مسبقاً' }));
+      return;
+    }
+
+    if (code && currentFactories.some(item => typeof item === 'object' && (item.code || '').trim() === code)) {
+      toast.error(t('admin.messages.duplicate_factory_code', { defaultValue: 'يوجد مصنع آخر مسجل بنفس رمز الكود مسبقاً!' }));
+      return;
+    }
+
+    const createdFactory = { name, mobile, address, code };
+    setIsAddingFactory(true);
+    try {
+      const { error } = await updateLookup('factories', [...currentFactories, createdFactory]);
+      if (error) throw error;
+      updateOrder('factoryId', name);
+      resetNewFactoryForm();
+      toast.success(t('entry.factory.add_success', { defaultValue: 'تم إضافة المصنع واختياره بنجاح' }));
+    } catch (err) {
+      console.error('Error adding factory:', err);
+      toast.error(t('entry.factory.add_failed', { defaultValue: 'تعذر حفظ المصنع، حاول مرة أخرى' }));
+    } finally {
+      setIsAddingFactory(false);
+    }
   };
 
   const handleSaveCurrentPackagingAsFixed = () => {
@@ -1327,6 +1379,15 @@ const DataEntryWizard = () => {
       .filter(cond => !!currentOrder?.packagingConditions?.[cond]);
     const fixedSelected = selectedConditions.filter(c => fixedPackagingTerms.includes(c));
     const extraSelected = selectedConditions.filter(c => !fixedPackagingTerms.includes(c));
+    const factorySelectOptions = (() => {
+      const options = Array.isArray(filteredLookups.factories) ? [...filteredLookups.factories] : [];
+      const selectedFactory = Array.isArray(lookups.factories)
+        ? lookups.factories.find(f => (f.name === currentOrder.factoryId || f === currentOrder.factoryId))
+        : null;
+      const selectedName = selectedFactory ? (selectedFactory.name || selectedFactory) : '';
+      const selectedIsVisible = selectedName && options.some(f => (f.name || f) === selectedName);
+      return selectedFactory && !selectedIsVisible ? [...options, selectedFactory] : options;
+    })();
 
     return (
       <div className="tab-panel" key={tabKey} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -1341,12 +1402,102 @@ const DataEntryWizard = () => {
           </div>
           
           <div className="form-group">
-            <label className="form-label">{t('entry.factory.factory_select')}</label>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <label className="form-label" style={{ margin: 0 }}>{t('entry.factory.factory_select')}</label>
+              <button
+                type="button"
+                className="btn btn-outline"
+                onClick={() => setShowAddFactoryForm(prev => !prev)}
+                style={{ padding: '0.45rem 0.75rem', fontSize: '0.85rem', borderColor: 'rgba(212, 175, 55, 0.35)', color: 'var(--accent-color)' }}
+                title={t('entry.factory.add_factory', { defaultValue: 'إضافة مصنع' })}
+              >
+                {showAddFactoryForm ? <X size={16} /> : <Plus size={16} />}
+                <span>{showAddFactoryForm ? t('entry.actions.cancel_edit', { defaultValue: 'إلغاء' }) : t('entry.factory.add_factory', { defaultValue: 'إضافة مصنع' })}</span>
+              </button>
+            </div>
             <ClearableSelect className="form-control" value={currentOrder.factoryId || ''} onChange={(e) => updateOrder('factoryId', e.target.value)} clearTitle={t('entry.actions.clear_btn')}>
               <option value="">{t('entry.factory.factory_placeholder')}</option>
-              {filteredLookups.factories?.map((f, i) => <option key={i} value={f.name || f}>{f.name || f}</option>)}
+              {factorySelectOptions.map((f, i) => <option key={`${f.name || f}-${i}`} value={f.name || f}>{f.name || f}</option>)}
             </ClearableSelect>
           </div>
+
+          {showAddFactoryForm && (
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+              gap: '0.75rem',
+              padding: '1rem',
+              marginBottom: '1rem',
+              border: '1px dashed rgba(212, 175, 55, 0.35)',
+              borderRadius: 'var(--radius-md)',
+              background: 'rgba(212, 175, 55, 0.06)'
+            }}>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">{t('admin.factory_name', { defaultValue: 'اسم المصنع' })}</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  value={newFactory.name}
+                  onChange={(e) => setNewFactory(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder={t('admin.factory_name', { defaultValue: 'اسم المصنع' })}
+                />
+              </div>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">{t('entry.factory.factory_code')}</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  value={newFactory.code}
+                  onChange={(e) => setNewFactory(prev => ({ ...prev, code: e.target.value }))}
+                  placeholder={t('entry.factory.factory_code')}
+                />
+              </div>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">{t('entry.factory.factory_mobile')}</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  value={newFactory.mobile}
+                  onChange={(e) => setNewFactory(prev => ({ ...prev, mobile: e.target.value }))}
+                  placeholder={t('entry.factory.factory_mobile')}
+                />
+              </div>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">{t('entry.factory.factory_address')}</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  value={newFactory.address}
+                  onChange={(e) => setNewFactory(prev => ({ ...prev, address: e.target.value }))}
+                  placeholder={t('entry.factory.factory_address')}
+                />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: '0.5rem', gridColumn: '1 / -1', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={resetNewFactoryForm}
+                  disabled={isAddingFactory}
+                  style={{ padding: '0.55rem 0.9rem', fontSize: '0.9rem' }}
+                >
+                  <X size={16} />
+                  {t('entry.actions.cancel_edit', { defaultValue: 'إلغاء' })}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={handleAddFactory}
+                  disabled={isAddingFactory}
+                  style={{ padding: '0.55rem 1rem', fontSize: '0.9rem', opacity: isAddingFactory ? 0.65 : 1, cursor: isAddingFactory ? 'not-allowed' : 'pointer' }}
+                >
+                  {isAddingFactory ? <RefreshCw size={16} /> : <Save size={16} />}
+                  {isAddingFactory
+                    ? t('entry.factory.add_saving', { defaultValue: 'جاري الحفظ...' })
+                    : t('entry.factory.add_save', { defaultValue: 'حفظ المصنع' })}
+                </button>
+              </div>
+            </div>
+          )}
 
           {currentOrder.factoryId && (() => {
             const selectedFactoryObj = Array.isArray(lookups.factories) ? lookups.factories.find(f => (f.name === currentOrder.factoryId || f === currentOrder.factoryId)) : null;

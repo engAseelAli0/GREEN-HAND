@@ -11,8 +11,72 @@ import autoTable from 'jspdf-autotable';
 import { useAuth } from '../context/AuthContext';
 import { useFilteredLookups } from '../hooks/useFilteredLookups';
 
+const EN_PDF = {
+  title: 'Warehouse Receipt Report',
+  buyerNo: 'Buyer No',
+  supplier: 'Supplier',
+  consignee: 'Consignee',
+  receiptDate: 'Receipt Date',
+  orderNo: 'Order No',
+  inspector: 'Inspector',
+  cartonNo: 'Carton No',
+  serial: 'Serial',
+  receivedAt: 'Received At',
+  product: 'Product',
+  ctnsQty: 'CTNs Qty',
+  ctnPcs: 'CTN/Pcs',
+  itemQty: 'Item Qty',
+  totalQty: 'Total Qty',
+  ccy: 'CCY',
+  unitPrice: 'Unit Price',
+  totalPrice: 'Total Price',
+  totalAmount: 'Tot. Amount',
+  cartonSize: 'Carton Size',
+  cbm: 'CBM',
+  remarks: 'Remarks',
+  total: 'Total',
+  models: 'Models',
+  ctn: 'CTN',
+  pcs: 'Pcs',
+  shippingDate: 'Shipping Date',
+  cabinetNo: 'Cabinet Number',
+  shipper: 'Shipper'
+};
+
+const latinPdfText = (value) => {
+  if (value === null || value === undefined) return '-';
+  const str = String(value);
+  const latin = englishOnly(str).trim();
+  return (latin || str.replace(/[^\x20-\x7E]/g, '').trim() || '-');
+};
+
+let droidSansFallbackBase64 = null;
+
+const arrayBufferToBase64 = (buffer) => {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode.apply(null, chunk);
+  }
+  return btoa(binary);
+};
+
+const registerChinesePdfFont = async (pdf) => {
+  if (!droidSansFallbackBase64) {
+    const baseUrl = import.meta.env.BASE_URL || '/';
+    const response = await fetch(`${baseUrl}fonts/DroidSansFallbackFull.ttf`);
+    if (!response.ok) throw new Error('Chinese PDF font could not be loaded');
+    droidSansFallbackBase64 = arrayBufferToBase64(await response.arrayBuffer());
+  }
+  pdf.addFileToVFS('DroidSansFallbackFull.ttf', droidSansFallbackBase64);
+  pdf.addFont('DroidSansFallbackFull.ttf', 'DroidSansFallback', 'normal');
+  pdf.addFont('DroidSansFallbackFull.ttf', 'DroidSansFallback', 'bold');
+};
+
 const WarehouseReceipt = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { lookups } = useAppData();
   const { user, hasPermission } = useAuth();
   const filteredLookups = useFilteredLookups();
@@ -49,6 +113,20 @@ const WarehouseReceipt = () => {
 
   const updateHeaderInfo = (field, value) => {
     setHeaderInfo(prev => ({ ...prev, [field]: value }));
+  };
+
+  const formatReceivedAt = (dateStr) => {
+    if (!dateStr) return '-';
+    const date = new Date(dateStr);
+    if (Number.isNaN(date.getTime())) return String(dateStr).split('T')[0] || '-';
+    return date.toLocaleString('en-GB', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    });
   };
 
   const fetchData = async () => {
@@ -115,7 +193,8 @@ const WarehouseReceipt = () => {
         rData.receive_data.status === '已收货' ||
         rData.receive_data.status === t('receiving.info.received')
       );
-      const rDate = rData?.receive_data?.receivedAt?.split('T')[0] || o.created_at.split('T')[0];
+      const receivedAt = isReceived ? (rData?.receive_data?.receivedAt || rData?.created_at || '') : '';
+      const rDate = (receivedAt || o.created_at).split('T')[0];
       
       // Determine base date for filtering
       const filterDate = new Date(rDate);
@@ -183,6 +262,7 @@ const WarehouseReceipt = () => {
 
         result.push({
             serial: o.serial_number,
+            receivedAt,
             productName: oData.productName,
             ccy: oData.currency || 'RMB',
             cartonSize: oData.cartonSize || '-',
@@ -219,68 +299,148 @@ const WarehouseReceipt = () => {
     if (filteredData.length === 0) return toast.error(t('warehouse.messages.no_data_export'));
     const toastId = toast.loading(t('warehouse.messages.exporting_pdf'));
     try {
+       const isChinesePdf = (i18n.language || '').startsWith('zh');
+       const label = isChinesePdf
+         ? {
+             title: t('warehouse.title'),
+             buyerNo: t('warehouse.header.buyer_no'),
+             supplier: t('warehouse.header.supplier'),
+             consignee: t('warehouse.header.consignee'),
+             receiptDate: t('warehouse.header.receipt_date'),
+             orderNo: t('warehouse.header.order_no'),
+             inspector: t('warehouse.header.inspector'),
+             cartonNo: t('warehouse.table.cols.carton_no_zh'),
+             serial: t('warehouse.table.cols.item_no_zh'),
+             receivedAt: t('warehouse.table.cols.received_at_zh'),
+             product: t('warehouse.table.cols.product_name_zh'),
+             ctnsQty: t('warehouse.table.cols.ctns_qty_zh'),
+             ctnPcs: t('warehouse.table.cols.ctn_pcs_zh'),
+             itemQty: t('warehouse.table.cols.item_qty_zh'),
+             totalQty: t('warehouse.table.cols.total_qty_zh'),
+             ccy: t('warehouse.table.cols.ccy_zh'),
+             unitPrice: t('warehouse.table.cols.unit_price_zh'),
+             totalPrice: t('warehouse.table.cols.total_price_zh'),
+             totalAmount: t('warehouse.table.cols.tot_amount_zh'),
+             cartonSize: t('warehouse.table.cols.carton_size_zh'),
+             cbm: t('warehouse.table.cols.cbm_zh'),
+             remarks: t('warehouse.table.cols.remarks_zh'),
+             total: t('packing.footer.total'),
+             models: t('warehouse.results.models_count'),
+             ctn: t('shipping.footer.ctn'),
+             pcs: t('shipping.footer.pcs'),
+             shippingDate: t('warehouse.footer.shipping_date'),
+             cabinetNo: t('warehouse.footer.cabinet_no'),
+             shipper: t('warehouse.footer.shipper')
+           }
+         : EN_PDF;
+       const pdfText = (value) => {
+         if (value === null || value === undefined || value === '') return '-';
+         return isChinesePdf ? String(value) : latinPdfText(value);
+       };
+       const containsCjk = (value) => /[\u3400-\u9FFF\uF900-\uFAFF]/.test(String(value || ''));
+       const pdfCell = (value, styles = {}) => {
+         const content = pdfText(value);
+         const { colSpan, rowSpan, ...cellStyles } = styles;
+         return {
+           content,
+           ...(colSpan ? { colSpan } : {}),
+           ...(rowSpan ? { rowSpan } : {}),
+           styles: {
+             font: isChinesePdf && containsCjk(content) ? 'DroidSansFallback' : 'helvetica',
+             ...cellStyles
+           }
+         };
+       };
+
        const tblHead = [[
-         t('warehouse.table.cols.carton_no'), 
-         t('warehouse.table.cols.serial'), 
-         t('warehouse.table.cols.product'), 
-         t('warehouse.table.cols.ctns_qty'), 
-         t('warehouse.table.cols.ctn_pcs'), 
-         t('warehouse.table.cols.item_qty'), 
-         t('warehouse.table.cols.total_qty'), 
-         t('warehouse.table.cols.ccy'), 
-         t('warehouse.table.cols.unit_price'), 
-         t('warehouse.table.cols.total_price'), 
-         t('warehouse.table.cols.tot_amount'), 
-         t('warehouse.table.cols.carton_size'), 
-         t('warehouse.table.cols.cbm'), 
-         t('warehouse.table.cols.remarks')
+         label.cartonNo,
+         label.serial,
+         label.receivedAt,
+         label.product,
+         label.ctnsQty,
+         label.ctnPcs,
+         label.itemQty,
+         label.totalQty,
+         label.ccy,
+         label.unitPrice,
+         label.totalPrice,
+         label.totalAmount,
+         label.cartonSize,
+         label.cbm,
+         label.remarks
        ]];
        const tblBody = [];
        filteredData.forEach((order) => {
          order.packages.forEach((pkg) => {
-           tblBody.push([
-             pkg.cartonNo || '-', order.serial || '-', englishOnly(order.productName) || '-',
-             pkg.ctnQty || 0, pkg.ctnPcs || 0, pkg.itemQty || 0, order.totalProd || 0, order.ccy || '-',
-             (pkg.unitPrice || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }),
-             (pkg.totalPrice || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }),
-             (order.totalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 }),
-             order.cartonSize || '-', pkg.cbm || '-', order.remarks || '',
-           ]);
+           const row = [
+             pdfCell(pkg.cartonNo),
+             pdfCell(order.serial),
+             pdfCell(formatReceivedAt(order.receivedAt)),
+             pdfCell(order.productName, { halign: 'left' }),
+             pdfCell(pkg.ctnQty || 0),
+             pdfCell(pkg.ctnPcs || 0),
+             pdfCell(pkg.itemQty || 0),
+             pdfCell(order.totalProd || 0),
+             pdfCell(order.ccy),
+             pdfCell((pkg.unitPrice || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })),
+             pdfCell((pkg.totalPrice || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })),
+             pdfCell((order.totalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })),
+             pdfCell(order.cartonSize),
+             pdfCell(pkg.cbm),
+             pdfCell(order.remarks, { halign: 'left' }),
+           ];
+           tblBody.push(isChinesePdf ? row : row.map(cell => cell.content));
          });
        });
        tblBody.push([
-         { content: t('packing.footer.total'), colSpan: 3, styles: { fontStyle: 'bold', fillColor: [220, 230, 241], fontSize: 8 } },
-         { content: String(grandTotalCtn), styles: { fontStyle: 'bold', fillColor: [220, 230, 241] } },
-         { content: '', styles: { fillColor: [220, 230, 241] } },
-         { content: '', styles: { fillColor: [220, 230, 241] } },
-         { content: String(grandTotalPcs), styles: { fontStyle: 'bold', fillColor: [220, 230, 241] } },
-         { content: '', styles: { fillColor: [220, 230, 241] } },
-         { content: '', styles: { fillColor: [220, 230, 241] } },
-         { content: '', styles: { fillColor: [220, 230, 241] } },
-         { content: grandTotalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 }), styles: { fontStyle: 'bold', fillColor: [220, 230, 241], fontSize: 8 } },
-         { content: '', styles: { fillColor: [220, 230, 241] } },
-         { content: '', styles: { fillColor: [220, 230, 241] } },
-         { content: grandTotalItems + ' ' + t('warehouse.results.models_count'), styles: { fontStyle: 'bold', fillColor: [220, 230, 241] } },
+         pdfCell(label.total, { colSpan: 4, fontStyle: 'bold', fillColor: [220, 230, 241], fontSize: isChinesePdf ? 6.5 : 8 }),
+         pdfCell(grandTotalCtn, { fontStyle: 'bold', fillColor: [220, 230, 241] }),
+         pdfCell('', { fillColor: [220, 230, 241] }),
+         pdfCell('', { fillColor: [220, 230, 241] }),
+         pdfCell(grandTotalPcs, { fontStyle: 'bold', fillColor: [220, 230, 241] }),
+         pdfCell('', { fillColor: [220, 230, 241] }),
+         pdfCell('', { fillColor: [220, 230, 241] }),
+         pdfCell('', { fillColor: [220, 230, 241] }),
+         pdfCell(grandTotalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 }), { fontStyle: 'bold', fillColor: [220, 230, 241], fontSize: 8 }),
+         pdfCell('', { fillColor: [220, 230, 241] }),
+         pdfCell('', { fillColor: [220, 230, 241] }),
+         pdfCell(grandTotalItems + ' ' + label.models, { fontStyle: 'bold', fillColor: [220, 230, 241] }),
        ]);
-       var contentH = 50 + (tblBody.length * 4.5) + 35;
+       var contentH = 58 + (tblBody.length * 5.2) + 42;
        var pdfH = Math.max(210, contentH);
        var pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [297, pdfH] });
+       const pdfFont = isChinesePdf ? 'DroidSansFallback' : 'helvetica';
+       if (isChinesePdf) await registerChinesePdfFont(pdf);
        var pageW = pdf.internal.pageSize.getWidth();
        var mg = 8;
-       pdf.setFontSize(16);
-       pdf.setFont('helvetica', 'bold');
-       pdf.text(t('warehouse.title'), pageW / 2, 12, { align: 'center' });
-       pdf.setDrawColor(50, 50, 50);
-       pdf.setLineWidth(0.6);
+       pdf.setFontSize(isChinesePdf ? 15 : 17);
+       pdf.setFont(pdfFont, 'bold');
+       pdf.text(label.title, pageW / 2, 12, { align: 'center' });
+       pdf.setDrawColor(15, 23, 42);
+       pdf.setLineWidth(0.8);
        pdf.line(mg, 15, pageW - mg, 15);
        autoTable(pdf, {
          startY: 17,
          body: [
-           [t('warehouse.header.buyer_no') + ':', headerInfo.buyerNo || '-', t('warehouse.header.supplier') + ':', headerInfo.supplier || '-', t('warehouse.header.consignee') + ':', headerInfo.consignee || '-'],
-           [t('warehouse.header.receipt_date') + ':', headerInfo.receiptDate || '-', t('warehouse.header.order_no') + ':', headerInfo.orderNo || '-', t('warehouse.header.inspector') + ':', headerInfo.inspector || '-'],
+           [
+             pdfCell(label.buyerNo + ':', { font: pdfFont, fontStyle: 'bold', fillColor: [230, 236, 245] }),
+             pdfCell(headerInfo.buyerNo),
+             pdfCell(label.supplier + ':', { font: pdfFont, fontStyle: 'bold', fillColor: [230, 236, 245] }),
+             pdfCell(headerInfo.supplier),
+             pdfCell(label.consignee + ':', { font: pdfFont, fontStyle: 'bold', fillColor: [230, 236, 245] }),
+             pdfCell(headerInfo.consignee)
+           ],
+           [
+             pdfCell(label.receiptDate + ':', { font: pdfFont, fontStyle: 'bold', fillColor: [230, 236, 245] }),
+             pdfCell(headerInfo.receiptDate || '-'),
+             pdfCell(label.orderNo + ':', { font: pdfFont, fontStyle: 'bold', fillColor: [230, 236, 245] }),
+             pdfCell(headerInfo.orderNo),
+             pdfCell(label.inspector + ':', { font: pdfFont, fontStyle: 'bold', fillColor: [230, 236, 245] }),
+             pdfCell(headerInfo.inspector)
+           ],
          ],
          theme: 'grid',
-         styles: { fontSize: 7, cellPadding: 2, halign: 'center', font: 'helvetica' },
+         styles: { fontSize: isChinesePdf ? 7 : 7.5, cellPadding: 2.2, halign: 'center', font: isChinesePdf ? 'helvetica' : pdfFont, textColor: [15, 23, 42], lineColor: [100, 116, 139], lineWidth: 0.25 },
          columnStyles: {
            0: { fontStyle: 'bold', fillColor: [230, 236, 245], cellWidth: 28 },
            1: { cellWidth: 32 }, 2: { fontStyle: 'bold', fillColor: [230, 236, 245], cellWidth: 28 },
@@ -292,29 +452,45 @@ const WarehouseReceipt = () => {
        var tableY = (pdf.lastAutoTable ? pdf.lastAutoTable.finalY : 35) + 2;
        autoTable(pdf, {
          startY: tableY, head: tblHead, body: tblBody, theme: 'grid',
-         headStyles: { fillColor: [50, 65, 85], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 6, halign: 'center', cellPadding: 1.8 },
-         styles: { fontSize: 6, cellPadding: 1.5, halign: 'center', font: 'helvetica', overflow: 'linebreak', lineWidth: 0.2, lineColor: [180, 180, 180] },
-         alternateRowStyles: { fillColor: [248, 250, 252] },
+         headStyles: { fillColor: [30, 64, 100], textColor: [255, 255, 255], font: pdfFont, fontStyle: 'bold', fontSize: isChinesePdf ? 5.9 : 6.4, halign: 'center', cellPadding: 2 },
+         styles: { fontSize: isChinesePdf ? 5.8 : 6.3, cellPadding: 1.7, halign: 'center', font: isChinesePdf ? 'helvetica' : pdfFont, overflow: 'linebreak', lineWidth: 0.25, lineColor: [100, 116, 139], textColor: [15, 23, 42] },
+         alternateRowStyles: { fillColor: [241, 245, 249] },
          columnStyles: {
-           0: { cellWidth: 15 }, 1: { cellWidth: 14 }, 2: { cellWidth: 35, halign: 'left' },
-           3: { cellWidth: 12 }, 4: { cellWidth: 14 }, 5: { cellWidth: 16 }, 6: { cellWidth: 16 },
-           7: { cellWidth: 12 }, 8: { cellWidth: 16 }, 9: { cellWidth: 20 }, 10: { cellWidth: 22 },
-           11: { cellWidth: 26, fontSize: 5.5 }, 12: { cellWidth: 14 }, 13: { cellWidth: 22, halign: 'left', fontSize: 5.5 },
+           0: { cellWidth: 13 }, 1: { cellWidth: 13 }, 2: { cellWidth: 20, fontSize: 5.2 }, 3: { cellWidth: 31, halign: 'left' },
+           4: { cellWidth: 11 }, 5: { cellWidth: 12 }, 6: { cellWidth: 14 }, 7: { cellWidth: 14 },
+           8: { cellWidth: 10 }, 9: { cellWidth: 14 }, 10: { cellWidth: 17 }, 11: { cellWidth: 19 },
+           12: { cellWidth: 21, fontSize: 5.2 }, 13: { cellWidth: 11 }, 14: { cellWidth: 18, halign: 'left', fontSize: 5.2 },
          },
          margin: { left: mg, right: mg },
        });
-       var fY = (pdf.lastAutoTable ? pdf.lastAutoTable.finalY : 180) + 6;
-       pdf.setFontSize(8);
-       pdf.setFont('helvetica', 'bold');
-       pdf.setDrawColor(50, 50, 50);
-       pdf.setLineWidth(0.3);
+       var tableEndY = pdf.lastAutoTable ? pdf.lastAutoTable.finalY : 180;
+       var fY = Math.max(tableEndY + 8, pdfH - 18);
+       pdf.setFontSize(8.5);
+       pdf.setFont(pdfFont, 'bold');
+       pdf.setDrawColor(15, 23, 42);
+       pdf.setLineWidth(0.5);
        pdf.line(mg, fY - 2, pageW - mg, fY - 2);
-       pdf.text(t('warehouse.footer.shipping_date') + ': ' + (headerInfo.shippingDate || '____________'), mg, fY + 2);
-       pdf.text(t('warehouse.footer.cabinet_no') + ': ' + (headerInfo.cabinetNumber || '____________'), mg + 90, fY + 2);
-       pdf.text(t('warehouse.footer.shipper') + ': ' + (headerInfo.shipper || '____________'), mg + 180, fY + 2);
-       pdf.setFontSize(7);
-       pdf.setFont('helvetica', 'normal');
-       pdf.text('Tel: ' + (headerInfo.companyPhone || '-'), mg, fY + 7);
+       if (isChinesePdf) {
+         const drawFooterPair = (x, y, name, value) => {
+           pdf.setFont('DroidSansFallback', 'bold');
+           pdf.text(`${name}:`, x, y);
+           pdf.setFont('helvetica', 'bold');
+           pdf.text(String(value || '____________'), x + 24, y);
+         };
+         drawFooterPair(mg, fY + 2, label.shippingDate, headerInfo.shippingDate);
+         drawFooterPair(mg + 90, fY + 2, label.cabinetNo, pdfText(headerInfo.cabinetNumber));
+         drawFooterPair(mg + 180, fY + 2, label.shipper, pdfText(headerInfo.shipper));
+         pdf.setFontSize(7);
+         pdf.setFont('helvetica', 'normal');
+         pdf.text('Tel: ' + pdfText(headerInfo.companyPhone), mg, fY + 7);
+       } else {
+         pdf.text(label.shippingDate + ': ' + (headerInfo.shippingDate || '____________'), mg, fY + 2);
+         pdf.text(label.cabinetNo + ': ' + (pdfText(headerInfo.cabinetNumber) || '____________'), mg + 90, fY + 2);
+         pdf.text(label.shipper + ': ' + (pdfText(headerInfo.shipper) || '____________'), mg + 180, fY + 2);
+         pdf.setFontSize(7);
+         pdf.setFont(pdfFont, 'normal');
+         pdf.text('Tel: ' + pdfText(headerInfo.companyPhone), mg, fY + 7);
+       }
        pdf.save('Warehouse_Receipt_' + new Date().toISOString().split('T')[0] + '.pdf');
        toast.success(t('warehouse.messages.export_success'), { id: toastId });
     } catch (err) {
@@ -407,14 +583,18 @@ const WarehouseReceipt = () => {
 
       {/* RECEIPT PRINT AREA */}
       {filteredData.length > 0 && (
-        <div id="receipt-print-area" className="dark-theme-receipt" style={{ 
-            backgroundColor: 'var(--surface-color)', 
-            color: 'var(--text-main)', 
+        <div id="receipt-print-area" className="warehouse-receipt-sheet" style={{ 
+            backgroundColor: '#ffffff', 
+            color: '#0f172a', 
             padding: '2rem', 
-            borderRadius: '12px',
-            boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
+            borderRadius: '8px',
+            boxShadow: '0 10px 40px rgba(0,0,0,0.28)',
             direction: 'ltr',
-            fontFamily: 'Inter, Tajawal, sans-serif'
+            fontFamily: 'Inter, Tajawal, sans-serif',
+            display: 'flex',
+            flexDirection: 'column',
+            minHeight: '190mm',
+            border: '2px solid #0f172a'
         }}>
             {/* Header Form Settings (Visible on screen, looks like text on print) */}
             <div className="hide-on-print" style={{ marginBottom: '1.5rem', padding: '1rem', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', direction: 'rtl' }}>
@@ -445,66 +625,66 @@ const WarehouseReceipt = () => {
             </div>
 
             {/* Print Header */}
-            <div className="print-header" style={{ textAlign: 'center', marginBottom: '1rem', paddingBottom: '0.5rem', borderBottom: '3px solid #1e293b' }}>
-                <h1 style={{ fontSize: '2.2rem', margin: 0, color: '#0f172a', fontWeight: '900', letterSpacing: '1px' }}>
+            <div className="print-header" style={{ textAlign: 'center', marginBottom: '1rem', paddingBottom: '0.6rem', borderBottom: '4px solid #0f172a' }}>
+                <h1 style={{ fontSize: '2.35rem', margin: 0, color: '#0f172a', fontWeight: '900', letterSpacing: '0' }}>
                     {t('warehouse.title')}
                 </h1>
-                <h2 style={{ fontSize: '1.5rem', margin: '0.2rem 0 0', color: '#334155', fontWeight: 'bold' }}>
+                <h2 style={{ fontSize: '1.55rem', margin: '0.2rem 0 0', color: '#1e293b', fontWeight: 'bold' }}>
                     {t('warehouse.subtitle').split(' - ')[1]}
                 </h2>
             </div>
 
             {/* Header Info Grid */}
-            <div className="info-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1px', backgroundColor: '#94a3b8', border: '2px solid #334155', marginBottom: '1rem' }}>
+            <div className="info-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1px', backgroundColor: '#475569', border: '2px solid #0f172a', marginBottom: '1rem' }}>
                 <div style={{ display: 'flex', backgroundColor: '#fff' }}>
-                    <div className="info-label" style={{ width: '40%', padding: '8px', backgroundColor: '#e2e8f0', fontWeight: 'bold', fontSize: '0.9rem', color: '#0f172a', borderRight: '1px solid #94a3b8' }}>
+                    <div className="info-label" style={{ width: '40%', padding: '9px', backgroundColor: '#cbd5e1', fontWeight: 'bold', fontSize: '0.95rem', color: '#0f172a', borderRight: '1px solid #475569' }}>
                         <div>{t('warehouse.header.buyer_no').split(' (')[0]}</div>
                         <div style={{ color: '#ef4444', fontSize: '0.75rem' }}>{t('warehouse.header.buyer_no_zh')}:</div>
                     </div>
-                    <div style={{ width: '60%', padding: '8px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{headerInfo.buyerNo || '-'}</div>
+                    <div style={{ width: '60%', padding: '9px', fontSize: '0.95rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{headerInfo.buyerNo || '-'}</div>
                 </div>
                 <div style={{ display: 'flex', backgroundColor: '#fff' }}>
-                    <div className="info-label" style={{ width: '40%', padding: '8px', backgroundColor: '#e2e8f0', fontWeight: 'bold', fontSize: '0.9rem', color: '#0f172a', borderRight: '1px solid #94a3b8' }}>
+                    <div className="info-label" style={{ width: '40%', padding: '9px', backgroundColor: '#cbd5e1', fontWeight: 'bold', fontSize: '0.95rem', color: '#0f172a', borderRight: '1px solid #475569' }}>
                         <div>{t('warehouse.header.supplier').split(' (')[0]}</div>
                         <div style={{ color: '#ef4444', fontSize: '0.75rem' }}>{t('warehouse.header.supplier_zh')}:</div>
                     </div>
-                    <div style={{ width: '60%', padding: '8px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{headerInfo.supplier || '-'}</div>
+                    <div style={{ width: '60%', padding: '9px', fontSize: '0.95rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{headerInfo.supplier || '-'}</div>
                 </div>
                 <div style={{ display: 'flex', backgroundColor: '#fff' }}>
-                    <div className="info-label" style={{ width: '40%', padding: '8px', backgroundColor: '#e2e8f0', fontWeight: 'bold', fontSize: '0.9rem', color: '#0f172a', borderRight: '1px solid #94a3b8' }}>
+                    <div className="info-label" style={{ width: '40%', padding: '9px', backgroundColor: '#cbd5e1', fontWeight: 'bold', fontSize: '0.95rem', color: '#0f172a', borderRight: '1px solid #475569' }}>
                         <div>{t('warehouse.header.consignee').split(' (')[0]}</div>
                         <div style={{ color: '#ef4444', fontSize: '0.75rem' }}>{t('warehouse.header.consignee_zh')}:</div>
                     </div>
-                    <div style={{ width: '60%', padding: '8px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{headerInfo.consignee || '-'}</div>
+                    <div style={{ width: '60%', padding: '9px', fontSize: '0.95rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{headerInfo.consignee || '-'}</div>
                 </div>
                 
                 <div style={{ display: 'flex', backgroundColor: '#fff' }}>
-                    <div className="info-label" style={{ width: '40%', padding: '8px', backgroundColor: '#e2e8f0', fontWeight: 'bold', fontSize: '0.9rem', color: '#0f172a', borderRight: '1px solid #94a3b8' }}>
+                    <div className="info-label" style={{ width: '40%', padding: '9px', backgroundColor: '#cbd5e1', fontWeight: 'bold', fontSize: '0.95rem', color: '#0f172a', borderRight: '1px solid #475569' }}>
                         <div>{t('warehouse.header.receipt_date').split(' (')[0]}</div>
                         <div style={{ color: '#ef4444', fontSize: '0.75rem' }}>{t('warehouse.header.receipt_date_zh')}:</div>
                     </div>
-                    <div style={{ width: '60%', padding: '8px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{headerInfo.receiptDate || '-'}</div>
+                    <div style={{ width: '60%', padding: '9px', fontSize: '0.95rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{headerInfo.receiptDate || '-'}</div>
                 </div>
                 <div style={{ display: 'flex', backgroundColor: '#fff' }}>
-                    <div className="info-label" style={{ width: '40%', padding: '8px', backgroundColor: '#e2e8f0', fontWeight: 'bold', fontSize: '0.9rem', color: '#0f172a', borderRight: '1px solid #94a3b8' }}>
+                    <div className="info-label" style={{ width: '40%', padding: '9px', backgroundColor: '#cbd5e1', fontWeight: 'bold', fontSize: '0.95rem', color: '#0f172a', borderRight: '1px solid #475569' }}>
                         <div>{t('warehouse.header.order_no').split(' (')[0]}</div>
                         <div style={{ color: '#ef4444', fontSize: '0.75rem' }}>{t('warehouse.header.order_no_zh')}:</div>
                     </div>
-                    <div style={{ width: '60%', padding: '8px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{headerInfo.orderNo || '-'}</div>
+                    <div style={{ width: '60%', padding: '9px', fontSize: '0.95rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{headerInfo.orderNo || '-'}</div>
                 </div>
                 <div style={{ display: 'flex', backgroundColor: '#fff' }}>
-                    <div className="info-label" style={{ width: '40%', padding: '8px', backgroundColor: '#e2e8f0', fontWeight: 'bold', fontSize: '0.9rem', color: '#0f172a', borderRight: '1px solid #94a3b8' }}>
+                    <div className="info-label" style={{ width: '40%', padding: '9px', backgroundColor: '#cbd5e1', fontWeight: 'bold', fontSize: '0.95rem', color: '#0f172a', borderRight: '1px solid #475569' }}>
                         <div>{t('warehouse.header.inspector').split(' (')[0]}</div>
                         <div style={{ color: '#ef4444', fontSize: '0.75rem' }}>{t('warehouse.header.inspector_zh')}:</div>
                     </div>
-                    <div style={{ width: '60%', padding: '8px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{headerInfo.inspector || '-'}</div>
+                    <div style={{ width: '60%', padding: '9px', fontSize: '0.95rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{headerInfo.inspector || '-'}</div>
                 </div>
             </div>
 
             {/* Data Table */}
-            <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', border: '2px solid #334155', fontSize: '0.85rem' }}>
+            <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', border: '2px solid #0f172a', fontSize: '0.92rem', color: '#0f172a', tableLayout: 'fixed' }}>
                 <thead>
-                    <tr style={{ backgroundColor: '#e2e8f0', textAlign: 'center', borderBottom: '2px solid #334155' }}>
+                    <tr style={{ backgroundColor: '#cbd5e1', textAlign: 'center', borderBottom: '2px solid #0f172a' }}>
                         <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', width: '6%' }}>
                             <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.carton_no_zh')}</div>
                             <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.carton_no')}</div>
@@ -513,7 +693,11 @@ const WarehouseReceipt = () => {
                             <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.item_no_zh')}</div>
                             <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.item_no')}</div>
                         </th>
-                        <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', width: '14%' }}>
+                        <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', width: '8%' }}>
+                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.received_at_zh')}</div>
+                            <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.received_at')}</div>
+                        </th>
+                        <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', width: '8%' }}>
                             <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.product_name_zh')}</div>
                             <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.product_name')}</div>
                         </th>
@@ -541,15 +725,15 @@ const WarehouseReceipt = () => {
                             <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.unit_price_zh')}</div>
                             <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.unit_price')}</div>
                         </th>
-                        <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', width: '9%' }}>
+                        <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', width: '8%' }}>
                             <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.total_price_zh')}</div>
                             <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.total_price')}</div>
                         </th>
-                        <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', width: '9%' }}>
+                        <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', width: '8%' }}>
                             <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.tot_amount_zh')}</div>
                             <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.tot_amount')}</div>
                         </th>
-                        <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', width: '10%' }}>
+                        <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', width: '8%' }}>
                             <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.carton_size_zh')}</div>
                             <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.carton_size')}</div>
                         </th>
@@ -571,12 +755,13 @@ const WarehouseReceipt = () => {
                             const tBorderStyle = '1px solid #cbd5e1';
 
                             return (
-                                <tr key={`${oIdx}-${pIdx}`} style={{ textAlign: 'center', backgroundColor: '#fff', borderBottom: pIdx === rowSpan - 1 ? '1px solid #334155' : 'none' }}>
+                                <tr key={`${oIdx}-${pIdx}`} style={{ textAlign: 'center', backgroundColor: oIdx % 2 === 0 ? '#ffffff' : '#f1f5f9', borderBottom: pIdx === rowSpan - 1 ? '1px solid #334155' : 'none' }}>
                                     <td style={{ padding: '4px', borderRight: tBorderStyle, borderBottom: tBorderStyle }}>{pkg.cartonNo}</td>
                                     
                                     {isFirstPkg && (
                                         <>
                                             <td rowSpan={rowSpan} style={{ padding: '4px', borderRight: tBorderStyle, fontWeight: 'bold', borderBottom: '1px solid #334155' }}>{order.serial}</td>
+                                            <td rowSpan={rowSpan} style={{ padding: '4px', borderRight: tBorderStyle, fontSize: '0.72rem', fontWeight: 'bold', borderBottom: '1px solid #334155' }}>{formatReceivedAt(order.receivedAt)}</td>
                                             <td rowSpan={rowSpan} style={{ padding: '4px', borderRight: tBorderStyle, borderBottom: '1px solid #334155' }}>{englishOnly(order.productName)}</td>
                                         </>
                                     )}
@@ -615,8 +800,8 @@ const WarehouseReceipt = () => {
                     })}
 
                     {/* Totals Row */}
-                    <tr className="totals-row" style={{ backgroundColor: '#e2e8f0', textAlign: 'center', fontWeight: 'bold', borderBottom: '2px solid #334155', borderTop: '2px solid #334155' }}>
-                        <td colSpan={2} style={{ padding: '10px 4px', borderRight: '1px solid #94a3b8', fontSize: '1rem' }}>{t('packing.footer.total')}</td>
+                    <tr className="totals-row" style={{ backgroundColor: '#cbd5e1', textAlign: 'center', fontWeight: 'bold', borderBottom: '2px solid #0f172a', borderTop: '2px solid #0f172a' }}>
+                        <td colSpan={3} style={{ padding: '10px 4px', borderRight: '1px solid #94a3b8', fontSize: '1rem' }}>{t('packing.footer.total')}</td>
                         <td style={{ padding: '10px 4px', borderRight: '1px solid #94a3b8', color: '#1e293b' }}>{grandTotalItems} {t('warehouse.results.models_count')}</td>
                         <td colSpan={2} style={{ padding: '10px 4px', borderRight: '1px solid #94a3b8', color: '#1e293b' }}>{grandTotalCtn} {t('shipping.footer.ctn')}</td>
                         <td colSpan={2} style={{ padding: '10px 4px', borderRight: '1px solid #94a3b8', color: '#1e293b' }}>{grandTotalPcs} {t('shipping.footer.pcs')}</td>
@@ -626,7 +811,8 @@ const WarehouseReceipt = () => {
             </table>
 
             {/* Footer Summary */}
-            <div className="footer-summary" style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1.5rem', padding: '1rem', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '0.9rem', fontWeight: 'bold', color: '#334155', flexWrap: 'wrap', gap: '1rem' }}>
+            <div className="receipt-footer-block" style={{ marginTop: 'auto', paddingTop: '1.5rem' }}>
+            <div className="footer-summary" style={{ display: 'flex', justifyContent: 'space-between', padding: '1rem', backgroundColor: '#e2e8f0', border: '2px solid #334155', borderRadius: '6px', fontSize: '1rem', fontWeight: 'bold', color: '#0f172a', flexWrap: 'wrap', gap: '1rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <span style={{ color: '#ef4444' }}>{t('warehouse.footer.shipping_date_zh')}</span>
                     <span>{t('warehouse.footer.shipping_date')}:</span>
@@ -647,7 +833,7 @@ const WarehouseReceipt = () => {
                 </div>
             </div>
 
-            <div style={{ marginTop: '1.5rem', display: 'flex', gap: '1.5rem', alignItems: 'center', color: '#0f172a', fontWeight: 'bold' }}>
+            <div style={{ marginTop: '1rem', display: 'flex', gap: '1.5rem', alignItems: 'center', color: '#0f172a', fontWeight: 'bold' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <span>{t('warehouse.header.company_phone')}</span>
                     <span style={{ color: '#ef4444' }}>{t('warehouse.header.company_phone_zh')}:</span>
@@ -656,6 +842,7 @@ const WarehouseReceipt = () => {
                     <input className="hide-on-print" type="text" value={headerInfo.companyPhone} onChange={e => updateHeaderInfo('companyPhone', e.target.value)} style={{ width: '300px', padding: '0.2rem', border: '1px solid #cbd5e1', borderRadius: '4px' }} />
                     <span className="print-only-inline" style={{ display: 'none' }}>{headerInfo.companyPhone}</span>
                 </div>
+            </div>
             </div>
 
             <style>
@@ -718,6 +905,40 @@ const WarehouseReceipt = () => {
                     border-color: var(--border-color) !important;
                     color: var(--text-main) !important;
                 }
+                .warehouse-receipt-sheet {
+                    box-sizing: border-box;
+                }
+                .warehouse-receipt-sheet .info-grid,
+                .warehouse-receipt-sheet .data-table,
+                .warehouse-receipt-sheet .footer-summary {
+                    box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.08);
+                }
+                .warehouse-receipt-sheet .data-table th {
+                    background-color: #cbd5e1 !important;
+                    color: #0f172a !important;
+                    border-color: #64748b !important;
+                    font-weight: 900 !important;
+                    line-height: 1.2;
+                }
+                .warehouse-receipt-sheet .data-table th div:first-child {
+                    color: #dc2626 !important;
+                    font-size: 0.98rem !important;
+                }
+                .warehouse-receipt-sheet .data-table th div:last-child {
+                    color: #0f172a !important;
+                    font-size: 0.76rem !important;
+                    font-weight: 800 !important;
+                }
+                .warehouse-receipt-sheet .data-table td {
+                    border-color: #94a3b8 !important;
+                    color: #0f172a !important;
+                    font-weight: 650;
+                    line-height: 1.25;
+                }
+                .warehouse-receipt-sheet .data-table .totals-row td {
+                    color: #0f172a !important;
+                    font-weight: 900 !important;
+                }
 
                 @page {
                     size: A4 landscape;
@@ -748,6 +969,10 @@ const WarehouseReceipt = () => {
                         left: 0;
                         top: 0;
                         width: 100%;
+                        min-height: calc(210mm - 10mm) !important;
+                        display: flex !important;
+                        flex-direction: column !important;
+                        box-sizing: border-box !important;
                         background-color: #ffffff !important;
                         color: #000000 !important;
                         box-shadow: none !important;
@@ -756,6 +981,10 @@ const WarehouseReceipt = () => {
                         border-radius: 0 !important;
                         page-break-inside: avoid !important;
                         break-inside: avoid !important;
+                    }
+                    #receipt-print-area .receipt-footer-block {
+                        margin-top: auto !important;
+                        padding-top: 6mm !important;
                     }
 
                     /* Force single page */
@@ -783,42 +1012,45 @@ const WarehouseReceipt = () => {
                     }
                     #receipt-print-area .print-header {
                         border-bottom: 3px solid #0f172a !important;
-                        margin-bottom: 8mm !important;
+                        margin-bottom: 5mm !important;
                     }
 
                     /* Info grid print */
                     #receipt-print-area .info-grid {
-                        background-color: #94a3b8 !important;
-                        border: 2px solid #334155 !important;
+                        background-color: #475569 !important;
+                        border: 2px solid #0f172a !important;
+                        margin-bottom: 5mm !important;
                     }
                     #receipt-print-area .info-grid > div {
                         background-color: #fff !important;
                     }
                     #receipt-print-area .info-grid .info-label {
-                        background-color: #e2e8f0 !important;
+                        background-color: #cbd5e1 !important;
                         color: #0f172a !important;
-                        border-right: 1px solid #94a3b8 !important;
+                        border-right: 1px solid #475569 !important;
+                        font-size: 8.5pt !important;
                     }
 
                     /* Data table print */
                     #receipt-print-area .data-table {
-                        border: 2px solid #334155 !important;
-                        font-size: 8pt !important;
+                        border: 2px solid #0f172a !important;
+                        font-size: 8.5pt !important;
                         table-layout: fixed !important;
                         width: 100% !important;
                     }
                     #receipt-print-area .data-table th {
-                        background-color: #e2e8f0 !important;
+                        background-color: #cbd5e1 !important;
                         color: #0f172a !important;
-                        border: 1px solid #94a3b8 !important;
+                        border: 1px solid #64748b !important;
                         padding: 4px 2px !important;
-                        font-size: 7pt !important;
+                        font-size: 7.4pt !important;
                     }
                     #receipt-print-area .data-table td {
-                        border: 1px solid #cbd5e1 !important;
+                        border: 1px solid #94a3b8 !important;
                         padding: 3px 2px !important;
                         color: #0f172a !important;
-                        font-size: 7.5pt !important;
+                        font-size: 8pt !important;
+                        font-weight: 650 !important;
                         word-wrap: break-word !important;
                         overflow-wrap: break-word !important;
                     }
@@ -826,8 +1058,8 @@ const WarehouseReceipt = () => {
                         background-color: #fff !important;
                     }
                     #receipt-print-area .data-table .totals-row {
-                        background-color: #e2e8f0 !important;
-                        border: 2px solid #334155 !important;
+                        background-color: #cbd5e1 !important;
+                        border: 2px solid #0f172a !important;
                     }
                     #receipt-print-area .data-table .totals-row td {
                         color: #0f172a !important;
@@ -837,9 +1069,10 @@ const WarehouseReceipt = () => {
 
                     /* Footer print */
                     #receipt-print-area .footer-summary {
-                        background-color: #f8fafc !important;
-                        border: 1px solid #e2e8f0 !important;
-                        color: #334155 !important;
+                        background-color: #e2e8f0 !important;
+                        border: 2px solid #334155 !important;
+                        color: #0f172a !important;
+                        font-size: 9pt !important;
                     }
                 }
                 `}

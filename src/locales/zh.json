@@ -992,6 +992,8 @@
         "product": "产品",
         "item_no": "货号",
         "item_no_zh": "货号",
+        "received_at": "收货时间",
+        "received_at_zh": "收货时间",
         "product_name": "产品名称",
         "product_name_zh": "货名",
         "ctns_qty": "箱数",

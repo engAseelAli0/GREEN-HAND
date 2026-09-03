@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useLayoutEffect, useRef, useState } from 'react';
 import { englishOnly, chineseOnly } from '../utils/textUtils';
 import { normalizeImageUrl } from '../utils/imageUtils';
 import toast from 'react-hot-toast';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 
 export const getSizeRange = (orderData) => {
   if (!orderData) return '-';
@@ -45,6 +47,150 @@ export const formatDate = (dateStr) => {
   return dateStr;
 };
 
+const ProductImageFrame = ({ img, index, isMultiImage, maxHeight }) => {
+  const [ratio, setRatio] = useState(null);
+  const maxWidth = isMultiImage ? 180 : 250;
+  const fallbackRatio = 3 / 4;
+  const activeRatio = ratio || fallbackRatio;
+  const boundedByWidthHeight = maxWidth / activeRatio;
+  const height = Math.min(maxHeight, boundedByWidthHeight);
+  const width = Math.min(maxWidth, height * activeRatio);
+
+  return (
+    <div
+      style={{
+        width: `${width}px`,
+        height: `${height}px`,
+        maxWidth: '100%',
+        border: '1.5px solid #000',
+        borderRadius: '4px',
+        backgroundColor: '#fff',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '2px',
+        boxSizing: 'border-box',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+        overflow: 'hidden'
+      }}
+    >
+      <img
+        src={normalizeImageUrl(img)}
+        alt={`product-${index + 1}`}
+        crossOrigin="anonymous"
+        onLoad={(e) => {
+          const { naturalWidth, naturalHeight } = e.currentTarget;
+          if (naturalWidth && naturalHeight) {
+            setRatio(naturalWidth / naturalHeight);
+          }
+        }}
+        onError={(e) => {
+          e.currentTarget.style.display = 'none';
+        }}
+        style={{ width: '100%', height: '100%', objectFit: 'contain', objectPosition: 'center', display: 'block' }}
+      />
+    </div>
+  );
+};
+
+const FitOneLine = ({ children, maxFontSize = 15, minFontSize = 7, align = 'center', style }) => {
+  const outerRef = useRef(null);
+  const textRef = useRef(null);
+  const [fit, setFit] = useState({ fontSize: maxFontSize, scale: 1 });
+
+  useLayoutEffect(() => {
+    const fitText = () => {
+      const outer = outerRef.current;
+      const text = textRef.current;
+      if (!outer || !text) return;
+
+      text.style.fontSize = `${maxFontSize}px`;
+      text.style.transform = 'scaleX(1)';
+
+      const availableWidth = Math.max(1, outer.clientWidth - 2);
+      const naturalWidth = text.scrollWidth || 1;
+      let nextFontSize = maxFontSize;
+      let nextScale = 1;
+
+      if (naturalWidth > availableWidth) {
+        nextFontSize = Math.max(minFontSize, maxFontSize * (availableWidth / naturalWidth));
+        const widthAtMin = naturalWidth * (nextFontSize / maxFontSize);
+        if (widthAtMin > availableWidth) {
+          nextScale = Math.max(0.62, availableWidth / widthAtMin);
+        }
+      }
+
+      setFit(prev => (
+        Math.abs(prev.fontSize - nextFontSize) > 0.1 || Math.abs(prev.scale - nextScale) > 0.01
+          ? { fontSize: nextFontSize, scale: nextScale }
+          : prev
+      ));
+    };
+
+    const frame = requestAnimationFrame(fitText);
+    const resizeObserver = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(fitText) : null;
+    if (outerRef.current && resizeObserver) resizeObserver.observe(outerRef.current);
+    document.fonts?.ready?.then(fitText);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      resizeObserver?.disconnect();
+    };
+  }, [children, maxFontSize, minFontSize]);
+
+  return (
+    <span ref={outerRef} className="fit-one-line" style={{ display: 'block', width: '100%', overflow: 'hidden', textAlign: align, ...style }}>
+      <span
+        ref={textRef}
+        className="fit-one-line-text"
+        style={{
+          display: 'inline-block',
+          whiteSpace: 'nowrap',
+          fontSize: `${fit.fontSize}px`,
+          lineHeight: 1.15,
+          transform: `scaleX(${fit.scale})`,
+          transformOrigin: align === 'left' ? 'left center' : align === 'right' ? 'right center' : 'center',
+        }}
+      >
+        {children || '-'}
+      </span>
+    </span>
+  );
+};
+
+const prepareExportCloneForCapture = async (clonedElement) => {
+  await document.fonts?.ready;
+
+  clonedElement.querySelectorAll('.fit-one-line').forEach((outer) => {
+    const text = outer.querySelector('.fit-one-line-text');
+    if (!text) return;
+
+    text.style.fontSize = text.style.fontSize || '12px';
+    text.style.transform = 'scaleX(1)';
+
+    const availableWidth = Math.max(1, outer.clientWidth - 2);
+    const naturalWidth = text.scrollWidth || 1;
+    if (naturalWidth > availableWidth) {
+      const currentSize = parseFloat(text.style.fontSize) || 12;
+      const nextSize = Math.max(5, currentSize * (availableWidth / naturalWidth));
+      text.style.fontSize = `${nextSize}px`;
+      const adjustedWidth = naturalWidth * (nextSize / currentSize);
+      if (adjustedWidth > availableWidth) {
+        text.style.transform = `scaleX(${Math.max(0.55, availableWidth / adjustedWidth)})`;
+      }
+    }
+  });
+
+  const images = Array.from(clonedElement.querySelectorAll('img'));
+  await Promise.all(images.map(img => {
+    if (img.complete) return Promise.resolve();
+    return new Promise(resolve => {
+      img.onload = resolve;
+      img.onerror = resolve;
+    });
+  }));
+};
+
 export const downloadOrderPDF = async ({ order, elementId = 'export-doc', t }) => {
   if (!order) return;
   const element = document.getElementById(elementId);
@@ -56,9 +202,6 @@ export const downloadOrderPDF = async ({ order, elementId = 'export-doc', t }) =
   const filename = `Order_${order.serialNumber || order.serial_number || 'Export'}.pdf`;
 
   try {
-    const { default: html2canvas } = await import('html2canvas');
-    const { default: jsPDF } = await import('jspdf');
-
     // Clone element to isolate in memory and render desktop-width canvas
     const clonedElement = element.cloneNode(true);
     clonedElement.style.cssText = `
@@ -72,8 +215,10 @@ export const downloadOrderPDF = async ({ order, elementId = 'export-doc', t }) =
       padding: 15px !important;
       margin: 0 !important;
     `;
+    clonedElement.dataset.exportPdfClone = 'true';
 
     document.body.appendChild(clonedElement);
+    await prepareExportCloneForCapture(clonedElement);
 
     const canvas = await html2canvas(clonedElement, {
       scale: 2,
@@ -116,6 +261,7 @@ export const downloadOrderPDF = async ({ order, elementId = 'export-doc', t }) =
   } catch (err) {
     toast.error(t ? t('export.messages.download_error', 'حدث خطأ أثناء تحميل ملف PDF') : 'Error downloading PDF', { id: toastId });
     console.error(err);
+    document.querySelectorAll('[data-export-pdf-clone="true"]').forEach(node => node.remove());
   }
 };
 
@@ -164,7 +310,7 @@ const ExportOrderDocument = ({ order, lookups = {}, t, id = "export-doc", classN
           width: 100%;
           border-collapse: collapse;
           border: 3px solid #000;
-          table-layout: auto;
+          table-layout: fixed;
           background: #fff;
         }
         .inv-table-new th, .inv-table-new td {
@@ -173,6 +319,7 @@ const ExportOrderDocument = ({ order, lookups = {}, t, id = "export-doc", classN
           word-wrap: break-word;
           white-space: normal;
           line-height: 1.3;
+          overflow: hidden;
         }
         .hdr-blue {
           background-color: #1a5276 !important;
@@ -224,15 +371,28 @@ const ExportOrderDocument = ({ order, lookups = {}, t, id = "export-doc", classN
       `}</style>
 
       <table className="inv-table-new">
+        <colgroup>
+          <col style={{ width: '26%' }} />
+          <col style={{ width: '6%' }} />
+          <col style={{ width: '8%' }} />
+          <col style={{ width: '5%' }} />
+          <col style={{ width: '6%' }} />
+          <col style={{ width: '8%' }} />
+          <col style={{ width: '5%' }} />
+          <col style={{ width: '8%' }} />
+          <col style={{ width: '6%' }} />
+          <col style={{ width: '6%' }} />
+          <col style={{ width: '16%' }} />
+        </colgroup>
         <tbody>
           {/* ═══ ROW 1: HEADER ═══ */}
           <tr>
-            <th colSpan={1} className="hdr-blue">{t('export.doc.order_no', 'ORDER NO.')}</th>
-            <td colSpan={2} className="val-center val-bold">{order.orderNumber || '-'}</td>
-            <th colSpan={2} className="hdr-blue">{t('export.doc.request_date', 'Order Date')}</th>
-            <td colSpan={2} className="val-center val-bold">{formatDate(order.requestDate)}</td>
-            <th colSpan={2} className="hdr-blue">{t('export.doc.delivery_date', 'Delivery Date')}</th>
-            <td colSpan={2} className="val-center val-bold">{formatDate(order.deliveryDate)}</td>
+            <th colSpan={1} className="hdr-blue"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.order_no', 'ORDER NO.')}</FitOneLine></th>
+            <td colSpan={2} className="val-center val-bold"><FitOneLine maxFontSize={13} minFontSize={7}>{order.orderNumber || '-'}</FitOneLine></td>
+            <th colSpan={2} className="hdr-blue"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.request_date', 'Order Date')}</FitOneLine></th>
+            <td colSpan={2} className="val-center val-bold"><FitOneLine maxFontSize={13} minFontSize={7}>{formatDate(order.requestDate)}</FitOneLine></td>
+            <th colSpan={2} className="hdr-blue"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.delivery_date', 'Delivery Date')}</FitOneLine></th>
+            <td colSpan={2} className="val-center val-bold"><FitOneLine maxFontSize={13} minFontSize={7}>{formatDate(order.deliveryDate)}</FitOneLine></td>
           </tr>
 
           {/* ═══ ROW 2-4: BUYER & FACTORY INFO ═══ */}
@@ -254,58 +414,57 @@ const ExportOrderDocument = ({ order, lookups = {}, t, id = "export-doc", classN
                 </div>
               )}
             </th>
-            <th colSpan={2} className="hdr-light" style={{ whiteSpace: 'nowrap', padding: '6px 8px' }}>{t('export.doc.buyer_name', 'Buyer')}</th>
-            <td colSpan={3} className="val-center val-bold" style={{ padding: '6px 8px' }}>{order.buyerCompany || '-'}</td>
-            <th colSpan={2} className="hdr-light" style={{ whiteSpace: 'nowrap', padding: '6px 8px' }}>{t('export.doc.factory_name', 'Factory')}</th>
-            <td colSpan={3} className="val-center val-bold" style={{ padding: '6px 8px' }}>{factoryInfo.name || '-'}</td>
+            <th colSpan={2} className="hdr-light" style={{ whiteSpace: 'nowrap', padding: '6px 8px' }}><FitOneLine maxFontSize={11} minFontSize={6}>{t('export.doc.buyer_name', 'Buyer')}</FitOneLine></th>
+            <td colSpan={3} className="val-center val-bold" style={{ padding: '6px 8px' }}><FitOneLine maxFontSize={12} minFontSize={6}>{order.buyerCompany || '-'}</FitOneLine></td>
+            <th colSpan={2} className="hdr-light" style={{ whiteSpace: 'nowrap', padding: '6px 8px' }}><FitOneLine maxFontSize={11} minFontSize={6}>{t('export.doc.factory_name', 'Factory')}</FitOneLine></th>
+            <td colSpan={3} className="val-center val-bold" style={{ padding: '6px 8px' }}><FitOneLine maxFontSize={12} minFontSize={6}>{factoryInfo.name || '-'}</FitOneLine></td>
           </tr>
           <tr>
-            <th colSpan={2} className="hdr-light" style={{ whiteSpace: 'nowrap', padding: '6px 8px' }}>{t('export.doc.buyer_mobile', 'Buyer Mobile')}</th>
-            <td colSpan={3} className="val-center val-bold" style={{ padding: '6px 8px' }}>{order.buyerNumber || '-'}</td>
-            <th colSpan={2} className="hdr-light" style={{ whiteSpace: 'nowrap', padding: '6px 8px' }}>{t('export.doc.factory_mobile', 'Factory Mobile')}</th>
-            <td colSpan={3} className="val-center val-bold" style={{ padding: '6px 8px' }}>{factoryInfo.mobile || '-'}</td>
+            <th colSpan={2} className="hdr-light" style={{ whiteSpace: 'nowrap', padding: '6px 8px' }}><FitOneLine maxFontSize={11} minFontSize={6}>{t('export.doc.buyer_mobile', 'Buyer Mobile')}</FitOneLine></th>
+            <td colSpan={3} className="val-center val-bold" style={{ padding: '6px 8px' }}><FitOneLine maxFontSize={12} minFontSize={6}>{order.buyerNumber || '-'}</FitOneLine></td>
+            <th colSpan={2} className="hdr-light" style={{ whiteSpace: 'nowrap', padding: '6px 8px' }}><FitOneLine maxFontSize={11} minFontSize={6}>{t('export.doc.factory_mobile', 'Factory Mobile')}</FitOneLine></th>
+            <td colSpan={3} className="val-center val-bold" style={{ padding: '6px 8px' }}><FitOneLine maxFontSize={12} minFontSize={6}>{factoryInfo.mobile || '-'}</FitOneLine></td>
           </tr>
           <tr>
-            <th colSpan={2} className="hdr-light" style={{ whiteSpace: 'nowrap', padding: '6px 8px' }}>{t('export.doc.customer_id', 'Customer ID')}</th>
-            <td colSpan={3} className="val-center val-bold" style={{ padding: '6px 8px' }}>{order.buyerMobile || '-'}</td>
-            <th colSpan={2} className="hdr-light" style={{ whiteSpace: 'nowrap', padding: '6px 8px' }}>{t('export.doc.factory_address', 'Factory Address')}</th>
-            <td colSpan={3} className="val-center val-bold" style={{ padding: '6px 8px' }}>{factoryInfo.address || '-'}</td>
+            <th colSpan={2} className="hdr-light" style={{ whiteSpace: 'nowrap', padding: '6px 8px' }}><FitOneLine maxFontSize={11} minFontSize={6}>{t('export.doc.customer_id', 'Customer ID')}</FitOneLine></th>
+            <td colSpan={3} className="val-center val-bold" style={{ padding: '6px 8px' }}><FitOneLine maxFontSize={12} minFontSize={6}>{order.buyerMobile || '-'}</FitOneLine></td>
+            <th colSpan={2} className="hdr-light" style={{ whiteSpace: 'nowrap', padding: '6px 8px' }}><FitOneLine maxFontSize={11} minFontSize={6}>{t('export.doc.factory_address', 'Factory Address')}</FitOneLine></th>
+            <td colSpan={3} className="val-center val-bold" style={{ padding: '6px 8px' }}><FitOneLine maxFontSize={12} minFontSize={6}>{factoryInfo.address || '-'}</FitOneLine></td>
           </tr>
 
           {/* ═══ ROW 5: PRODUCT COLUMNS ═══ */}
           <tr>
-            <th className="hdr-blue" style={{ whiteSpace: 'nowrap', minWidth: '180px', padding: '6px 10px' }}>{t('export.doc.product_name', 'Product')}</th>
-            <th className="hdr-blue">{t('export.doc.model_no', 'Model NO.')}</th>
-            <th className="hdr-blue">{t('export.doc.barcode', 'Barcode')}</th>
-            <th className="hdr-blue">{t('export.doc.qty', 'Quantity')}</th>
-            <th className="hdr-blue">{t('export.doc.price', 'Price')}</th>
-            <th className="hdr-blue">{t('export.doc.total_price', 'Total Price')}</th>
-            <th className="hdr-blue">{t('export.doc.size_qty', 'Sizes Qty')}</th>
-            <th className="hdr-blue">{t('export.doc.size_range', 'Size Range')}</th>
-            <th className="hdr-blue">{t('export.doc.carton_size', 'Carton Size')}</th>
-            <th className="hdr-blue">{t('export.doc.plastic_bag', 'Plastic Bag')}</th>
-            <th className="hdr-blue">{t('export.doc.ctn_packaging', 'CTN Packaging')}</th>
+            <th className="hdr-blue" style={{ whiteSpace: 'nowrap', padding: '6px 8px' }}><FitOneLine maxFontSize={13} minFontSize={7}>{t('export.doc.product_name', 'Product')}</FitOneLine></th>
+            <th className="hdr-blue"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.model_no', 'Model NO.')}</FitOneLine></th>
+            <th className="hdr-blue"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.barcode', 'Barcode')}</FitOneLine></th>
+            <th className="hdr-blue"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.qty', 'Quantity')}</FitOneLine></th>
+            <th className="hdr-blue"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.price', 'Price')}</FitOneLine></th>
+            <th className="hdr-blue"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.total_price', 'Total Price')}</FitOneLine></th>
+            <th className="hdr-blue"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.size_qty', 'Sizes Qty')}</FitOneLine></th>
+            <th className="hdr-blue"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.size_range', 'Size Range')}</FitOneLine></th>
+            <th className="hdr-blue"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.carton_size', 'Carton Size')}</FitOneLine></th>
+            <th className="hdr-blue"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.plastic_bag', 'Plastic Bag')}</FitOneLine></th>
+            <th className="hdr-blue"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.ctn_packaging', 'CTN Packaging')}</FitOneLine></th>
           </tr>
 
           {/* ═══ ROW 6: PRODUCT VALUES ═══ */}
           <tr>
-            <td className="val-center val-bold hdr-grey" style={{ whiteSpace: 'nowrap', minWidth: '180px', padding: '6px 12px' }}>
-              {englishOnly(order.productName)}
-              {chineseOnly(order.productName) && (
-                <span style={{ fontWeight: '800', marginLeft: '8px', color: '#333', whiteSpace: 'nowrap' }}>
-                  - {chineseOnly(order.productName)}
-                </span>
-              )}
-              {(!englishOnly(order.productName) && !chineseOnly(order.productName)) && '-'}
+            <td className="val-center val-bold hdr-grey" style={{ whiteSpace: 'nowrap', padding: '6px 8px' }}>
+              <FitOneLine maxFontSize={13} minFontSize={6}>
+                {[
+                  englishOnly(order.productName),
+                  chineseOnly(order.productName)
+                ].filter(Boolean).join(' - ') || '-'}
+              </FitOneLine>
             </td>
-            <td className="val-center val-bold bg-cyan">{order.serialNumber || order.serial_number || '-'}</td>
-            <td className="val-center val-bold">{order.barcode ? `${order.barcode}` : '-'}</td>
-            <td className="val-center val-bold">{order.totalQuantity || '-'}</td>
-            <td className="val-center val-bold">¥ {order.productPrice || '-'}</td>
-            <td className="val-center val-bold bg-light-blue">¥ {order.productPrice && order.totalQuantity ? (parseFloat(order.productPrice) * parseFloat(order.totalQuantity)).toFixed(2) : '-'}</td>
-            <td className="val-center val-bold">{sizesToRender.length || '-'}</td>
+            <td className="val-center val-bold bg-cyan"><FitOneLine maxFontSize={12} minFontSize={6}>{order.serialNumber || order.serial_number || '-'}</FitOneLine></td>
+            <td className="val-center val-bold"><FitOneLine maxFontSize={12} minFontSize={6}>{order.barcode ? `${order.barcode}` : '-'}</FitOneLine></td>
+            <td className="val-center val-bold"><FitOneLine maxFontSize={12} minFontSize={6}>{order.totalQuantity || '-'}</FitOneLine></td>
+            <td className="val-center val-bold"><FitOneLine maxFontSize={12} minFontSize={6}>¥ {order.productPrice || '-'}</FitOneLine></td>
+            <td className="val-center val-bold bg-light-blue"><FitOneLine maxFontSize={12} minFontSize={6}>¥ {order.productPrice && order.totalQuantity ? (parseFloat(order.productPrice) * parseFloat(order.totalQuantity)).toFixed(2) : '-'}</FitOneLine></td>
+            <td className="val-center val-bold"><FitOneLine maxFontSize={12} minFontSize={6}>{sizesToRender.length || '-'}</FitOneLine></td>
             <td className="val-center val-bold">
-              {(() => {
+              <FitOneLine maxFontSize={11} minFontSize={6}>{(() => {
                 const range = getSizeRange(order);
                 if (range && range !== '-') {
                   const parts = range.split(' - ');
@@ -313,12 +472,12 @@ const ExportOrderDocument = ({ order, lookups = {}, t, id = "export-doc", classN
                   return range;
                 }
                 return '-';
-              })()}
+              })()}</FitOneLine>
             </td>
-            <td className="val-center val-bold">{order.cartonSize || '-'}</td>
-            <td className="val-center val-bold">{order.plasticBagSize || '-'}</td>
+            <td className="val-center val-bold"><FitOneLine maxFontSize={12} minFontSize={6}>{order.cartonSize || '-'}</FitOneLine></td>
+            <td className="val-center val-bold"><FitOneLine maxFontSize={12} minFontSize={6}>{order.plasticBagSize || '-'}</FitOneLine></td>
             <td className="val-center val-bold">
-              {(() => {
+              <FitOneLine maxFontSize={11} minFontSize={6}>{(() => {
                 const getFirstNum = (str) => {
                   if (!str) return null;
                   const match = String(str).match(/\d+(\.\d+)?/);
@@ -331,7 +490,7 @@ const ExportOrderDocument = ({ order, lookups = {}, t, id = "export-doc", classN
                 if (qNum) return `${qNum} Carton`;
                 if (pNum) return `${pNum} Pcs`;
                 return '-';
-              })()}
+              })()}</FitOneLine>
             </td>
           </tr>
 
@@ -369,16 +528,16 @@ const ExportOrderDocument = ({ order, lookups = {}, t, id = "export-doc", classN
 
               rows.push(
                 <tr key="empty-hdr">
-                  <th className="hdr-grey">{t('export.doc.size_header', 'Size')}</th>
+                  <th className="hdr-grey"><FitOneLine maxFontSize={13} minFontSize={6}>{t('export.doc.size_header', 'Size')}</FitOneLine></th>
                   {displaySizes.length > 0 ? (
                     displaySizes.map((s, i) => (
-                      <th key={i} className="hdr-grey" style={{ minWidth: '40px', height: '28px' }}>
-                        {s}
+                      <th key={i} className="hdr-grey" style={{ height: '28px' }}>
+                        <FitOneLine maxFontSize={13} minFontSize={6}>{s}</FitOneLine>
                       </th>
                     ))
                   ) : (
                     Array.from({ length: 4 }).map((_, i) => (
-                      <th key={i} className="hdr-grey" style={{ minWidth: '40px', height: '28px' }}>&nbsp;</th>
+                      <th key={i} className="hdr-grey" style={{ height: '28px' }}>&nbsp;</th>
                     ))
                   )}
                   {remainingCols > 0 && (
@@ -394,39 +553,14 @@ const ExportOrderDocument = ({ order, lookups = {}, t, id = "export-doc", classN
                       gap: '8px',
                       alignItems: 'center',
                       justifyContent: 'center',
+                      flexWrap: 'wrap',
                       width: '100%',
-                      maxWidth: isMultiImage ? '340px' : '230px',
+                      maxWidth: isMultiImage ? '380px' : '250px',
                       margin: '0 auto',
                       boxSizing: 'border-box'
                     }}>
                       {order.productImages?.filter(Boolean).map((img, idx) => (
-                        <div
-                          key={idx}
-                          style={{
-                            flex: isMultiImage ? '1 1 48%' : '0 1 100%',
-                            maxWidth: isMultiImage ? '160px' : '230px',
-                            height: isMultiImage ? '230px' : '250px',
-                            border: '1.5px solid #000',
-                            borderRadius: '4px',
-                            backgroundColor: '#fff',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            padding: '3px',
-                            boxSizing: 'border-box',
-                            boxShadow: '0 1px 3px rgba(0,0,0,0.08)'
-                          }}
-                        >
-                          <img
-                            src={normalizeImageUrl(img)}
-                            alt={`product-${idx + 1}`}
-                            crossOrigin="anonymous"
-                            onError={(e) => {
-                              e.currentTarget.style.display = 'none';
-                            }}
-                            style={{ maxWidth: '100%', maxHeight: '100%', width: 'auto', height: 'auto', objectFit: 'contain', display: 'block' }}
-                          />
-                        </div>
+                        <ProductImageFrame key={idx} img={img} index={idx} isMultiImage={isMultiImage} maxHeight={isMultiImage ? 230 : 250} />
                       ))}
                     </div>
                   </td>
@@ -462,8 +596,8 @@ const ExportOrderDocument = ({ order, lookups = {}, t, id = "export-doc", classN
             parts.forEach(part => {
               rows.push(
                 <tr key={`part-hdr-${part}`}>
-                  <th className="hdr-grey">{t('export.doc.part_size_header', { part, defaultValue: `${part} Size` })}</th>
-                  {partSizes.map(s => <th key={s} className="hdr-grey">{s}</th>)}
+                  <th className="hdr-grey"><FitOneLine maxFontSize={13} minFontSize={6}>{t('export.doc.part_size_header', { part, defaultValue: `${part} Size` })}</FitOneLine></th>
+                  {partSizes.map(s => <th key={s} className="hdr-grey"><FitOneLine maxFontSize={13} minFontSize={6}>{s}</FitOneLine></th>)}
                   {partSizes.length < maxSizeCols && (
                     <td colSpan={maxSizeCols - partSizes.length} style={{ border: 'none', background: '#fff' }}></td>
                   )}
@@ -476,39 +610,14 @@ const ExportOrderDocument = ({ order, lookups = {}, t, id = "export-doc", classN
                         gap: '8px',
                         alignItems: 'center',
                         justifyContent: 'center',
+                        flexWrap: 'wrap',
                         width: '100%',
-                        maxWidth: isMultiImage ? '340px' : '230px',
+                        maxWidth: isMultiImage ? '380px' : '250px',
                         margin: '0 auto',
                         boxSizing: 'border-box'
                       }}>
                         {order.productImages?.filter(Boolean).map((img, idx) => (
-                          <div
-                            key={idx}
-                            style={{
-                              flex: isMultiImage ? '1 1 48%' : '0 1 100%',
-                              maxWidth: isMultiImage ? '160px' : '230px',
-                              height: isMultiImage ? '250px' : '275px',
-                              border: '1.5px solid #000',
-                              borderRadius: '4px',
-                              backgroundColor: '#fff',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              padding: '3px',
-                              boxSizing: 'border-box',
-                              boxShadow: '0 1px 3px rgba(0,0,0,0.08)'
-                            }}
-                          >
-                            <img
-                              src={normalizeImageUrl(img)}
-                              alt={`product-${idx + 1}`}
-                              crossOrigin="anonymous"
-                              onError={(e) => {
-                                e.currentTarget.style.display = 'none';
-                              }}
-                              style={{ maxWidth: '100%', maxHeight: '100%', width: 'auto', height: 'auto', objectFit: 'contain', display: 'block' }}
-                            />
-                          </div>
+                          <ProductImageFrame key={idx} img={img} index={idx} isMultiImage={isMultiImage} maxHeight={isMultiImage ? 250 : 275} />
                         ))}
                       </div>
                     </td>
@@ -595,7 +704,7 @@ const ExportOrderDocument = ({ order, lookups = {}, t, id = "export-doc", classN
           {(() => {
             if (activeColors.length === 0) return null;
 
-            const CHUNK_SIZE = 9;
+            const CHUNK_SIZE = 6;
             const numChunks = Math.ceil(activeColors.length / CHUNK_SIZE);
             const chunks = [];
             for (let i = 0; i < numChunks; i++) {
@@ -623,7 +732,7 @@ const ExportOrderDocument = ({ order, lookups = {}, t, id = "export-doc", classN
               return (
                 <React.Fragment key={`color-chunk-${chunkIndex}`}>
                   <tr>
-                    <th colSpan={1} className="hdr-light" style={{ borderTop: chunkIndex > 0 ? '3px solid #000' : '1px solid #000' }}>{t('export.doc.colors_zh', '颜色 / Colors')}</th>
+                    <th colSpan={1} className="hdr-light" style={{ borderTop: chunkIndex > 0 ? '3px solid #000' : '1px solid #000' }}><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.colors_zh', '颜色 / Colors')}</FitOneLine></th>
                     {chunk.map((c, i) => {
                       let hex = '';
                       if (c) {
@@ -633,9 +742,9 @@ const ExportOrderDocument = ({ order, lookups = {}, t, id = "export-doc", classN
                       return (
                         <td key={`c-${i}`} colSpan={spans[i]} className={c ? "val-center val-bold bg-light-blue" : ""} style={{ borderTop: chunkIndex > 0 ? '3px solid #000' : '1px solid #000' }}>
                           {c ? (
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', width: '100%', overflow: 'hidden' }}>
                               {hex && <div style={{ width: '14px', height: '14px', borderRadius: '50%', backgroundColor: hex, border: '1px solid #000', flexShrink: 0 }} />}
-                              <span>{c}</span>
+                              <FitOneLine maxFontSize={11} minFontSize={5}>{c}</FitOneLine>
                             </div>
                           ) : ''}
                         </td>
@@ -643,21 +752,21 @@ const ExportOrderDocument = ({ order, lookups = {}, t, id = "export-doc", classN
                     })}
                   </tr>
                   <tr>
-                    <th colSpan={1} className="hdr-light">{t('export.doc.qty_zh', '数量 / Qty')}</th>
+                    <th colSpan={1} className="hdr-light"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.qty_zh', '数量 / Qty')}</FitOneLine></th>
                     {chunk.map((c, i) => {
                       if (!c) return <td key={`q-${i}`} colSpan={spans[i]}></td>;
                       const qty = sizesToRender.reduce((sum, s) => sum + (parseInt(order.colorDistribution[c]?.[s]) || 0), 0);
-                      return <td key={`q-${i}`} colSpan={spans[i]} className="val-center val-bold bg-light-blue">{qty}</td>;
+                      return <td key={`q-${i}`} colSpan={spans[i]} className="val-center val-bold bg-light-blue"><FitOneLine maxFontSize={12} minFontSize={6}>{qty}</FitOneLine></td>;
                     })}
                   </tr>
                   <tr>
-                    <th colSpan={1} className="hdr-light">{t('export.doc.color_barcodes', 'Color Barcodes')}</th>
+                    <th colSpan={1} className="hdr-light"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.color_barcodes', 'Color Barcodes')}</FitOneLine></th>
                     {chunk.map((c, i) => {
                       if (!c) return <td key={`b-${i}`} colSpan={spans[i]}></td>;
                       const cInfo = lookups.colors?.find(color => typeof color === 'object' ? color.name === c : color === c);
                       const code = (cInfo && typeof cInfo === 'object') ? (cInfo.abbr || cInfo.code || '') : '';
                       return <td key={`b-${i}`} colSpan={spans[i]} className="val-center val-bold" style={{ whiteSpace: 'nowrap' }}>
-                        {order.barcode ? `${order.barcode}${code ? '-' + code : ''}` : '-'}
+                        <FitOneLine maxFontSize={11} minFontSize={5}>{order.barcode ? `${order.barcode}${code ? '-' + code : ''}` : '-'}</FitOneLine>
                       </td>;
                     })}
                   </tr>

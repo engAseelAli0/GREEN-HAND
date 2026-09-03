@@ -118,16 +118,25 @@ export const AppDataProvider = ({ children }) => {
   const [currentOrder, setCurrentOrder] = useState(defaultOrderState);
 
   const updateLookup = async (category, newData) => {
+    const previousLookups = lookups;
     const newLookupsObj = { ...lookups, [category]: newData };
     setLookups(newLookupsObj);
     
     try {
-       await supabase
+       const { error } = await supabase
         .from('lookup_settings')
         .upsert({ id: 1, config: newLookupsObj });
-    } catch (err) {
+       if (error) {
+         console.error("Error saving lookups to supabase:", error);
+         setLookups(previousLookups);
+         return { error };
+       }
+       return { error: null };
+     } catch (err) {
        console.error("Error saving lookups to supabase:", err);
-    }
+       setLookups(previousLookups);
+       return { error: err };
+     }
   };
 
   const updateOrder = (field, value) => {

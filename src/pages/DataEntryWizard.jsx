@@ -1512,6 +1512,7 @@ const DataEntryWizard = () => {
 
   const divideQuantityEqually = () => distributeQuantity(selectedColorsArr, false, undefined, true);
 
+  const hasManual = currentOrder.manualSizes && currentOrder.manualSizes.length > 0;
   const targetSizes = getActiveSizes();
 
     const currentTabIdx = 0;

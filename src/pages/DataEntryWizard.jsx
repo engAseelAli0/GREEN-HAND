@@ -76,6 +76,8 @@ const DataEntryWizard = () => {
     }
     return [];
   });
+  const isManualDistEditRef = useRef(false);
+  const prevTotalQtyRef = useRef(currentOrder?.totalQuantity);
   const [serialStatus, setSerialStatus] = useState(null);
   const [tabKey, setTabKey] = useState(0);
   const [productImages, setProductImages] = useState(() => {
@@ -561,10 +563,26 @@ const DataEntryWizard = () => {
     if (idx > 0) switchTab(TABS[idx - 1].id);
   };
 
+  const getActiveSizes = useCallback(() => {
+    if (currentOrder.manualSizes && currentOrder.manualSizes.length > 0) {
+      return currentOrder.manualSizes.filter(s => s && s.trim() !== '');
+    }
+    if (currentOrder.sizeFrom && currentOrder.sizeTo) {
+      const allSizes = lookups.sizes || [];
+      const idx1 = allSizes.indexOf(currentOrder.sizeFrom);
+      const idx2 = allSizes.indexOf(currentOrder.sizeTo);
+      if (idx1 !== -1 && idx2 !== -1) {
+        return allSizes.slice(Math.min(idx1, idx2), Math.max(idx1, idx2) + 1);
+      }
+    }
+    return [];
+  }, [currentOrder.manualSizes, currentOrder.sizeFrom, currentOrder.sizeTo, lookups.sizes]);
+
   const toggleColor = (colorName) => {
     setSelectedColorsArr(prev => {
       let nextArr;
-      if (prev.includes(colorName)) {
+      const isAdding = !prev.includes(colorName);
+      if (!isAdding) {
         nextArr = prev.filter(c => c !== colorName);
       } else {
         nextArr = [...prev, colorName];
@@ -574,6 +592,14 @@ const DataEntryWizard = () => {
         const dist = { ...(currentOrder.colorDistribution || {}) };
         delete dist[colorName];
         updateOrder('colorDistribution', dist);
+      } else if (isAdding) {
+        const currentTotal = parseInt(currentOrder.totalQuantity, 10) || 0;
+        const activeSizes = getActiveSizes();
+        const numSizes = activeSizes.length > 0 ? activeSizes.length : 1;
+        const minRequired = nextArr.length * numSizes;
+        if (currentTotal > 0 && minRequired > currentTotal) {
+          updateOrder('totalQuantity', String(minRequired));
+        }
       }
       return nextArr;
     });
@@ -1343,8 +1369,36 @@ const DataEntryWizard = () => {
     } else {
       dist[color] = {};
     }
-    dist[color][size] = qty;
-    updateOrder('colorDistribution', dist);
+
+    const normalizedQty = typeof qty === 'string'
+      ? qty.replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d))
+      : qty;
+    dist[color][size] = normalizedQty;
+
+    // Calculate total distributed pieces across all colors and sizes
+    let totalPieces = 0;
+    Object.values(dist).forEach(sizesObj => {
+      if (sizesObj && typeof sizesObj === 'object') {
+        Object.values(sizesObj).forEach(val => {
+          const num = parseInt(val, 10);
+          if (!isNaN(num) && num > 0) {
+            totalPieces += num;
+          }
+        });
+      }
+    });
+
+    const currentTotal = parseInt(currentOrder.totalQuantity, 10) || 0;
+    if (totalPieces > currentTotal) {
+      isManualDistEditRef.current = true;
+      setCurrentOrder(prev => ({
+        ...prev,
+        colorDistribution: dist,
+        totalQuantity: String(totalPieces)
+      }));
+    } else {
+      updateOrder('colorDistribution', dist);
+    }
   };
 
   const handleMaterialChange = (index, field, value) => {
@@ -1389,8 +1443,8 @@ const DataEntryWizard = () => {
     updateOrder('packagingConditions', pc);
   };
 
-  const distributeQuantity = (colorsArr, isSilent = false, overrideTotalQty) => {
-    const totalQty = overrideTotalQty !== undefined ? overrideTotalQty : parseInt(currentOrder.totalQuantity);
+  const distributeQuantity = (colorsArr, isSilent = false, overrideTotalQty, allowAutoIncrease = true) => {
+    let totalQty = overrideTotalQty !== undefined ? overrideTotalQty : parseInt(currentOrder.totalQuantity, 10);
     if (!totalQty || isNaN(totalQty)) {
       if (!isSilent) toast.error(t('entry.messages.qty_error'));
       return;
@@ -1400,26 +1454,19 @@ const DataEntryWizard = () => {
       return;
     }
     
-    let sizes = [];
-    const hasManual = currentOrder.manualSizes && currentOrder.manualSizes.length > 0;
-    if (hasManual) {
-      sizes = currentOrder.manualSizes.filter(s => s && s.trim() !== '');
-    } else {
-      sizes = lookups.sizes || [];
-      if (currentOrder.sizeFrom && currentOrder.sizeTo) {
-        const idx1 = sizes.indexOf(currentOrder.sizeFrom);
-        const idx2 = sizes.indexOf(currentOrder.sizeTo);
-        if (idx1 !== -1 && idx2 !== -1) {
-          sizes = sizes.slice(Math.min(idx1, idx2), Math.max(idx1, idx2) + 1);
-        }
-      }
-    }
-
+    const sizes = getActiveSizes();
     if (sizes.length === 0) {
       if (!isSilent) toast.error(t('entry.messages.no_sizes_error'));
       return;
     }
+
     const cellsCount = colorsArr.length * sizes.length;
+    let shouldUpdateTotal = false;
+    if (allowAutoIncrease && totalQty < cellsCount) {
+      totalQty = cellsCount;
+      shouldUpdateTotal = true;
+    }
+
     const qtyPerCell = Math.floor(totalQty / cellsCount);
     const remainder = totalQty % cellsCount;
     const newDist = {};
@@ -1434,32 +1481,38 @@ const DataEntryWizard = () => {
       });
     });
     
-    updateOrder('colorDistribution', newDist);
+    if (shouldUpdateTotal) {
+      isManualDistEditRef.current = true;
+      setCurrentOrder(prev => ({
+        ...prev,
+        colorDistribution: newDist,
+        totalQuantity: String(totalQty)
+      }));
+    } else {
+      updateOrder('colorDistribution', newDist);
+    }
     if (!isSilent) toast.success(t('entry.messages.distribution_success'));
   };
 
   useEffect(() => {
-    const totalQty = parseInt(currentOrder.totalQuantity);
+    if (isManualDistEditRef.current) {
+      isManualDistEditRef.current = false;
+      return;
+    }
+    const totalQty = parseInt(currentOrder.totalQuantity, 10);
+    const totalQtyChanged = prevTotalQtyRef.current !== currentOrder.totalQuantity;
+    prevTotalQtyRef.current = currentOrder.totalQuantity;
+
+    const allowAutoIncrease = !totalQtyChanged;
+
     if (totalQty && !isNaN(totalQty) && selectedColorsArr.length > 0) {
-      distributeQuantity(selectedColorsArr, true, totalQty);
+      distributeQuantity(selectedColorsArr, true, totalQty, allowAutoIncrease);
     }
   }, [currentOrder.totalQuantity, selectedColorsArr, currentOrder.sizeFrom, currentOrder.sizeTo, currentOrder.manualSizes]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const divideQuantityEqually = () => distributeQuantity(selectedColorsArr, false);
+  const divideQuantityEqually = () => distributeQuantity(selectedColorsArr, false, undefined, true);
 
-  let targetSizes = [];
-  const hasManual = currentOrder.manualSizes && currentOrder.manualSizes.length > 0;
-
-  if (hasManual) {
-    targetSizes = currentOrder.manualSizes.filter(s => s && s.trim() !== '');
-  } else if (currentOrder.sizeFrom && currentOrder.sizeTo) {
-    const allSizes = lookups.sizes || [];
-    const idx1 = allSizes.indexOf(currentOrder.sizeFrom);
-    const idx2 = allSizes.indexOf(currentOrder.sizeTo);
-    if (idx1 !== -1 && idx2 !== -1) {
-      targetSizes = allSizes.slice(Math.min(idx1, idx2), Math.max(idx1, idx2) + 1);
-    }
-  }
+  const targetSizes = getActiveSizes();
 
     const currentTabIdx = 0;
 
@@ -1943,6 +1996,15 @@ const DataEntryWizard = () => {
                               e.stopPropagation();
                               const allNames = lookups.colors.map(c => c.name || c);
                               setSelectedColorsArr(allNames);
+
+                              const currentTotal = parseInt(currentOrder.totalQuantity, 10) || 0;
+                              const activeSizes = getActiveSizes();
+                              const numSizes = activeSizes.length > 0 ? activeSizes.length : 1;
+                              const minRequired = allNames.length * numSizes;
+                              if (currentTotal > 0 && minRequired > currentTotal) {
+                                updateOrder('totalQuantity', String(minRequired));
+                              }
+
                               toast.success(t('entry.messages.all_colors_selected', { count: allNames.length }));
                             }}
                             style={{
@@ -2679,7 +2741,24 @@ const DataEntryWizard = () => {
 
                             <div className="form-group" style={{ gridColumn: '1 / -1' }}>
                   <label className="form-label">{t('entry.dates.total_quantity')}</label>
-                  <input type="text" inputMode="numeric" className="form-control" style={{ textAlign: 'right' }} value={currentOrder.totalQuantity || ''} onChange={(e) => updateOrder('totalQuantity', e.target.value.replace(/[^0-9]/g, ''))} />
+                  <input 
+                    type="text" 
+                    inputMode="numeric" 
+                    className="form-control" 
+                    style={{ textAlign: 'right' }} 
+                    value={currentOrder.totalQuantity || ''} 
+                    onChange={(e) => updateOrder('totalQuantity', e.target.value.replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[^0-9]/g, ''))}
+                    onBlur={() => {
+                      const val = parseInt(currentOrder.totalQuantity, 10) || 0;
+                      const activeSizes = getActiveSizes();
+                      const numSizes = activeSizes.length > 0 ? activeSizes.length : 1;
+                      const minRequired = selectedColorsArr.length * numSizes;
+                      if (selectedColorsArr.length > 0 && val > 0 && val < minRequired) {
+                        updateOrder('totalQuantity', String(minRequired));
+                        toast(t('entry.messages.qty_adjusted_to_colors', { defaultValue: `تم تعديل الكمية الإجمالية إلى ${minRequired} لتغطية الألوان والمقاسات المحددة` }), { icon: 'ℹ️' });
+                      }
+                    }}
+                  />
                 </div>
 
           </div>

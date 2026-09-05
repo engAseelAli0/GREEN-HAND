@@ -76,9 +76,7 @@ const DataEntryWizard = () => {
     }
     return [];
   });
-  const isManualDistEditRef = useRef(false);
-  const isManualDistModeRef = useRef(false);
-  const prevTotalQtyRef = useRef(currentOrder?.totalQuantity);
+  const skipNextDistributeRef = useRef(false);
   const [serialStatus, setSerialStatus] = useState(null);
   const [tabKey, setTabKey] = useState(0);
   const [productImages, setProductImages] = useState(() => {
@@ -582,43 +580,16 @@ const DataEntryWizard = () => {
   const toggleColor = (colorName) => {
     setSelectedColorsArr(prev => {
       let nextArr;
-      const isAdding = !prev.includes(colorName);
-      if (!isAdding) {
+      if (prev.includes(colorName)) {
         nextArr = prev.filter(c => c !== colorName);
       } else {
         nextArr = [...prev, colorName];
       }
       
-      if (!isAdding) {
-        isManualDistEditRef.current = true;
-        setCurrentOrder(orderPrev => {
-          const dist = { ...(orderPrev.colorDistribution || {}) };
-          delete dist[colorName];
-          let totalPieces = 0;
-          Object.values(dist).forEach(sizesObj => {
-            if (sizesObj && typeof sizesObj === 'object') {
-              Object.values(sizesObj).forEach(val => {
-                const num = parseInt(val, 10);
-                if (!isNaN(num) && num > 0) totalPieces += num;
-              });
-            }
-          });
-          const newTot = totalPieces > 0 ? String(totalPieces) : (isManualDistModeRef.current ? '' : orderPrev.totalQuantity);
-          prevTotalQtyRef.current = newTot;
-          return {
-            ...orderPrev,
-            colorDistribution: dist,
-            totalQuantity: newTot
-          };
-        });
-      } else if (isAdding) {
-        const currentTotal = parseInt(currentOrder.totalQuantity, 10) || 0;
-        const activeSizes = getActiveSizes();
-        const numSizes = activeSizes.length > 0 ? activeSizes.length : 1;
-        const minRequired = nextArr.length * numSizes;
-        if (currentTotal > 0 && minRequired > currentTotal) {
-          updateOrder('totalQuantity', String(minRequired));
-        }
+      if (nextArr.length === 0) {
+        const dist = { ...(currentOrder.colorDistribution || {}) };
+        delete dist[colorName];
+        updateOrder('colorDistribution', dist);
       }
       return nextArr;
     });
@@ -1363,7 +1334,6 @@ const DataEntryWizard = () => {
     setCurrentOrder({ ...defaultOrderState, packagingConditions: initConditions, serialNumber: nextSerial, orderNumber: nextOrder });
     setAutoFocusLastSize(false);
     setSerialStatus('available');
-    isManualDistModeRef.current = false;
     
     toast.success(t('entry.messages.cleared_success'));
   };
@@ -1383,44 +1353,42 @@ const DataEntryWizard = () => {
   };
 
   const handleColorChange = (color, size, qty) => {
-    isManualDistEditRef.current = true;
-    isManualDistModeRef.current = true;
+    const dist = { ...(currentOrder.colorDistribution || {}) };
+    if (dist[color]) {
+      dist[color] = { ...dist[color] };
+    } else {
+      dist[color] = {};
+    }
 
     const normalizedQty = typeof qty === 'string'
       ? qty.replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[^0-9]/g, '')
       : (qty || '');
+    dist[color][size] = normalizedQty;
 
-    setCurrentOrder(prev => {
-      const dist = { ...(prev.colorDistribution || {}) };
-      if (dist[color]) {
-        dist[color] = { ...dist[color] };
-      } else {
-        dist[color] = {};
+    // Calculate total distributed pieces across all colors and sizes
+    let totalPieces = 0;
+    Object.values(dist).forEach(sizesObj => {
+      if (sizesObj && typeof sizesObj === 'object') {
+        Object.values(sizesObj).forEach(val => {
+          const num = parseInt(val, 10);
+          if (!isNaN(num) && num > 0) {
+            totalPieces += num;
+          }
+        });
       }
-      dist[color][size] = normalizedQty;
+    });
 
-      // Calculate total distributed pieces across all colors and sizes
-      let totalPieces = 0;
-      Object.values(dist).forEach(sizesObj => {
-        if (sizesObj && typeof sizesObj === 'object') {
-          Object.values(sizesObj).forEach(val => {
-            const num = parseInt(val, 10);
-            if (!isNaN(num) && num > 0) {
-              totalPieces += num;
-            }
-          });
-        }
-      });
-
-      const newTotalQty = totalPieces > 0 ? String(totalPieces) : '';
-      prevTotalQtyRef.current = newTotalQty;
-
-      return {
+    const currentTotal = parseInt(currentOrder.totalQuantity, 10) || 0;
+    if (totalPieces > currentTotal) {
+      skipNextDistributeRef.current = true;
+      setCurrentOrder(prev => ({
         ...prev,
         colorDistribution: dist,
-        totalQuantity: newTotalQty
-      };
-    });
+        totalQuantity: String(totalPieces)
+      }));
+    } else {
+      updateOrder('colorDistribution', dist);
+    }
   };
 
   const handleMaterialChange = (index, field, value) => {
@@ -1465,7 +1433,7 @@ const DataEntryWizard = () => {
     updateOrder('packagingConditions', pc);
   };
 
-  const distributeQuantity = (colorsArr, isSilent = false, overrideTotalQty, allowAutoIncrease = true) => {
+  const distributeQuantity = (colorsArr, isSilent = false, overrideTotalQty) => {
     let totalQty = overrideTotalQty !== undefined ? overrideTotalQty : parseInt(currentOrder.totalQuantity, 10);
     if (!totalQty || isNaN(totalQty)) {
       if (!isSilent) toast.error(t('entry.messages.qty_error'));
@@ -1483,12 +1451,6 @@ const DataEntryWizard = () => {
     }
 
     const cellsCount = colorsArr.length * sizes.length;
-    let shouldUpdateTotal = false;
-    if (allowAutoIncrease && totalQty < cellsCount) {
-      totalQty = cellsCount;
-      shouldUpdateTotal = true;
-    }
-
     const qtyPerCell = Math.floor(totalQty / cellsCount);
     const remainder = totalQty % cellsCount;
     const newDist = {};
@@ -1503,42 +1465,22 @@ const DataEntryWizard = () => {
       });
     });
     
-    if (shouldUpdateTotal) {
-      isManualDistEditRef.current = true;
-      setCurrentOrder(prev => ({
-        ...prev,
-        colorDistribution: newDist,
-        totalQuantity: String(totalQty)
-      }));
-    } else {
-      updateOrder('colorDistribution', newDist);
-    }
+    updateOrder('colorDistribution', newDist);
     if (!isSilent) toast.success(t('entry.messages.distribution_success'));
   };
 
   useEffect(() => {
-    if (isManualDistEditRef.current) {
-      isManualDistEditRef.current = false;
-      return;
-    }
-    if (isManualDistModeRef.current) {
+    if (skipNextDistributeRef.current) {
+      skipNextDistributeRef.current = false;
       return;
     }
     const totalQty = parseInt(currentOrder.totalQuantity, 10);
-    const totalQtyChanged = prevTotalQtyRef.current !== currentOrder.totalQuantity;
-    prevTotalQtyRef.current = currentOrder.totalQuantity;
-
-    const allowAutoIncrease = !totalQtyChanged;
-
     if (totalQty && !isNaN(totalQty) && selectedColorsArr.length > 0) {
-      distributeQuantity(selectedColorsArr, true, totalQty, allowAutoIncrease);
+      distributeQuantity(selectedColorsArr, true, totalQty);
     }
   }, [currentOrder.totalQuantity, selectedColorsArr, currentOrder.sizeFrom, currentOrder.sizeTo, currentOrder.manualSizes]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const divideQuantityEqually = () => {
-    isManualDistModeRef.current = false;
-    distributeQuantity(selectedColorsArr, false, undefined, true);
-  };
+  const divideQuantityEqually = () => distributeQuantity(selectedColorsArr, false);
 
   const hasManual = currentOrder.manualSizes && currentOrder.manualSizes.length > 0;
   const targetSizes = getActiveSizes();
@@ -2025,15 +1967,6 @@ const DataEntryWizard = () => {
                               e.stopPropagation();
                               const allNames = lookups.colors.map(c => c.name || c);
                               setSelectedColorsArr(allNames);
-
-                              const currentTotal = parseInt(currentOrder.totalQuantity, 10) || 0;
-                              const activeSizes = getActiveSizes();
-                              const numSizes = activeSizes.length > 0 ? activeSizes.length : 1;
-                              const minRequired = allNames.length * numSizes;
-                              if (currentTotal > 0 && minRequired > currentTotal) {
-                                updateOrder('totalQuantity', String(minRequired));
-                              }
-
                               toast.success(t('entry.messages.all_colors_selected', { count: allNames.length }));
                             }}
                             style={{
@@ -2167,8 +2100,7 @@ const DataEntryWizard = () => {
                           {selectedColorsArr.map((colorName, cIdx) => (
                             <td key={cIdx} style={{ padding: '0.5rem' }}>
                               <input
-                                type="text"
-                                inputMode="numeric"
+                                type="number"
                                 className="form-control"
                                 style={{ width: '75px', margin: 'auto', display: 'block', textAlign: 'center' }}
                                 placeholder="0"
@@ -2771,24 +2703,7 @@ const DataEntryWizard = () => {
 
                             <div className="form-group" style={{ gridColumn: '1 / -1' }}>
                   <label className="form-label">{t('entry.dates.total_quantity')}</label>
-                  <input 
-                    type="text" 
-                    inputMode="numeric" 
-                    className="form-control" 
-                    style={{ textAlign: 'right' }} 
-                    value={currentOrder.totalQuantity || ''} 
-                    onChange={(e) => updateOrder('totalQuantity', e.target.value.replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[^0-9]/g, ''))}
-                    onBlur={() => {
-                      const val = parseInt(currentOrder.totalQuantity, 10) || 0;
-                      const activeSizes = getActiveSizes();
-                      const numSizes = activeSizes.length > 0 ? activeSizes.length : 1;
-                      const minRequired = selectedColorsArr.length * numSizes;
-                      if (selectedColorsArr.length > 0 && val > 0 && val < minRequired) {
-                        updateOrder('totalQuantity', String(minRequired));
-                        toast(t('entry.messages.qty_adjusted_to_colors', { defaultValue: `تم تعديل الكمية الإجمالية إلى ${minRequired} لتغطية الألوان والمقاسات المحددة` }), { icon: 'ℹ️' });
-                      }
-                    }}
-                  />
+                  <input type="text" inputMode="numeric" className="form-control" style={{ textAlign: 'right' }} value={currentOrder.totalQuantity || ''} onChange={(e) => updateOrder('totalQuantity', e.target.value.replace(/[^0-9]/g, ''))} />
                 </div>
 
           </div>

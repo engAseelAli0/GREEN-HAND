@@ -77,6 +77,7 @@ const DataEntryWizard = () => {
     return [];
   });
   const isManualDistEditRef = useRef(false);
+  const isManualDistModeRef = useRef(false);
   const prevTotalQtyRef = useRef(currentOrder?.totalQuantity);
   const [serialStatus, setSerialStatus] = useState(null);
   const [tabKey, setTabKey] = useState(0);
@@ -588,10 +589,28 @@ const DataEntryWizard = () => {
         nextArr = [...prev, colorName];
       }
       
-      if (nextArr.length === 0) {
-        const dist = { ...(currentOrder.colorDistribution || {}) };
-        delete dist[colorName];
-        updateOrder('colorDistribution', dist);
+      if (!isAdding) {
+        isManualDistEditRef.current = true;
+        setCurrentOrder(orderPrev => {
+          const dist = { ...(orderPrev.colorDistribution || {}) };
+          delete dist[colorName];
+          let totalPieces = 0;
+          Object.values(dist).forEach(sizesObj => {
+            if (sizesObj && typeof sizesObj === 'object') {
+              Object.values(sizesObj).forEach(val => {
+                const num = parseInt(val, 10);
+                if (!isNaN(num) && num > 0) totalPieces += num;
+              });
+            }
+          });
+          const newTot = totalPieces > 0 ? String(totalPieces) : (isManualDistModeRef.current ? '' : orderPrev.totalQuantity);
+          prevTotalQtyRef.current = newTot;
+          return {
+            ...orderPrev,
+            colorDistribution: dist,
+            totalQuantity: newTot
+          };
+        });
       } else if (isAdding) {
         const currentTotal = parseInt(currentOrder.totalQuantity, 10) || 0;
         const activeSizes = getActiveSizes();
@@ -1344,6 +1363,7 @@ const DataEntryWizard = () => {
     setCurrentOrder({ ...defaultOrderState, packagingConditions: initConditions, serialNumber: nextSerial, orderNumber: nextOrder });
     setAutoFocusLastSize(false);
     setSerialStatus('available');
+    isManualDistModeRef.current = false;
     
     toast.success(t('entry.messages.cleared_success'));
   };
@@ -1363,42 +1383,44 @@ const DataEntryWizard = () => {
   };
 
   const handleColorChange = (color, size, qty) => {
-    const dist = { ...(currentOrder.colorDistribution || {}) };
-    if (dist[color]) {
-      dist[color] = { ...dist[color] };
-    } else {
-      dist[color] = {};
-    }
+    isManualDistEditRef.current = true;
+    isManualDistModeRef.current = true;
 
     const normalizedQty = typeof qty === 'string'
-      ? qty.replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d))
-      : qty;
-    dist[color][size] = normalizedQty;
+      ? qty.replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[^0-9]/g, '')
+      : (qty || '');
 
-    // Calculate total distributed pieces across all colors and sizes
-    let totalPieces = 0;
-    Object.values(dist).forEach(sizesObj => {
-      if (sizesObj && typeof sizesObj === 'object') {
-        Object.values(sizesObj).forEach(val => {
-          const num = parseInt(val, 10);
-          if (!isNaN(num) && num > 0) {
-            totalPieces += num;
-          }
-        });
+    setCurrentOrder(prev => {
+      const dist = { ...(prev.colorDistribution || {}) };
+      if (dist[color]) {
+        dist[color] = { ...dist[color] };
+      } else {
+        dist[color] = {};
       }
-    });
+      dist[color][size] = normalizedQty;
 
-    const currentTotal = parseInt(currentOrder.totalQuantity, 10) || 0;
-    if (totalPieces > currentTotal) {
-      isManualDistEditRef.current = true;
-      setCurrentOrder(prev => ({
+      // Calculate total distributed pieces across all colors and sizes
+      let totalPieces = 0;
+      Object.values(dist).forEach(sizesObj => {
+        if (sizesObj && typeof sizesObj === 'object') {
+          Object.values(sizesObj).forEach(val => {
+            const num = parseInt(val, 10);
+            if (!isNaN(num) && num > 0) {
+              totalPieces += num;
+            }
+          });
+        }
+      });
+
+      const newTotalQty = totalPieces > 0 ? String(totalPieces) : '';
+      prevTotalQtyRef.current = newTotalQty;
+
+      return {
         ...prev,
         colorDistribution: dist,
-        totalQuantity: String(totalPieces)
-      }));
-    } else {
-      updateOrder('colorDistribution', dist);
-    }
+        totalQuantity: newTotalQty
+      };
+    });
   };
 
   const handleMaterialChange = (index, field, value) => {
@@ -1499,6 +1521,9 @@ const DataEntryWizard = () => {
       isManualDistEditRef.current = false;
       return;
     }
+    if (isManualDistModeRef.current) {
+      return;
+    }
     const totalQty = parseInt(currentOrder.totalQuantity, 10);
     const totalQtyChanged = prevTotalQtyRef.current !== currentOrder.totalQuantity;
     prevTotalQtyRef.current = currentOrder.totalQuantity;
@@ -1510,7 +1535,10 @@ const DataEntryWizard = () => {
     }
   }, [currentOrder.totalQuantity, selectedColorsArr, currentOrder.sizeFrom, currentOrder.sizeTo, currentOrder.manualSizes]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const divideQuantityEqually = () => distributeQuantity(selectedColorsArr, false, undefined, true);
+  const divideQuantityEqually = () => {
+    isManualDistModeRef.current = false;
+    distributeQuantity(selectedColorsArr, false, undefined, true);
+  };
 
   const hasManual = currentOrder.manualSizes && currentOrder.manualSizes.length > 0;
   const targetSizes = getActiveSizes();
@@ -2139,7 +2167,8 @@ const DataEntryWizard = () => {
                           {selectedColorsArr.map((colorName, cIdx) => (
                             <td key={cIdx} style={{ padding: '0.5rem' }}>
                               <input
-                                type="number"
+                                type="text"
+                                inputMode="numeric"
                                 className="form-control"
                                 style={{ width: '75px', margin: 'auto', display: 'block', textAlign: 'center' }}
                                 placeholder="0"

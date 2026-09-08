@@ -13,6 +13,7 @@ import ImageEditorModal from '../components/ImageEditorModal';
 import ExportOrderDocument, { downloadOrderPDF } from '../components/ExportOrderDocument';
 import { appendActivity, createActivityItem, summarizeOrderChanges } from '../utils/activityLog';
 import { logAuditEvent } from '../utils/auditLogger';
+import { isOrderAllowedForUser, fetchAllowedSerials } from '../utils/permissionUtils';
 
 const ClearableSelect = ({ value, onChange, children, className = "form-control", style, disabled, clearTitle }) => {
   const { t } = useTranslation();
@@ -701,21 +702,8 @@ const DataEntryWizard = () => {
     return true;
   };
   const getCleanOrder = () => {
-    // 1. Determine the actual active sizes based on current selection
-    let activeSizes = [];
+    const activeSizes = getActiveSizes();
     const hasManual = currentOrder.manualSizes && currentOrder.manualSizes.length > 0;
-    if (hasManual) {
-      activeSizes = currentOrder.manualSizes.filter(s => s && s.trim() !== '');
-    } else {
-      activeSizes = lookups.sizes || [];
-      if (currentOrder.sizeFrom && currentOrder.sizeTo) {
-        const idx1 = activeSizes.indexOf(currentOrder.sizeFrom);
-        const idx2 = activeSizes.indexOf(currentOrder.sizeTo);
-        if (idx1 !== -1 && idx2 !== -1) {
-          activeSizes = activeSizes.slice(Math.min(idx1, idx2), Math.max(idx1, idx2) + 1);
-        }
-      }
-    }
 
     const cleanOrder = { 
       ...currentOrder,
@@ -1225,14 +1213,8 @@ const DataEntryWizard = () => {
       setShowSerialsList(true);
       setSerialSearchQuery('');
       try {
-        const { data, error } = await supabase
-          .from('orders')
-          .select('serial_number')
-          .order('created_at', { ascending: false })
-          .limit(2000);
-        if (data && !error) {
-           setAvailableSerials(data.map(d => d.serial_number));
-        }
+        const serials = await fetchAllowedSerials(supabase, user, lookups?.factories);
+        setAvailableSerials(serials);
       } catch (err) {
         console.error(err);
       } finally {
@@ -1272,20 +1254,12 @@ const DataEntryWizard = () => {
         return;
       }
 
-      const fetchedOrder = data.order_data || data;
-
-      if (user && user.role !== 'admin') {
-         const allowedFactories = user.permissions?.allowed_factories || [];
-         const allowedCompanies = user.permissions?.allowed_companies || [];
-         if (allowedFactories.length > 0 && !allowedFactories.includes(fetchedOrder.factoryId)) {
-            toast.error(t('auth.unauthorized_factory'), { id: toastId });
-            return;
-         }
-         if (allowedCompanies.length > 0 && !allowedCompanies.includes(fetchedOrder.buyerCompany)) {
-            toast.error(t('auth.unauthorized_company'), { id: toastId });
-            return;
-         }
+      if (!isOrderAllowedForUser(data, user, lookups?.factories)) {
+         toast.error(t('auth.unauthorized_factory', { defaultValue: 'ليس لديك صلاحية للوصول إلى بيانات هذا المصنع' }), { id: toastId });
+         return;
       }
+
+      const fetchedOrder = data.order_data || data;
 
       const finalOrder = { ...defaultOrderState, ...fetchedOrder, serialNumber: data.serial_number || fetchedOrder.serialNumber };
       if (finalOrder.productImages) {

@@ -2,7 +2,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../supabaseClient';
 import toast from 'react-hot-toast';
-import { Search, Printer, FileText, CheckCircle2, DownloadCloud, X } from 'lucide-react';
+import { Search, Printer, FileText, CheckCircle2, DownloadCloud, Download, X, Coins, ShieldCheck } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import { useAppData } from '../context/AppDataContext';
@@ -10,6 +10,7 @@ import { useAuth } from '../context/AuthContext';
 import { englishOnly, chineseOnly } from '../utils/textUtils';
 import { normalizeImageUrl } from '../utils/imageUtils';
 import { logAuditEvent } from '../utils/auditLogger';
+import { isOrderAllowedForUser, fetchAllowedSerials } from '../utils/permissionUtils';
 
 const getSizeRange = (orderData) => {
   if (!orderData) return '-';
@@ -192,6 +193,8 @@ const ExportOrder = () => {
   
   const [searchTerm, setSearchTerm] = useState('');
   const [order, setOrder] = useState(null);
+  const [includePrices, setIncludePrices] = useState(true);
+  const [exportModalConfig, setExportModalConfig] = useState(null);
 
   // F9 Search States
   const [showSerialsList, setShowSerialsList] = useState(false);
@@ -219,7 +222,8 @@ const ExportOrder = () => {
     return () => window.removeEventListener('beforeprint', onBeforePrint);
   }, [order]);
 
-  const handlePrint = () => {
+  const handlePrint = (includePricesMode = true) => {
+    setIncludePrices(includePricesMode);
     updatePrintZoom();
     if (order?.serialNumber) {
       logAuditEvent({
@@ -230,17 +234,20 @@ const ExportOrder = () => {
         user,
         screenKey: 'export',
         screenName: 'مستندات وفواتير التصدير',
-        summary: `قام الموظف بطباعة مستند وفاتورة التصدير الرسمية للموديل #${order.serialNumber} (المشتري: ${order.buyerCompany || order.buyerId || '-'}) من شاشة مستندات التصدير`,
+        summary: `قام الموظف بطباعة مستند وفاتورة التصدير الرسمية للموديل #${order.serialNumber} (${includePricesMode ? 'شامل الأسعار' : 'بدون أسعار'}) من شاشة مستندات التصدير`,
         details: {
           screenKey: 'export',
           screenName: 'مستندات وفواتير التصدير',
           serialNumber: order.serialNumber,
           productName: order.productName,
           totalQuantity: order.totalQuantity,
+          includePrices: includePricesMode,
         }
       }).catch(() => {});
     }
-    window.print();
+    setTimeout(() => {
+      window.print();
+    }, 150);
   };
   
   const formatDate = (dateStr) => {
@@ -275,20 +282,10 @@ const ExportOrder = () => {
         const orderData = data.order_data;
         
         // Data-Level Authorization Check
-        if (user && user.role !== 'admin') {
-          const allowedFactories = user.permissions?.allowed_factories || [];
-          const allowedCompanies = user.permissions?.allowed_companies || [];
-          
-          if (allowedFactories.length > 0 && !allowedFactories.includes(orderData.factoryId)) {
-             toast.error(t('auth.messages.unauthorized', { defaultValue: 'غير مصرح لك بمشاهدة طلبات هذا المصنع' }), { id: toastId });
-             setOrder(null);
-             return;
-          }
-          if (allowedCompanies.length > 0 && !allowedCompanies.includes(orderData.buyerCompany)) {
-             toast.error(t('auth.messages.unauthorized', { defaultValue: 'غير مصرح لك بمشاهدة طلبات هذه الشركة' }), { id: toastId });
-             setOrder(null);
-             return;
-          }
+        if (!isOrderAllowedForUser(data, user, lookups?.factories)) {
+           toast.error(t('auth.messages.unauthorized', { defaultValue: 'غير مصرح لك بمشاهدة طلبات هذا المصنع' }), { id: toastId });
+           setOrder(null);
+           return;
         }
         
         toast.success(t('export.messages.fetch_success'), { id: toastId });
@@ -311,14 +308,8 @@ const ExportOrder = () => {
       setShowSerialsList(true);
       setSerialSearchQuery('');
       try {
-        const { data, error } = await supabase
-          .from('orders')
-          .select('serial_number')
-          .order('created_at', { ascending: false })
-          .limit(2000);
-        if (data && !error) {
-           setAvailableSerials(data.map(d => d.serial_number));
-        }
+        const serials = await fetchAllowedSerials(supabase, user, lookups?.factories);
+        setAvailableSerials(serials);
       } catch (err) {
         console.error(err);
       } finally {
@@ -331,95 +322,121 @@ const ExportOrder = () => {
     }
   };
 
-  // ─── الدالة المحدثة لحل مشكلة الشاشات الصغيرة والهواتف ───
-  const handleDownloadPDF = async () => {
+  // ─── الدالة المحدثة لحل مشكلة الشاشات الصغيرة والهواتف ودعم التصدير بالأسعار أو بدونها ───
+  const handleDownloadPDF = async (includePricesMode = true) => {
     if (!order) return;
-    const element = document.getElementById('export-doc');
+    setIncludePrices(includePricesMode);
     const toastId = toast.loading(t('export.messages.preparing_pdf'));
     
-    const filename = `Order_${order.serialNumber || 'Export'}.pdf`;
+    const fileSuffix = !includePricesMode ? '_NoPrices' : '';
+    const filename = `Order_${order.serialNumber || 'Export'}${fileSuffix}.pdf`;
 
     try {
-       // 1. استنساخ العنصر لإنشاء نسخة معزولة في الذاكرة تماماً
-       const clonedElement = element.cloneNode(true);
-       
-       // 2. إجبار النسخة المستنسخة على اتخاذ أبعاد شاشة عرض عريضة وثابتة (Desktop View)
-       // ونقلها خارج منطقة الرؤية للمستخدم
-       clonedElement.style.cssText = `
-         position: fixed;
-         left: -9999px;
-         top: 0;
-         width: 1350px; /* العرض المثالي لاستيعاب الجدول الأفقي بالكامل بدون قص */
-         max-width: none !important;
-         min-height: 820px;
-         display: flex;
-         flex-direction: column;
-         background: #ffffff !important;
-         box-shadow: none !important;
-         padding: 15px !important;
-         margin: 0 !important;
-       `;
-       clonedElement.dataset.exportPdfClone = 'true';
-       
-       document.body.appendChild(clonedElement);
-       await prepareExportCloneForCapture(clonedElement);
+        // ننتظر قليلاً ليتسنى لـ React تحديث شجرة الـ DOM بالكامل بعد تغيير حالة includePrices
+        await new Promise(resolve => setTimeout(resolve, 80));
 
-       const canvas = await html2canvas(clonedElement, {
-         scale: 2,
-         useCORS: true,
-         logging: false,
-         backgroundColor: '#ffffff',
-       });
+        const element = document.getElementById('export-doc');
 
-       document.body.removeChild(clonedElement);
+        // 1. استنساخ العنصر لإنشاء نسخة معزولة في الذاكرة تماماً
+        const clonedElement = element.cloneNode(true);
+        
+        // 2. إجبار النسخة المستنسخة على اتخاذ أبعاد شاشة عرض عريضة وثابتة (Desktop View)
+        // ونقلها خارج منطقة الرؤية للمستخدم
+        clonedElement.style.cssText = `
+          position: fixed;
+          left: -9999px;
+          top: 0;
+          width: 1350px; /* العرض المثالي لاستيعاب الجدول الأفقي بالكامل بدون قص */
+          max-width: none !important;
+          min-height: 820px;
+          display: flex;
+          flex-direction: column;
+          background: #ffffff !important;
+          box-shadow: none !important;
+          padding: 15px !important;
+          margin: 0 !important;
+        `;
+        clonedElement.dataset.exportPdfClone = 'true';
+        
+        document.body.appendChild(clonedElement);
+        await prepareExportCloneForCapture(clonedElement);
 
-       const imgData = canvas.toDataURL('image/jpeg', 1.0);
-       const imgWidthPx = canvas.width;
-       const imgHeightPx = canvas.height;
+        const canvas = await html2canvas(clonedElement, {
+          scale: 2,
+          useCORS: true,
+          logging: false,
+          backgroundColor: '#ffffff',
+        });
 
-       // حساب الأبعاد والنسب لضمان أن ملف الـ PDF ورقة A4 أفقية قياسية واحدة تماماً (Single Page A4)
-       const pdfWidthMM = 297;
-       const pdfHeightMM = 210;
-       const margin = 5; 
-       const maxContentWidthMM = pdfWidthMM - margin * 2; // 287mm
-       const maxContentHeightMM = pdfHeightMM - margin * 2; // 200mm
+        document.body.removeChild(clonedElement);
 
-       const scaleRatio = Math.min(
-         maxContentWidthMM / imgWidthPx,
-         maxContentHeightMM / imgHeightPx
-       );
+        const imgData = canvas.toDataURL('image/jpeg', 1.0);
+        const imgWidthPx = canvas.width;
+        const imgHeightPx = canvas.height;
 
-       const renderWidthMM = imgWidthPx * scaleRatio;
-       const renderHeightMM = imgHeightPx * scaleRatio;
+        // حساب الأبعاد والنسب لضمان أن ملف الـ PDF ورقة A4 أفقية قياسية واحدة تماماً (Single Page A4)
+        const pdfWidthMM = 297;
+        const pdfHeightMM = 210;
+        const margin = 5; 
+        const maxContentWidthMM = pdfWidthMM - margin * 2; // 287mm
+        const maxContentHeightMM = pdfHeightMM - margin * 2; // 200mm
 
-       // توسيط الفاتورة بشكل متناسق في الورقة
-       const posX = margin + (maxContentWidthMM - renderWidthMM) / 2;
-       const posY = margin + (maxContentHeightMM - renderHeightMM) / 2;
+        const scaleRatio = Math.min(
+          maxContentWidthMM / imgWidthPx,
+          maxContentHeightMM / imgHeightPx
+        );
 
-       const pdf = new jsPDF({
-         orientation: 'landscape',
-         unit: 'mm',
-         format: 'a4',
-         compress: true,
-       });
+        const renderWidthMM = imgWidthPx * scaleRatio;
+        const renderHeightMM = imgHeightPx * scaleRatio;
 
-       pdf.addImage(imgData, 'JPEG', posX, posY, renderWidthMM, renderHeightMM, undefined, 'FAST');
+        // توسيط الفاتورة بشكل متناسق في الورقة
+        const posX = margin + (maxContentWidthMM - renderWidthMM) / 2;
+        const posY = margin + (maxContentHeightMM - renderHeightMM) / 2;
 
-       const pdfBlob = pdf.output('blob');
-       const blobUrl = URL.createObjectURL(new Blob([pdfBlob], { type: 'application/pdf' }));
-       const link = document.createElement('a');
-       link.href = blobUrl;
-       link.download = filename;
-       document.body.appendChild(link);
-       link.click();
-       document.body.removeChild(link);
-       setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
-       
-       toast.success(t('export.messages.download_success'), { id: toastId });
+        const pdf = new jsPDF({
+          orientation: 'landscape',
+          unit: 'mm',
+          format: 'a4',
+          compress: true,
+        });
+
+        pdf.addImage(imgData, 'JPEG', posX, posY, renderWidthMM, renderHeightMM, undefined, 'FAST');
+
+        const pdfBlob = pdf.output('blob');
+        const blobUrl = URL.createObjectURL(new Blob([pdfBlob], { type: 'application/pdf' }));
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+        
+        if (order?.serialNumber) {
+          logAuditEvent({
+            action: 'DOWNLOAD_EXPORT_PDF',
+            actionType: 'EXPORT',
+            entityType: 'order',
+            entityId: order.serialNumber,
+            user,
+            screenKey: 'export',
+            screenName: 'مستندات وفواتير التصدير',
+            summary: `قام الموظف بتحميل مستند التصدير (PDF) للموديل #${order.serialNumber} (${includePricesMode ? 'شامل الأسعار' : 'بدون أسعار'})`,
+            details: {
+              screenKey: 'export',
+              screenName: 'مستندات وفواتير التصدير',
+              serialNumber: order.serialNumber,
+              includePrices: includePricesMode,
+              filename,
+            }
+          }).catch(() => {});
+        }
+
+        toast.success(t('export.messages.download_success'), { id: toastId });
     } catch (err) {
-       toast.error(t('export.messages.download_error'), { id: toastId });
-       console.error(err);
-       document.querySelectorAll('[data-export-pdf-clone="true"]').forEach(node => node.remove());
+        toast.error(t('export.messages.download_error'), { id: toastId });
+        console.error(err);
+        document.querySelectorAll('[data-export-pdf-clone="true"]').forEach(node => node.remove());
     }
   };
 
@@ -460,6 +477,8 @@ const ExportOrder = () => {
 
   const tmObj = order ? lookups.tradeMarks?.find(t => (typeof t === 'object' ? t.name : t) === order.tradeMark) : null;
   const tmImage = tmObj?.imageUrl || null;
+  const totalTableCols = includePrices ? 11 : 9;
+  const infoValColSpan = includePrices ? 3 : 2;
 
   return (
     <div className="fade-in">
@@ -752,10 +771,10 @@ const ExportOrder = () => {
         </div>
         {order && hasPermission('export', 'export') && (
            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
-              <button className="btn btn-accent" style={{ padding: '0.8rem 2rem', fontSize: '1.15rem', gap: '0.75rem', borderRadius: '50px', background: 'linear-gradient(135deg, var(--accent-color), #b48c26)', color: '#000', fontWeight: 'bold', boxShadow: '0 4px 15px rgba(212, 175, 55, 0.4)' }} onClick={handlePrint}>
+              <button className="btn btn-accent" style={{ padding: '0.8rem 2rem', fontSize: '1.15rem', gap: '0.75rem', borderRadius: '50px', background: 'linear-gradient(135deg, var(--accent-color), #b48c26)', color: '#000', fontWeight: 'bold', boxShadow: '0 4px 15px rgba(212, 175, 55, 0.4)' }} onClick={() => setExportModalConfig({ type: 'print' })}>
                <Printer size={22} /> {t('export.print_btn')}
               </button>
-              <button className="btn btn-accent" style={{ padding: '0.8rem 2rem', fontSize: '1.15rem', gap: '0.75rem', borderRadius: '50px', background: 'linear-gradient(135deg, #1a5276, #2980b9)', color: '#fff', fontWeight: 'bold', boxShadow: '0 4px 15px rgba(26, 82, 118, 0.4)' }} onClick={handleDownloadPDF}>
+              <button className="btn btn-accent" style={{ padding: '0.8rem 2rem', fontSize: '1.15rem', gap: '0.75rem', borderRadius: '50px', background: 'linear-gradient(135deg, #1a5276, #2980b9)', color: '#fff', fontWeight: 'bold', boxShadow: '0 4px 15px rgba(26, 82, 118, 0.4)' }} onClick={() => setExportModalConfig({ type: 'pdf' })}>
                <DownloadCloud size={22} /> {t('export.download_btn')}
               </button>
            </div>
@@ -778,26 +797,42 @@ const ExportOrder = () => {
         <div className="print-doc" id="export-doc" dir="ltr">
           <table className="inv-table-new">
             <colgroup>
-              <col style={{ width: '26%' }} />
-              <col style={{ width: '6%' }} />
-              <col style={{ width: '8%' }} />
-              <col style={{ width: '5%' }} />
-              <col style={{ width: '6%' }} />
-              <col style={{ width: '8%' }} />
-              <col style={{ width: '5%' }} />
-              <col style={{ width: '8%' }} />
-              <col style={{ width: '6%' }} />
-              <col style={{ width: '6%' }} />
-              <col style={{ width: '16%' }} />
+              {includePrices ? (
+                <>
+                  <col style={{ width: '26%' }} />
+                  <col style={{ width: '6%' }} />
+                  <col style={{ width: '8%' }} />
+                  <col style={{ width: '5%' }} />
+                  <col style={{ width: '6%' }} />
+                  <col style={{ width: '8%' }} />
+                  <col style={{ width: '5%' }} />
+                  <col style={{ width: '8%' }} />
+                  <col style={{ width: '6%' }} />
+                  <col style={{ width: '6%' }} />
+                  <col style={{ width: '16%' }} />
+                </>
+              ) : (
+                <>
+                  <col style={{ width: '28%' }} />
+                  <col style={{ width: '8%' }} />
+                  <col style={{ width: '10%' }} />
+                  <col style={{ width: '7%' }} />
+                  <col style={{ width: '7%' }} />
+                  <col style={{ width: '10%' }} />
+                  <col style={{ width: '7%' }} />
+                  <col style={{ width: '7%' }} />
+                  <col style={{ width: '16%' }} />
+                </>
+              )}
             </colgroup>
             <tbody>
               {/* ═══ ROW 1: HEADER ═══ */}
               <tr>
                 <th colSpan={1} className="hdr-blue"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.order_no')}</FitOneLine></th>
                 <td colSpan={2} className="val-center val-bold"><FitOneLine maxFontSize={13} minFontSize={7}>{order.orderNumber || '-'}</FitOneLine></td>
-                <th colSpan={2} className="hdr-blue"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.request_date')}</FitOneLine></th>
+                <th colSpan={includePrices ? 2 : 1} className="hdr-blue"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.request_date')}</FitOneLine></th>
                 <td colSpan={2} className="val-center val-bold"><FitOneLine maxFontSize={13} minFontSize={7}>{formatDate(order.requestDate)}</FitOneLine></td>
-                <th colSpan={2} className="hdr-blue"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.delivery_date')}</FitOneLine></th>
+                <th colSpan={includePrices ? 2 : 1} className="hdr-blue"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.delivery_date')}</FitOneLine></th>
                 <td colSpan={2} className="val-center val-bold"><FitOneLine maxFontSize={13} minFontSize={7}>{formatDate(order.deliveryDate)}</FitOneLine></td>
               </tr>
 
@@ -821,21 +856,21 @@ const ExportOrder = () => {
                   )}
                 </th>
                 <th colSpan={2} className="hdr-light" style={{ whiteSpace: 'nowrap', padding: '6px 8px' }}><FitOneLine maxFontSize={11} minFontSize={6}>{t('export.doc.buyer_name')}</FitOneLine></th>
-                <td colSpan={3} className="val-center val-bold" style={{ padding: '6px 8px' }}><FitOneLine maxFontSize={12} minFontSize={6}>{order.buyerCompany || '-'}</FitOneLine></td>
+                <td colSpan={infoValColSpan} className="val-center val-bold" style={{ padding: '6px 8px' }}><FitOneLine maxFontSize={12} minFontSize={6}>{order.buyerCompany || '-'}</FitOneLine></td>
                 <th colSpan={2} className="hdr-light" style={{ whiteSpace: 'nowrap', padding: '6px 8px' }}><FitOneLine maxFontSize={11} minFontSize={6}>{t('export.doc.factory_name')}</FitOneLine></th>
-                <td colSpan={3} className="val-center val-bold" style={{ padding: '6px 8px' }}><FitOneLine maxFontSize={12} minFontSize={6}>{factoryInfo.name || '-'}</FitOneLine></td>
+                <td colSpan={infoValColSpan} className="val-center val-bold" style={{ padding: '6px 8px' }}><FitOneLine maxFontSize={12} minFontSize={6}>{factoryInfo.name || '-'}</FitOneLine></td>
               </tr>
               <tr>
                 <th colSpan={2} className="hdr-light" style={{ whiteSpace: 'nowrap', padding: '6px 8px' }}><FitOneLine maxFontSize={11} minFontSize={6}>{t('export.doc.buyer_mobile')}</FitOneLine></th>
-                <td colSpan={3} className="val-center val-bold" style={{ padding: '6px 8px' }}><FitOneLine maxFontSize={12} minFontSize={6}>{order.buyerNumber || '-'}</FitOneLine></td>
+                <td colSpan={infoValColSpan} className="val-center val-bold" style={{ padding: '6px 8px' }}><FitOneLine maxFontSize={12} minFontSize={6}>{order.buyerNumber || '-'}</FitOneLine></td>
                 <th colSpan={2} className="hdr-light" style={{ whiteSpace: 'nowrap', padding: '6px 8px' }}><FitOneLine maxFontSize={11} minFontSize={6}>{t('export.doc.factory_mobile')}</FitOneLine></th>
-                <td colSpan={3} className="val-center val-bold" style={{ padding: '6px 8px' }}><FitOneLine maxFontSize={12} minFontSize={6}>{factoryInfo.mobile || '-'}</FitOneLine></td>
+                <td colSpan={infoValColSpan} className="val-center val-bold" style={{ padding: '6px 8px' }}><FitOneLine maxFontSize={12} minFontSize={6}>{factoryInfo.mobile || '-'}</FitOneLine></td>
               </tr>
               <tr>
                 <th colSpan={2} className="hdr-light" style={{ whiteSpace: 'nowrap', padding: '6px 8px' }}><FitOneLine maxFontSize={11} minFontSize={6}>{t('export.doc.customer_id')}</FitOneLine></th>
-                <td colSpan={3} className="val-center val-bold" style={{ padding: '6px 8px' }}><FitOneLine maxFontSize={12} minFontSize={6}>{order.buyerMobile || '-'}</FitOneLine></td>
+                <td colSpan={infoValColSpan} className="val-center val-bold" style={{ padding: '6px 8px' }}><FitOneLine maxFontSize={12} minFontSize={6}>{order.buyerMobile || '-'}</FitOneLine></td>
                 <th colSpan={2} className="hdr-light" style={{ whiteSpace: 'nowrap', padding: '6px 8px' }}><FitOneLine maxFontSize={11} minFontSize={6}>{t('export.doc.factory_address')}</FitOneLine></th>
-                <td colSpan={3} className="val-center val-bold" style={{ padding: '6px 8px' }}><FitOneLine maxFontSize={12} minFontSize={6}>{factoryInfo.address || '-'}</FitOneLine></td>
+                <td colSpan={infoValColSpan} className="val-center val-bold" style={{ padding: '6px 8px' }}><FitOneLine maxFontSize={12} minFontSize={6}>{factoryInfo.address || '-'}</FitOneLine></td>
               </tr>
 
               {/* ═══ ROW 5: PRODUCT COLUMNS ═══ */}
@@ -844,8 +879,8 @@ const ExportOrder = () => {
                 <th className="hdr-blue"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.model_no')}</FitOneLine></th>
                 <th className="hdr-blue"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.barcode')}</FitOneLine></th>
                 <th className="hdr-blue"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.qty')}</FitOneLine></th>
-                <th className="hdr-blue"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.price')}</FitOneLine></th>
-                <th className="hdr-blue"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.total_price')}</FitOneLine></th>
+                {includePrices && <th className="hdr-blue"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.price')}</FitOneLine></th>}
+                {includePrices && <th className="hdr-blue"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.total_price')}</FitOneLine></th>}
                 <th className="hdr-blue"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.size_qty')}</FitOneLine></th>
                 <th className="hdr-blue"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.size_range')}</FitOneLine></th>
                 <th className="hdr-blue"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.carton_size')}</FitOneLine></th>
@@ -866,8 +901,12 @@ const ExportOrder = () => {
                 <td className="val-center val-bold bg-cyan"><FitOneLine maxFontSize={12} minFontSize={6}>{order.serialNumber || '-'}</FitOneLine></td>
                 <td className="val-center val-bold"><FitOneLine maxFontSize={12} minFontSize={6}>{order.barcode ? `${order.barcode}` : '-'}</FitOneLine></td>
                 <td className="val-center val-bold"><FitOneLine maxFontSize={12} minFontSize={6}>{order.totalQuantity || '-'}</FitOneLine></td>
-                <td className="val-center val-bold"><FitOneLine maxFontSize={12} minFontSize={6}>¥ {order.productPrice || '-'}</FitOneLine></td>
-                <td className="val-center val-bold bg-light-blue"><FitOneLine maxFontSize={12} minFontSize={6}>¥ {order.productPrice && order.totalQuantity ? (parseFloat(order.productPrice) * parseFloat(order.totalQuantity)).toFixed(2) : '-'}</FitOneLine></td>
+                {includePrices && (
+                  <td className="val-center val-bold export-val-price"><FitOneLine maxFontSize={12} minFontSize={6}>{order.productPrice ? `¥ ${order.productPrice}` : '-'}</FitOneLine></td>
+                )}
+                {includePrices && (
+                  <td className="val-center val-bold bg-light-blue export-val-total-price"><FitOneLine maxFontSize={12} minFontSize={6}>{order.productPrice && order.totalQuantity ? `¥ ${(parseFloat(order.productPrice) * parseFloat(order.totalQuantity)).toFixed(2)}` : '-'}</FitOneLine></td>
+                )}
                 <td className="val-center val-bold"><FitOneLine maxFontSize={12} minFontSize={6}>{sizesToRender.length || '-'}</FitOneLine></td>
                 <td className="val-center val-bold">
                   <FitOneLine maxFontSize={11} minFontSize={6}>{(() => {
@@ -918,8 +957,8 @@ const ExportOrder = () => {
 
                 const totalImages = order.productImages?.filter(Boolean).length || 0;
                 const isMultiImage = totalImages > 1;
-                const maxSizeCols = isMultiImage ? 7 : 8;
-                const imageColSpan = isMultiImage ? 3 : 2;
+                const imageColSpan = isMultiImage ? (includePrices ? 3 : 2) : 2;
+                const maxSizeCols = totalTableCols - 1 - imageColSpan;
                 const partSizes = sizesToRender.slice(0, maxSizeCols);
 
                 const rows = [];
@@ -1055,7 +1094,7 @@ const ExportOrder = () => {
                 const numMaterials = [0, 1, 2].filter(i => order.materials && order.materials[i] && order.materials[i].name).length;
                 const actualMaterials = Math.max(1, numMaterials);
                 const fabricColSpan = 1 + (actualMaterials === 1 ? 2 : actualMaterials); 
-                const conditionsColSpan = 11 - 2 - fabricColSpan; 
+                const conditionsColSpan = totalTableCols - 2 - fabricColSpan; 
 
                 return (
                   <React.Fragment>
@@ -1102,7 +1141,7 @@ const ExportOrder = () => {
               {/* ═══ COLORS QTY & BARCODES ═══ */}
               <tr>
                 <th colSpan={1} className="hdr-blue">{t('export.doc.colors_qty')}</th>
-                <td colSpan={10} className="val-center val-bold bg-light-blue" style={{ fontSize: '16px' }}>
+                <td colSpan={totalTableCols - 1} className="val-center val-bold bg-light-blue" style={{ fontSize: '16px' }}>
                    {activeColors.length || '0'}
                 </td>
               </tr>
@@ -1134,7 +1173,7 @@ const ExportOrder = () => {
                 };
                 
                 return chunks.map((chunk, chunkIndex) => {
-                  const spans = getColSpans(10, chunk.length);
+                  const spans = getColSpans(totalTableCols - 1, chunk.length);
                   return (
                     <React.Fragment key={`color-chunk-${chunkIndex}`}>
                       <tr>
@@ -1222,6 +1261,244 @@ const ExportOrder = () => {
           </div>
         </div>
       )}
+
+      {/* موديل تحديد خيارات التصدير (بالأسعار أو بدون أسعار) */}
+      {exportModalConfig && (
+        <ExportOptionsModal
+          config={exportModalConfig}
+          onClose={() => setExportModalConfig(null)}
+          onConfirm={(includePricesSelected) => {
+            const type = exportModalConfig.type;
+            setExportModalConfig(null);
+            if (type === 'pdf') {
+              handleDownloadPDF(includePricesSelected);
+            } else if (type === 'print') {
+              handlePrint(includePricesSelected);
+            }
+          }}
+          t={t}
+        />
+      )}
+    </div>
+  );
+};
+
+// موديل احترافي لاختيار إصدار المستند بالأسعار أو بدون أسعار مع الحفاظ الكامل على الحقول والتصميم
+const ExportOptionsModal = ({ config, onClose, onConfirm, t }) => {
+  const isPdf = config.type === 'pdf';
+
+  return (
+    <div 
+      style={{
+        position: 'fixed',
+        inset: 0,
+        backgroundColor: 'rgba(15, 23, 42, 0.75)',
+        backdropFilter: 'blur(8px)',
+        zIndex: 99999,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '1rem',
+        animation: 'fadeIn 0.2s ease-out'
+      }}
+      onClick={onClose}
+    >
+      <div 
+        style={{
+          backgroundColor: 'var(--surface-color, #1e293b)',
+          color: 'var(--text-main, #f8fafc)',
+          borderRadius: '18px',
+          border: '1px solid var(--border-color, rgba(255,255,255,0.12))',
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.55)',
+          maxWidth: '540px',
+          width: '100%',
+          padding: '1.75rem',
+          direction: 'rtl',
+          textAlign: 'right'
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Modal Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid var(--border-color, rgba(255,255,255,0.1))', paddingBottom: '0.85rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <div style={{
+              width: '42px',
+              height: '42px',
+              borderRadius: '10px',
+              backgroundColor: isPdf ? 'rgba(41, 128, 185, 0.15)' : 'rgba(212, 175, 55, 0.15)',
+              color: isPdf ? '#2980b9' : 'var(--accent-color, #d4af37)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              {isPdf ? <Download size={22} /> : <Printer size={22} />}
+            </div>
+            <div>
+              <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-strong, #fff)' }}>
+                {isPdf 
+                  ? t('export.export_modal.pdf_title', { defaultValue: 'خيارات تحميل عقد ومستند التصدير (PDF)' })
+                  : t('export.export_modal.print_title', { defaultValue: 'خيارات طباعة عقد ومستند التصدير' })
+                }
+              </h3>
+              <p style={{ margin: '0.2rem 0 0', fontSize: '0.85rem', color: 'var(--text-muted, #94a3b8)' }}>
+                {t('export.export_modal.subtitle', { defaultValue: 'تحديد طريقة عرض الأسعار والبيانات المالية في المستند' })}
+              </p>
+            </div>
+          </div>
+          <button 
+            onClick={onClose}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--text-muted, #94a3b8)',
+              cursor: 'pointer',
+              padding: '0.4rem',
+              borderRadius: '6px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'background 0.2s'
+            }}
+            aria-label="Close"
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* Modal Prompt Body */}
+        <p style={{ fontSize: '0.95rem', color: 'var(--text-main, #e2e8f0)', marginBottom: '1.25rem', lineHeight: '1.5' }}>
+          {t('export.export_modal.prompt_question', { defaultValue: 'هل ترغب في تضمين الأسعار والإجمالي المالي في المستند؟' })}
+        </p>
+
+        {/* Action Cards */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem', marginBottom: '1.5rem' }}>
+          {/* Option 1: With Prices */}
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => onConfirm(true)}
+            style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '1rem',
+              padding: '1rem 1.15rem',
+              borderRadius: '12px',
+              border: '2px solid rgba(16, 185, 129, 0.4)',
+              backgroundColor: 'rgba(16, 185, 129, 0.08)',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              textAlign: 'right'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = '#10b981';
+              e.currentTarget.style.backgroundColor = 'rgba(16, 185, 129, 0.16)';
+              e.currentTarget.style.transform = 'translateY(-2px)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = 'rgba(16, 185, 129, 0.4)';
+              e.currentTarget.style.backgroundColor = 'rgba(16, 185, 129, 0.08)';
+              e.currentTarget.style.transform = 'none';
+            }}
+          >
+            <div style={{
+              width: '42px',
+              height: '42px',
+              borderRadius: '50%',
+              backgroundColor: 'rgba(16, 185, 129, 0.2)',
+              color: '#10b981',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+              marginTop: '2px'
+            }}>
+              <Coins size={24} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
+                <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#10b981' }}>
+                  {t('export.export_modal.with_prices_title', { defaultValue: 'مستند شامل الأسعار (إظهار سعر المنتج والإجمالي)' })}
+                </h4>
+                <span style={{ fontSize: '0.75rem', padding: '3px 9px', borderRadius: '20px', backgroundColor: 'rgba(16, 185, 129, 0.25)', color: '#10b981', fontWeight: 800 }}>
+                  {t('export.export_modal.with_prices_badge', { defaultValue: 'شامل الأسعار' })}
+                </span>
+              </div>
+              <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted, #94a3b8)', lineHeight: '1.4' }}>
+                {t('export.export_modal.with_prices_desc', { defaultValue: 'يُظهر سعر المنتج (¥) وإجمالي المبلغ بالكامل. مناسب للإدارة والحسابات والمراجعة المالية.' })}
+              </p>
+            </div>
+          </div>
+
+          {/* Option 2: Without Prices */}
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => onConfirm(false)}
+            style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '1rem',
+              padding: '1rem 1.15rem',
+              borderRadius: '12px',
+              border: '2px solid rgba(59, 130, 246, 0.4)',
+              backgroundColor: 'rgba(59, 130, 246, 0.08)',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              textAlign: 'right'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = '#3b82f6';
+              e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.16)';
+              e.currentTarget.style.transform = 'translateY(-2px)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.4)';
+              e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.08)';
+              e.currentTarget.style.transform = 'none';
+            }}
+          >
+            <div style={{
+              width: '42px',
+              height: '42px',
+              borderRadius: '50%',
+              backgroundColor: 'rgba(59, 130, 246, 0.2)',
+              color: '#3b82f6',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+              marginTop: '2px'
+            }}>
+              <ShieldCheck size={24} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
+                <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#3b82f6' }}>
+                  {t('export.export_modal.no_prices_title', { defaultValue: 'مستند بدون أسعار (إخفاء المبالغ المالية)' })}
+                </h4>
+                <span style={{ fontSize: '0.75rem', padding: '3px 9px', borderRadius: '20px', backgroundColor: 'rgba(59, 130, 246, 0.25)', color: '#3b82f6', fontWeight: 800 }}>
+                  {t('export.export_modal.no_prices_badge', { defaultValue: 'للمصانع والورش' })}
+                </span>
+              </div>
+              <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted, #94a3b8)', lineHeight: '1.4' }}>
+                {t('export.export_modal.no_prices_desc', { defaultValue: 'يحذف عمودي سعر القطعة وإجمالي المبلغ بالكامل من المستند للحفاظ على سرية الأسعار عند إرسال العقد للمصانع والورش، مع المحافظة على تناسق أبعاد الجدول.' })}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Modal Footer */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+          <button 
+            type="button" 
+            className="btn btn-outline" 
+            onClick={onClose}
+            style={{ minWidth: '100px', borderColor: 'var(--border-color)' }}
+          >
+            {t('common.cancel', { defaultValue: 'إلغاء' })}
+          </button>
+        </div>
+      </div>
     </div>
   );
 };

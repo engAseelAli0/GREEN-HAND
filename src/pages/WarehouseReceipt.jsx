@@ -5,11 +5,12 @@ import { useAppData } from '../context/AppDataContext';
 import { Filter, Download, FileText, Printer, Calendar, Factory, CheckCircle2, Box } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { CustomDateInput } from '../components/CustomDateInput';
-import { englishOnly } from '../utils/textUtils';
+import { englishOnly, chineseOnly } from '../utils/textUtils';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import { useAuth } from '../context/AuthContext';
 import { useFilteredLookups } from '../hooks/useFilteredLookups';
+import { isOrderAllowedForUser } from '../utils/permissionUtils';
 
 const WarehouseReceipt = () => {
   const { t, i18n } = useTranslation();
@@ -65,6 +66,26 @@ const WarehouseReceipt = () => {
     });
   };
 
+  const getProductDisplayNames = (rawName) => {
+    if (!rawName) return { eng: '', chi: '' };
+    let eng = englishOnly(rawName);
+    let chi = chineseOnly(rawName);
+
+    if (!chi && lookups?.products) {
+      const match = lookups.products.find(p => {
+        const pName = typeof p === 'object' ? p.name : p;
+        if (!pName) return false;
+        return englishOnly(pName).toLowerCase() === eng.toLowerCase();
+      });
+      if (match) {
+        const mName = typeof match === 'object' ? match.name : match;
+        chi = chineseOnly(mName);
+      }
+    }
+
+    return { eng, chi };
+  };
+
   const fetchData = async () => {
     setIsLoading(true);
     try {
@@ -85,15 +106,7 @@ const WarehouseReceipt = () => {
 
       let validOrders = oData || [];
       if (user && user.role !== 'admin') {
-        const allowedFactories = user.permissions?.allowed_factories || [];
-        const allowedCompanies = user.permissions?.allowed_companies || [];
-        
-        if (allowedFactories.length > 0) {
-          validOrders = validOrders.filter(o => allowedFactories.includes(o.order_data?.factoryId));
-        }
-        if (allowedCompanies.length > 0) {
-          validOrders = validOrders.filter(o => allowedCompanies.includes(o.order_data?.buyerCompany));
-        }
+        validOrders = validOrders.filter(o => isOrderAllowedForUser(o, user, lookups?.factories));
       }
 
       setOrders(validOrders);
@@ -541,7 +554,7 @@ const WarehouseReceipt = () => {
                             <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.received_at_zh')}</div>
                             <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.received_at')}</div>
                         </th>
-                        <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', borderBottom: '2px solid #0f172a', width: '8%' }}>
+                        <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', borderBottom: '2px solid #0f172a', width: '10%' }}>
                             <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.product_name_zh')}</div>
                             <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.product_name')}</div>
                         </th>
@@ -569,7 +582,7 @@ const WarehouseReceipt = () => {
                             <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.unit_price_zh')}</div>
                             <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.unit_price')}</div>
                         </th>
-                        <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', borderBottom: '2px solid #0f172a', width: '8%' }}>
+                        <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', borderBottom: '2px solid #0f172a', width: '7%' }}>
                             <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.total_price_zh')}</div>
                             <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.total_price')}</div>
                         </th>
@@ -577,7 +590,7 @@ const WarehouseReceipt = () => {
                             <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.tot_amount_zh')}</div>
                             <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.tot_amount')}</div>
                         </th>
-                        <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', borderBottom: '2px solid #0f172a', width: '8%' }}>
+                        <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', borderBottom: '2px solid #0f172a', width: '7%' }}>
                             <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.carton_size_zh')}</div>
                             <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.carton_size')}</div>
                         </th>
@@ -609,7 +622,24 @@ const WarehouseReceipt = () => {
                                         <>
                                             <td rowSpan={rowSpan} style={{ padding: '4px', borderRight: tBorderStyle, fontWeight: 'bold', borderBottom: '1px solid #334155', backgroundColor: rowBg, verticalAlign: 'middle', position: 'relative', zIndex: 2 }}>{order.serial}</td>
                                             <td rowSpan={rowSpan} style={{ padding: '4px', borderRight: tBorderStyle, fontSize: '0.72rem', fontWeight: 'bold', borderBottom: '1px solid #334155', backgroundColor: rowBg, verticalAlign: 'middle', position: 'relative', zIndex: 2 }}>{formatReceivedAt(order.receivedAt)}</td>
-                                            <td rowSpan={rowSpan} style={{ padding: '4px', borderRight: tBorderStyle, borderBottom: '1px solid #334155', backgroundColor: rowBg, verticalAlign: 'middle', position: 'relative', zIndex: 2 }}>{englishOnly(order.productName)}</td>
+                                            <td rowSpan={rowSpan} style={{ padding: '3px 4px', borderRight: tBorderStyle, borderBottom: '1px solid #334155', backgroundColor: rowBg, verticalAlign: 'middle', position: 'relative', zIndex: 2 }}>
+                                                {(() => {
+                                                    const { eng, chi } = getProductDisplayNames(order.productName);
+                                                    if (eng && chi) {
+                                                        return (
+                                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '2px', lineHeight: 1.2 }}>
+                                                                <span style={{ fontSize: eng.length > 20 ? '0.85rem' : '0.92rem', fontWeight: 700, color: '#0f172a', wordBreak: 'break-word', maxWidth: '100%' }}>{eng}</span>
+                                                                <span style={{ fontSize: chi.length > 10 ? '0.85rem' : '0.9rem', fontWeight: 700, color: '#0f172a', wordBreak: 'break-word', maxWidth: '100%' }}>{chi}</span>
+                                                            </div>
+                                                        );
+                                                    }
+                                                    return (
+                                                        <span style={{ fontSize: '0.92rem', fontWeight: 700, color: '#0f172a', wordBreak: 'break-word', maxWidth: '100%' }}>
+                                                            {eng || chi || order.productName || '-'}
+                                                        </span>
+                                                    );
+                                                })()}
+                                            </td>
                                         </>
                                     )}
 

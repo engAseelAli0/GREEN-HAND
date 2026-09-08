@@ -15,6 +15,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { analyzeOrder } from '../utils/orderIntelligence';
 import { activitySummary, formatActivityTime, getActivityActionLabel, getActivityNote } from '../utils/activityLog';
+import { fetchAllowedSerials } from '../utils/permissionUtils';
 
 const calculateTotalPiecesCount = (orderData) => {
   if (!orderData) return 0;
@@ -123,14 +124,8 @@ const ReportsPortal = () => {
       setSerialSearchQuery('');
       
       try {
-        const { data, error } = await supabase
-          .from('orders')
-          .select('serial_number')
-          .order('created_at', { ascending: false })
-          .limit(2000);
-        if (data && !error) {
-           setAvailableSerials(data.map(d => d.serial_number));
-        }
+        const serials = await fetchAllowedSerials(supabase, user, lookups?.factories);
+        setAvailableSerials(serials);
       } catch (err) {
         console.error(err);
       } finally {

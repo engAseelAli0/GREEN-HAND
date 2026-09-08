@@ -7,6 +7,7 @@ import { Search, Printer, ArrowRight, Barcode as BarcodeIcon, Hash, Package, Lay
 import { englishOnly } from '../utils/textUtils';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { isOrderAllowedForUser, fetchAllowedSerials } from '../utils/permissionUtils';
 import JsBarcode from 'jsbarcode';
 
 const LS_KEY = 'barcode_print_settings';
@@ -159,16 +160,8 @@ const PrintBarcodes = () => {
         setOrder(null);
         setRows([]);
       } else {
-        const d = data.order_data;
-        if (user && user.role !== 'admin') {
-           const allowedFactories = user.permissions?.allowed_factories || [];
-           const allowedCompanies = user.permissions?.allowed_companies || [];
-           if (allowedFactories.length > 0 && !allowedFactories.includes(d.factoryId)) {
-              throw new Error("Unauthorized factory");
-           }
-           if (allowedCompanies.length > 0 && !allowedCompanies.includes(d.buyerCompany)) {
-              throw new Error("Unauthorized company");
-           }
+        if (!isOrderAllowedForUser(data, user, lookups?.factories)) {
+           throw new Error("Unauthorized factory");
         }
 
         toast.success(t('print.messages.found'), { id: toastId });
@@ -196,14 +189,8 @@ const PrintBarcodes = () => {
       setShowSerialsList(true);
       setSerialSearchQuery('');
       try {
-        const { data, error } = await supabase
-          .from('orders')
-          .select('serial_number')
-          .order('created_at', { ascending: false })
-          .limit(2000);
-        if (data && !error) {
-           setAvailableSerials(data.map(d => d.serial_number));
-        }
+        const serials = await fetchAllowedSerials(supabase, user, lookups?.factories);
+        setAvailableSerials(serials);
       } catch (err) {
         console.error(err);
       } finally {

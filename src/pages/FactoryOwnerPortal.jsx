@@ -1,14 +1,17 @@
 import React, { useState, useRef } from 'react';
 import { useAppData } from '../context/AppDataContext';
+import { useAuth } from '../context/AuthContext';
 import { supabase } from '../supabaseClient';
 import { Search, Save, Factory, AlertCircle, Info, Palette, CheckCircle2, X, Box } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
 import { extractColorCSS } from '../utils/textUtils';
+import { isOrderAllowedForUser, fetchAllowedSerials, resolveFactoryDisplay } from '../utils/permissionUtils';
 
 const FactoryOwnerPortal = () => {
   const { t } = useTranslation();
   const { lookups } = useAppData();
+  const { user } = useAuth();
   const [modelNo, setModelNo] = useState('');
   const [isFetched, setIsFetched] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
@@ -70,8 +73,20 @@ const FactoryOwnerPortal = () => {
       }
       
       const oData = oDataResp.order_data;
+
+      // Scoped permissions check: ensure user has access to this factory
+      if (!isOrderAllowedForUser(oDataResp, user, lookups?.factories)) {
+         toast.error(t('auth.unauthorized_factory', { defaultValue: 'ليس لديك صلاحية للوصول إلى بيانات هذا المصنع' }));
+         setIsSearching(false);
+         setIsFetched(false);
+         setOriginalOrderData(null);
+         return;
+      }
+
       setModelNo(oDataResp.serial_number);
       setOriginalOrderData(oData);
+
+      const factoryDisplay = resolveFactoryDisplay(oData.factoryId, lookups?.factories);
 
       setProductInfo({
         mainBarcode: oData.barcode || `1000${oData.serialNumber}`,
@@ -79,8 +94,9 @@ const FactoryOwnerPortal = () => {
         prodPrice: parseFloat(oData.productPrice) || 0,
         priceCurrency: oData.currency || '',
         reqTotalQuantity: parseInt(oData.totalQuantity) || 0,
-        factoryId: oData.factoryId || t('owner.messages.undefined'),
-        factoryName: '',
+        factoryId: factoryDisplay.code || oData.factoryId || t('owner.messages.undefined'),
+        factoryName: factoryDisplay.name || '',
+        factoryLabel: factoryDisplay.label || oData.factoryId || t('owner.messages.undefined'),
         factoryStatus: oData.factoryStatus || t('owner.info.not_delivered')
       });
       
@@ -136,14 +152,8 @@ const FactoryOwnerPortal = () => {
       setShowSerialsList(true);
       setSerialSearchQuery('');
       try {
-        const { data, error } = await supabase
-          .from('orders')
-          .select('serial_number')
-          .order('created_at', { ascending: false })
-          .limit(2000);
-        if (data && !error) {
-           setAvailableSerials(data.map(d => d.serial_number));
-        }
+        const serials = await fetchAllowedSerials(supabase, user, lookups?.factories);
+        setAvailableSerials(serials);
       } catch (err) {
         console.error(err);
       } finally {
@@ -192,6 +202,11 @@ const FactoryOwnerPortal = () => {
   const handleSave = async () => {
     if (!isFetched || !originalOrderData) {
       toast.error(t('owner.search.placeholder'));
+      return;
+    }
+
+    if (!isOrderAllowedForUser({ order_data: originalOrderData }, user, lookups?.factories)) {
+      toast.error(t('auth.unauthorized_factory', { defaultValue: 'ليس لديك صلاحية للوصول إلى بيانات هذا المصنع' }));
       return;
     }
 
@@ -439,7 +454,7 @@ const FactoryOwnerPortal = () => {
                   <option value={t('owner.info.delivered')}>{t('owner.info.delivered')}</option>
                 </select>
               </div>
-              <InfoBox label={t('owner.info.factory')} value={`${productInfo.factoryId} - ${productInfo.factoryName}`} highlight />
+              <InfoBox label={t('owner.info.factory')} value={productInfo.factoryLabel || (productInfo.factoryName ? `${productInfo.factoryId} - ${productInfo.factoryName}` : productInfo.factoryId)} highlight />
               <InfoBox label={t('owner.info.barcode')} value={productInfo.mainBarcode} />
               <InfoBox label={t('owner.info.full_name')} value={productInfo.prodFullName} />
               <InfoBox label={t('owner.info.total_req')} value={productInfo.reqTotalQuantity} />

@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next';
 import { extractColorCSS } from '../utils/textUtils';
 import { appendActivity, createActivityItem } from '../utils/activityLog';
 import { logAuditEvent } from '../utils/auditLogger';
+import { isOrderAllowedForUser, fetchAllowedSerials, resolveFactoryDisplay } from '../utils/permissionUtils';
 
 const FactoryReceiving = () => {
   const { t } = useTranslation();
@@ -125,22 +126,15 @@ const FactoryReceiving = () => {
       const oData = oDataResp.order_data;
       setModelNo(oDataResp.serial_number);
 
-      if (user && user.role !== 'admin') {
-         const allowedFactories = user.permissions?.allowed_factories || [];
-         const allowedCompanies = user.permissions?.allowed_companies || [];
-         if (allowedFactories.length > 0 && !allowedFactories.includes(oData.factoryId)) {
-            toast.error(t('auth.unauthorized_factory'));
-            setIsSearching(false);
-            setIsFetched(false);
-            return;
-         }
-         if (allowedCompanies.length > 0 && !allowedCompanies.includes(oData.buyerCompany)) {
-            toast.error(t('auth.unauthorized_company'));
-            setIsSearching(false);
-            setIsFetched(false);
-            return;
-         }
+      // Scoped permissions check: ensure user has access to this factory
+      if (!isOrderAllowedForUser(oDataResp, user, lookups?.factories)) {
+         toast.error(t('auth.unauthorized_factory', { defaultValue: 'ليس لديك صلاحية للوصول إلى بيانات هذا المصنع' }));
+         setIsSearching(false);
+         setIsFetched(false);
+         return;
       }
+
+      const factoryDisplay = resolveFactoryDisplay(oData.factoryId, lookups?.factories);
 
       setProductInfo({
         mainBarcode: oData.barcode || `1000${oData.serialNumber}`,
@@ -159,8 +153,9 @@ const FactoryReceiving = () => {
           recData.receive_data.status === 'received' ||
           recData.receive_data.status === 'مستلم'
         )) ? 'Received' : 'Not Received',
-        factoryId: oData.factoryId || t('receiving.messages.undefined'),
-        factoryName: ''
+        factoryId: factoryDisplay.code || oData.factoryId || t('receiving.messages.undefined'),
+        factoryName: factoryDisplay.name || '',
+        factoryLabel: factoryDisplay.label || oData.factoryId || t('receiving.messages.undefined')
       });
       
       if (recData && recData.receive_data && recData.receive_data.packages) {
@@ -244,14 +239,8 @@ const FactoryReceiving = () => {
       setShowSerialsList(true);
       setSerialSearchQuery('');
       try {
-        const { data, error } = await supabase
-          .from('orders')
-          .select('serial_number')
-          .order('created_at', { ascending: false })
-          .limit(2000);
-        if (data && !error) {
-           setAvailableSerials(data.map(d => d.serial_number));
-        }
+        const serials = await fetchAllowedSerials(supabase, user, lookups?.factories);
+        setAvailableSerials(serials);
       } catch (err) {
         console.error(err);
       } finally {
@@ -694,7 +683,7 @@ const FactoryReceiving = () => {
                   <option value="Received">{t('receiving.info.received')}</option>
                 </select>
               </div>
-              <InfoBox label={t('receiving.info.factory')} value={`${productInfo.factoryId} - ${productInfo.factoryName}`} highlight />
+              <InfoBox label={t('receiving.info.factory')} value={productInfo.factoryLabel || (productInfo.factoryName ? `${productInfo.factoryId} - ${productInfo.factoryName}` : productInfo.factoryId)} highlight />
               <InfoBox label={t('receiving.info.barcode')} value={productInfo.mainBarcode} />
               <InfoBox label={t('receiving.info.full_name')} value={productInfo.prodFullName} />
               <InfoBox label={t('receiving.info.price')} value={`${productInfo.prodPrice} ${productInfo.priceCurrency}`} />

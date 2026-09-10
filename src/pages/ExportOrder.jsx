@@ -190,7 +190,7 @@ const ExportOrder = () => {
   const { t } = useTranslation();
   const { lookups } = useAppData();
   const { user, hasPermission } = useAuth();
-  
+
   const [searchTerm, setSearchTerm] = useState('');
   const [order, setOrder] = useState(null);
   const [includePrices, setIncludePrices] = useState(true);
@@ -243,13 +243,13 @@ const ExportOrder = () => {
           totalQuantity: order.totalQuantity,
           includePrices: includePricesMode,
         }
-      }).catch(() => {});
+      }).catch(() => { });
     }
     setTimeout(() => {
       window.print();
     }, 150);
   };
-  
+
   const formatDate = (dateStr) => {
     if (!dateStr) return '-';
     const parts = dateStr.split('-');
@@ -280,14 +280,14 @@ const ExportOrder = () => {
         setOrder(null);
       } else {
         const orderData = data.order_data;
-        
+
         // Data-Level Authorization Check
         if (!isOrderAllowedForUser(data, user, lookups?.factories)) {
-           toast.error(t('auth.messages.unauthorized', { defaultValue: 'غير مصرح لك بمشاهدة طلبات هذا المصنع' }), { id: toastId });
-           setOrder(null);
-           return;
+          toast.error(t('auth.messages.unauthorized', { defaultValue: 'غير مصرح لك بمشاهدة طلبات هذا المصنع' }), { id: toastId });
+          setOrder(null);
+          return;
         }
-        
+
         toast.success(t('export.messages.fetch_success'), { id: toastId });
         setSearchTerm(data.serial_number);
         setOrder({ serialNumber: data.serial_number, ...orderData });
@@ -313,8 +313,8 @@ const ExportOrder = () => {
       } catch (err) {
         console.error(err);
       } finally {
-          setFetchingSerials(false);
-          setTimeout(() => serialSearchRef.current?.focus(), 100);
+        setFetchingSerials(false);
+        setTimeout(() => serialSearchRef.current?.focus(), 100);
       }
     } else if (e.key === 'Escape') {
       setShowSerialsList(false);
@@ -327,22 +327,22 @@ const ExportOrder = () => {
     if (!order) return;
     setIncludePrices(includePricesMode);
     const toastId = toast.loading(t('export.messages.preparing_pdf'));
-    
+
     const fileSuffix = !includePricesMode ? '_NoPrices' : '';
     const filename = `Order_${order.serialNumber || 'Export'}${fileSuffix}.pdf`;
 
     try {
-        // ننتظر قليلاً ليتسنى لـ React تحديث شجرة الـ DOM بالكامل بعد تغيير حالة includePrices
-        await new Promise(resolve => setTimeout(resolve, 80));
+      // ننتظر قليلاً ليتسنى لـ React تحديث شجرة الـ DOM بالكامل بعد تغيير حالة includePrices
+      await new Promise(resolve => setTimeout(resolve, 80));
 
-        const element = document.getElementById('export-doc');
+      const element = document.getElementById('export-doc');
 
-        // 1. استنساخ العنصر لإنشاء نسخة معزولة في الذاكرة تماماً
-        const clonedElement = element.cloneNode(true);
-        
-        // 2. إجبار النسخة المستنسخة على اتخاذ أبعاد شاشة عرض عريضة وثابتة (Desktop View)
-        // ونقلها خارج منطقة الرؤية للمستخدم
-        clonedElement.style.cssText = `
+      // 1. استنساخ العنصر لإنشاء نسخة معزولة في الذاكرة تماماً
+      const clonedElement = element.cloneNode(true);
+
+      // 2. إجبار النسخة المستنسخة على اتخاذ أبعاد شاشة عرض عريضة وثابتة (Desktop View)
+      // ونقلها خارج منطقة الرؤية للمستخدم
+      clonedElement.style.cssText = `
           position: fixed;
           left: -9999px;
           top: 0;
@@ -356,87 +356,87 @@ const ExportOrder = () => {
           padding: 15px !important;
           margin: 0 !important;
         `;
-        clonedElement.dataset.exportPdfClone = 'true';
-        
-        document.body.appendChild(clonedElement);
-        await prepareExportCloneForCapture(clonedElement);
+      clonedElement.dataset.exportPdfClone = 'true';
 
-        const canvas = await html2canvas(clonedElement, {
-          scale: 2,
-          useCORS: true,
-          logging: false,
-          backgroundColor: '#ffffff',
-        });
+      document.body.appendChild(clonedElement);
+      await prepareExportCloneForCapture(clonedElement);
 
-        document.body.removeChild(clonedElement);
+      const canvas = await html2canvas(clonedElement, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+      });
 
-        const imgData = canvas.toDataURL('image/jpeg', 1.0);
-        const imgWidthPx = canvas.width;
-        const imgHeightPx = canvas.height;
+      document.body.removeChild(clonedElement);
 
-        // حساب الأبعاد والنسب لضمان أن ملف الـ PDF ورقة A4 أفقية قياسية واحدة تماماً (Single Page A4)
-        const pdfWidthMM = 297;
-        const pdfHeightMM = 210;
-        const margin = 5; 
-        const maxContentWidthMM = pdfWidthMM - margin * 2; // 287mm
-        const maxContentHeightMM = pdfHeightMM - margin * 2; // 200mm
+      const imgData = canvas.toDataURL('image/jpeg', 1.0);
+      const imgWidthPx = canvas.width;
+      const imgHeightPx = canvas.height;
 
-        const scaleRatio = Math.min(
-          maxContentWidthMM / imgWidthPx,
-          maxContentHeightMM / imgHeightPx
-        );
+      // حساب الأبعاد والنسب لضمان أن ملف الـ PDF ورقة A4 أفقية قياسية واحدة تماماً (Single Page A4)
+      const pdfWidthMM = 297;
+      const pdfHeightMM = 210;
+      const margin = 5;
+      const maxContentWidthMM = pdfWidthMM - margin * 2; // 287mm
+      const maxContentHeightMM = pdfHeightMM - margin * 2; // 200mm
 
-        const renderWidthMM = imgWidthPx * scaleRatio;
-        const renderHeightMM = imgHeightPx * scaleRatio;
+      const scaleRatio = Math.min(
+        maxContentWidthMM / imgWidthPx,
+        maxContentHeightMM / imgHeightPx
+      );
 
-        // توسيط الفاتورة بشكل متناسق في الورقة
-        const posX = margin + (maxContentWidthMM - renderWidthMM) / 2;
-        const posY = margin + (maxContentHeightMM - renderHeightMM) / 2;
+      const renderWidthMM = imgWidthPx * scaleRatio;
+      const renderHeightMM = imgHeightPx * scaleRatio;
 
-        const pdf = new jsPDF({
-          orientation: 'landscape',
-          unit: 'mm',
-          format: 'a4',
-          compress: true,
-        });
+      // توسيط الفاتورة بشكل متناسق في الورقة
+      const posX = margin + (maxContentWidthMM - renderWidthMM) / 2;
+      const posY = margin + (maxContentHeightMM - renderHeightMM) / 2;
 
-        pdf.addImage(imgData, 'JPEG', posX, posY, renderWidthMM, renderHeightMM, undefined, 'FAST');
+      const pdf = new jsPDF({
+        orientation: 'landscape',
+        unit: 'mm',
+        format: 'a4',
+        compress: true,
+      });
 
-        const pdfBlob = pdf.output('blob');
-        const blobUrl = URL.createObjectURL(new Blob([pdfBlob], { type: 'application/pdf' }));
-        const link = document.createElement('a');
-        link.href = blobUrl;
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
-        
-        if (order?.serialNumber) {
-          logAuditEvent({
-            action: 'DOWNLOAD_EXPORT_PDF',
-            actionType: 'EXPORT',
-            entityType: 'order',
-            entityId: order.serialNumber,
-            user,
+      pdf.addImage(imgData, 'JPEG', posX, posY, renderWidthMM, renderHeightMM, undefined, 'FAST');
+
+      const pdfBlob = pdf.output('blob');
+      const blobUrl = URL.createObjectURL(new Blob([pdfBlob], { type: 'application/pdf' }));
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+
+      if (order?.serialNumber) {
+        logAuditEvent({
+          action: 'DOWNLOAD_EXPORT_PDF',
+          actionType: 'EXPORT',
+          entityType: 'order',
+          entityId: order.serialNumber,
+          user,
+          screenKey: 'export',
+          screenName: 'مستندات وفواتير التصدير',
+          summary: `قام الموظف بتحميل مستند التصدير (PDF) للموديل #${order.serialNumber} (${includePricesMode ? 'شامل الأسعار' : 'بدون أسعار'})`,
+          details: {
             screenKey: 'export',
             screenName: 'مستندات وفواتير التصدير',
-            summary: `قام الموظف بتحميل مستند التصدير (PDF) للموديل #${order.serialNumber} (${includePricesMode ? 'شامل الأسعار' : 'بدون أسعار'})`,
-            details: {
-              screenKey: 'export',
-              screenName: 'مستندات وفواتير التصدير',
-              serialNumber: order.serialNumber,
-              includePrices: includePricesMode,
-              filename,
-            }
-          }).catch(() => {});
-        }
+            serialNumber: order.serialNumber,
+            includePrices: includePricesMode,
+            filename,
+          }
+        }).catch(() => { });
+      }
 
-        toast.success(t('export.messages.download_success'), { id: toastId });
+      toast.success(t('export.messages.download_success'), { id: toastId });
     } catch (err) {
-        toast.error(t('export.messages.download_error'), { id: toastId });
-        console.error(err);
-        document.querySelectorAll('[data-export-pdf-clone="true"]').forEach(node => node.remove());
+      toast.error(t('export.messages.download_error'), { id: toastId });
+      console.error(err);
+      document.querySelectorAll('[data-export-pdf-clone="true"]').forEach(node => node.remove());
     }
   };
 
@@ -450,29 +450,29 @@ const ExportOrder = () => {
 
   const factoryInfo = order ? getFactoryDetails(order.factoryId) : {};
   const activeColors = order && order.colorDistribution ? Object.keys(order.colorDistribution) : [];
-  
+
   // Calculate specific sizes to show
   let activeSizesSet = new Set();
   if (order && order.colorDistribution) {
-     activeColors.forEach(color => {
-         Object.keys(order.colorDistribution[color] || {}).forEach(size => activeSizesSet.add(size));
-     });
+    activeColors.forEach(color => {
+      Object.keys(order.colorDistribution[color] || {}).forEach(size => activeSizesSet.add(size));
+    });
   }
   const sizeOrderArr = ['XXS', 'XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', '2XL', '3XL', '4XL', '5XL', 'F', 'FREE'];
   const sizesToRender = Array.from(activeSizesSet).sort((a, b) => {
-      const ai = sizeOrderArr.indexOf(a.toUpperCase());
-      const bi = sizeOrderArr.indexOf(b.toUpperCase());
-      if (ai !== -1 && bi !== -1) return ai - bi;
-      if (ai !== -1) return -1;
-      if (bi !== -1) return 1;
-      
-      const numA = parseFloat(a);
-      const numB = parseFloat(b);
-      if (!isNaN(numA) && !isNaN(numB)) {
-          return numA - numB;
-      }
-      
-      return a.localeCompare(b);
+    const ai = sizeOrderArr.indexOf(a.toUpperCase());
+    const bi = sizeOrderArr.indexOf(b.toUpperCase());
+    if (ai !== -1 && bi !== -1) return ai - bi;
+    if (ai !== -1) return -1;
+    if (bi !== -1) return 1;
+
+    const numA = parseFloat(a);
+    const numB = parseFloat(b);
+    if (!isNaN(numA) && !isNaN(numB)) {
+      return numA - numB;
+    }
+
+    return a.localeCompare(b);
   });
 
   const tmObj = order ? lookups.tradeMarks?.find(t => (typeof t === 'object' ? t.name : t) === order.tradeMark) : null;
@@ -635,11 +635,11 @@ const ExportOrder = () => {
           <div className="form-group" style={{ marginBottom: 0, flex: 1, maxWidth: '300px' }}>
             <label className="form-label">{t('export.fetch_label')}</label>
             <div style={{ display: 'flex', gap: '0.5rem', position: 'relative' }}>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 id="fetchSerialInput"
-                className="form-control" 
-                placeholder={t('export.fetch_placeholder')} 
+                className="form-control"
+                placeholder={t('export.fetch_placeholder')}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 onKeyDown={handleF9Press}
@@ -663,7 +663,7 @@ const ExportOrder = () => {
               <button className="btn btn-primary" onClick={() => handleFetch()}>
                 <Search size={20} /> {t('export.fetch_btn')}
               </button>
-              
+
               {showSerialsList && (
                 <div style={{
                   position: 'absolute', top: '100%', right: 0, marginTop: '4px',
@@ -675,10 +675,10 @@ const ExportOrder = () => {
                   zIndex: 1000
                 }}>
                   <div style={{ padding: '0.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--surface-highlight)' }}>
-                      <span style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>{t('export.select_saved')}</span>
-                      <button onClick={() => { setShowSerialsList(false); setSerialSearchQuery(''); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-color)', padding: 0, display: 'flex', alignItems: 'center' }}>
-                         <X size={16} />
-                      </button>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>{t('export.select_saved')}</span>
+                    <button onClick={() => { setShowSerialsList(false); setSerialSearchQuery(''); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-color)', padding: 0, display: 'flex', alignItems: 'center' }}>
+                      <X size={16} />
+                    </button>
                   </div>
                   <div style={{ padding: '0.5rem', borderBottom: '1px solid var(--border-color)', backgroundColor: 'var(--bg-color)' }}>
                     <input
@@ -720,49 +720,49 @@ const ExportOrder = () => {
                     />
                   </div>
                   {fetchingSerials ? (
-                      <div style={{ padding: '1rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)' }}>{t('entry.actions.loading')}</div>
+                    <div style={{ padding: '1rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)' }}>{t('entry.actions.loading')}</div>
                   ) : (
-                      (() => {
-                        const filteredSerials = serialSearchQuery.trim()
-                          ? availableSerials.filter(s => s.toString().includes(serialSearchQuery.trim()))
-                          : availableSerials;
-                        return filteredSerials.length === 0 ? (
-                          <div style={{ padding: '1rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                            {availableSerials.length === 0 ? t('entry.actions.no_saved_models') : t('entry.actions.no_match')}
-                          </div>
-                        ) : (
-                         <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-                             {filteredSerials.map(serial => {
-                                 const query = serialSearchQuery.trim();
-                                 const serialStr = serial.toString();
-                                 const matchIdx = query ? serialStr.indexOf(query) : -1;
-                                 return (
-                                 <li 
-                                     key={serial} 
-                                     onClick={() => {
-                                         setShowSerialsList(false);
-                                         setSerialSearchQuery('');
-                                         handleFetch(serial);
-                                     }}
-                                     style={{ padding: '0.6rem 1rem', cursor: 'pointer', borderBottom: '1px solid var(--border-color)', transition: 'background-color 0.2s', fontSize: '0.9rem', color: 'var(--text-color)' }}
-                                     onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--surface-highlight)'}
-                                     onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                                 >
-                                     {matchIdx !== -1 ? (
-                                       <strong>
-                                         {serialStr.substring(0, matchIdx)}
-                                         <span style={{ color: 'var(--accent-color)', textDecoration: 'underline' }}>{serialStr.substring(matchIdx, matchIdx + query.length)}</span>
-                                         {serialStr.substring(matchIdx + query.length)}
-                                       </strong>
-                                     ) : (
-                                       <strong>{serialStr}</strong>
-                                     )}
-                                 </li>
-                                 );
-                             })}
-                         </ul>
-                        );
-                      })()
+                    (() => {
+                      const filteredSerials = serialSearchQuery.trim()
+                        ? availableSerials.filter(s => s.toString().includes(serialSearchQuery.trim()))
+                        : availableSerials;
+                      return filteredSerials.length === 0 ? (
+                        <div style={{ padding: '1rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                          {availableSerials.length === 0 ? t('entry.actions.no_saved_models') : t('entry.actions.no_match')}
+                        </div>
+                      ) : (
+                        <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                          {filteredSerials.map(serial => {
+                            const query = serialSearchQuery.trim();
+                            const serialStr = serial.toString();
+                            const matchIdx = query ? serialStr.indexOf(query) : -1;
+                            return (
+                              <li
+                                key={serial}
+                                onClick={() => {
+                                  setShowSerialsList(false);
+                                  setSerialSearchQuery('');
+                                  handleFetch(serial);
+                                }}
+                                style={{ padding: '0.6rem 1rem', cursor: 'pointer', borderBottom: '1px solid var(--border-color)', transition: 'background-color 0.2s', fontSize: '0.9rem', color: 'var(--text-color)' }}
+                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--surface-highlight)'}
+                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                              >
+                                {matchIdx !== -1 ? (
+                                  <strong>
+                                    {serialStr.substring(0, matchIdx)}
+                                    <span style={{ color: 'var(--accent-color)', textDecoration: 'underline' }}>{serialStr.substring(matchIdx, matchIdx + query.length)}</span>
+                                    {serialStr.substring(matchIdx + query.length)}
+                                  </strong>
+                                ) : (
+                                  <strong>{serialStr}</strong>
+                                )}
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      );
+                    })()
                   )}
                 </div>
               )}
@@ -770,21 +770,21 @@ const ExportOrder = () => {
           </div>
         </div>
         {order && hasPermission('export', 'export') && (
-           <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
-              <button className="btn btn-accent" style={{ padding: '0.8rem 2rem', fontSize: '1.15rem', gap: '0.75rem', borderRadius: '50px', background: 'linear-gradient(135deg, var(--accent-color), #b48c26)', color: '#000', fontWeight: 'bold', boxShadow: '0 4px 15px rgba(212, 175, 55, 0.4)' }} onClick={() => setExportModalConfig({ type: 'print' })}>
-               <Printer size={22} /> {t('export.print_btn')}
-              </button>
-              <button className="btn btn-accent" style={{ padding: '0.8rem 2rem', fontSize: '1.15rem', gap: '0.75rem', borderRadius: '50px', background: 'linear-gradient(135deg, #1a5276, #2980b9)', color: '#fff', fontWeight: 'bold', boxShadow: '0 4px 15px rgba(26, 82, 118, 0.4)' }} onClick={() => setExportModalConfig({ type: 'pdf' })}>
-               <DownloadCloud size={22} /> {t('export.download_btn')}
-              </button>
-           </div>
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            <button className="btn btn-accent" style={{ padding: '0.8rem 2rem', fontSize: '1.15rem', gap: '0.75rem', borderRadius: '50px', background: 'linear-gradient(135deg, var(--accent-color), #b48c26)', color: '#000', fontWeight: 'bold', boxShadow: '0 4px 15px rgba(212, 175, 55, 0.4)' }} onClick={() => setExportModalConfig({ type: 'print' })}>
+              <Printer size={22} /> {t('export.print_btn')}
+            </button>
+            <button className="btn btn-accent" style={{ padding: '0.8rem 2rem', fontSize: '1.15rem', gap: '0.75rem', borderRadius: '50px', background: 'linear-gradient(135deg, #1a5276, #2980b9)', color: '#fff', fontWeight: 'bold', boxShadow: '0 4px 15px rgba(26, 82, 118, 0.4)' }} onClick={() => setExportModalConfig({ type: 'pdf' })}>
+              <DownloadCloud size={22} /> {t('export.download_btn')}
+            </button>
+          </div>
         )}
       </div>
 
       {!order && (
         <div className="card no-print" style={{ textAlign: 'center', padding: '6rem 2rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(to bottom, var(--surface-color), var(--bg-color))' }}>
           <div style={{ padding: '1.5rem', background: 'var(--surface-highlight)', borderRadius: '50%', marginBottom: '1.5rem' }}>
-             <FileText size={48} color="var(--accent-color)" />
+            <FileText size={48} color="var(--accent-color)" />
           </div>
           <h2 style={{ color: 'var(--text-main)', fontSize: '1.8rem', fontWeight: '800' }}>{t('export.empty_title')}</h2>
           <p style={{ color: 'var(--text-muted)', marginTop: '0.75rem', maxWidth: '500px', lineHeight: '1.6' }}>
@@ -830,10 +830,10 @@ const ExportOrder = () => {
               <tr>
                 <th colSpan={1} className="hdr-blue"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.order_no')}</FitOneLine></th>
                 <td colSpan={2} className="val-center val-bold"><FitOneLine maxFontSize={13} minFontSize={7}>{order.orderNumber || '-'}</FitOneLine></td>
-                <th colSpan={includePrices ? 2 : 1} className="hdr-blue"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.request_date')}</FitOneLine></th>
-                <td colSpan={2} className="val-center val-bold"><FitOneLine maxFontSize={13} minFontSize={7}>{formatDate(order.requestDate)}</FitOneLine></td>
-                <th colSpan={includePrices ? 2 : 1} className="hdr-blue"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.delivery_date')}</FitOneLine></th>
-                <td colSpan={2} className="val-center val-bold"><FitOneLine maxFontSize={13} minFontSize={7}>{formatDate(order.deliveryDate)}</FitOneLine></td>
+                <th colSpan={includePrices ? 2 : 1} className="hdr-blue"><FitOneLine maxFontSize={15} minFontSize={6}>{t('export.doc.request_date')}</FitOneLine></th>
+                <td colSpan={2} className="val-center val-bold"><FitOneLine maxFontSize={17} minFontSize={7}>{formatDate(order.requestDate)}</FitOneLine></td>
+                <th colSpan={includePrices ? 2 : 1} className="hdr-blue"><FitOneLine maxFontSize={15} minFontSize={6}>{t('export.doc.delivery_date')}</FitOneLine></th>
+                <td colSpan={2} className="val-center val-bold"><FitOneLine maxFontSize={25} minFontSize={7}>{formatDate(order.deliveryDate)}</FitOneLine></td>
               </tr>
 
               {/* ═══ ROW 2-4: BUYER & FACTORY INFO ═══ */}
@@ -943,9 +943,9 @@ const ExportOrder = () => {
               {(() => {
                 let totalRows = 0;
                 const parts = order.groupedMeasurements ? Object.keys(order.groupedMeasurements) : (order.measurements ? ['Product'] : []);
-                
+
                 parts.forEach(part => {
-                  totalRows += 1; 
+                  totalRows += 1;
                   if (order.groupedMeasurements) {
                     totalRows += Object.keys(order.groupedMeasurements[part] || {}).length;
                   } else {
@@ -992,22 +992,22 @@ const ExportOrder = () => {
                         ></td>
                       )}
                       <td colSpan={imageColSpan} rowSpan={totalEmptyRows} style={{ padding: '6px', borderLeft: '3px solid #000', backgroundColor: '#fff', verticalAlign: 'middle', textAlign: 'center' }}>
-                           <div style={{
-                             display: 'flex',
-                             flexDirection: 'row',
-                             gap: '8px',
-                             alignItems: 'center',
-                             justifyContent: 'center',
-                             flexWrap: 'wrap',
-                             width: '100%',
-                             maxWidth: isMultiImage ? '380px' : '250px',
-                             margin: '0 auto',
-                             boxSizing: 'border-box'
-                           }}>
-                             {order.productImages?.filter(Boolean).map((img, idx) => (
-                               <ProductImageFrame key={idx} img={img} index={idx} isMultiImage={isMultiImage} maxHeight={isMultiImage ? 230 : 250} />
-                             ))}
-                           </div>
+                        <div style={{
+                          display: 'flex',
+                          flexDirection: 'row',
+                          gap: '8px',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexWrap: 'wrap',
+                          width: '100%',
+                          maxWidth: isMultiImage ? '380px' : '250px',
+                          margin: '0 auto',
+                          boxSizing: 'border-box'
+                        }}>
+                          {order.productImages?.filter(Boolean).map((img, idx) => (
+                            <ProductImageFrame key={idx} img={img} index={idx} isMultiImage={isMultiImage} maxHeight={isMultiImage ? 230 : 250} />
+                          ))}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -1046,25 +1046,25 @@ const ExportOrder = () => {
                       {partSizes.length < maxSizeCols && (
                         <td colSpan={maxSizeCols - partSizes.length} style={{ border: 'none', background: '#fff' }}></td>
                       )}
-                      
+
                       {isFirstRow && (
                         <td colSpan={imageColSpan} rowSpan={totalRows} style={{ padding: '6px', borderLeft: '3px solid #000', backgroundColor: '#fff', verticalAlign: 'middle', textAlign: 'center' }}>
-                           <div style={{
-                             display: 'flex',
-                             flexDirection: 'row',
-                             gap: '8px',
-                             alignItems: 'center',
-                             justifyContent: 'center',
-                             flexWrap: 'wrap',
-                             width: '100%',
-                             maxWidth: isMultiImage ? '380px' : '250px',
-                             margin: '0 auto',
-                             boxSizing: 'border-box'
-                           }}>
-                             {order.productImages?.filter(Boolean).map((img, idx) => (
-                               <ProductImageFrame key={idx} img={img} index={idx} isMultiImage={isMultiImage} maxHeight={isMultiImage ? 250 : 275} />
-                             ))}
-                           </div>
+                          <div style={{
+                            display: 'flex',
+                            flexDirection: 'row',
+                            gap: '8px',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexWrap: 'wrap',
+                            width: '100%',
+                            maxWidth: isMultiImage ? '380px' : '250px',
+                            margin: '0 auto',
+                            boxSizing: 'border-box'
+                          }}>
+                            {order.productImages?.filter(Boolean).map((img, idx) => (
+                              <ProductImageFrame key={idx} img={img} index={idx} isMultiImage={isMultiImage} maxHeight={isMultiImage ? 250 : 275} />
+                            ))}
+                          </div>
                         </td>
                       )}
                     </tr>
@@ -1077,7 +1077,7 @@ const ExportOrder = () => {
                       <tr key={`m-${part}-${mName}`}>
                         <td className="val-bold val-left" style={{ paddingLeft: '6px' }}>{mName}</td>
                         {partSizes.map(s => (
-                           <td key={s} className="val-center val-bold">{measurementsObj[mName]?.[s] || ''}</td>
+                          <td key={s} className="val-center val-bold">{measurementsObj[mName]?.[s] || ''}</td>
                         ))}
                         {partSizes.length < maxSizeCols && (
                           <td colSpan={maxSizeCols - partSizes.length} style={{ border: 'none', background: '#fff' }}></td>
@@ -1093,8 +1093,8 @@ const ExportOrder = () => {
               {(() => {
                 const numMaterials = [0, 1, 2].filter(i => order.materials && order.materials[i] && order.materials[i].name).length;
                 const actualMaterials = Math.max(1, numMaterials);
-                const fabricColSpan = 1 + (actualMaterials === 1 ? 2 : actualMaterials); 
-                const conditionsColSpan = totalTableCols - 2 - fabricColSpan; 
+                const fabricColSpan = 1 + (actualMaterials === 1 ? 2 : actualMaterials);
+                const conditionsColSpan = totalTableCols - 2 - fabricColSpan;
 
                 return (
                   <React.Fragment>
@@ -1103,7 +1103,7 @@ const ExportOrder = () => {
                       <th colSpan={conditionsColSpan} className="hdr-blue">{t('export.doc.conditions')}</th>
                       <th colSpan={2} className="hdr-blue">{t('export.doc.remarks_header')}</th>
                     </tr>
-                    
+
                     <tr>
                       <td colSpan={fabricColSpan} className="val-center val-bold bg-light-blue" style={{ fontSize: '14px' }}>
                         {order.productFabric || t('export.doc.default_fabric')}
@@ -1117,20 +1117,20 @@ const ExportOrder = () => {
                         {order.remarks || ''}
                       </td>
                     </tr>
-                    
+
                     <tr>
                       <th colSpan={1} className="hdr-light" style={{ backgroundColor: '#d0dbe5', whiteSpace: 'nowrap', padding: '4px 6px' }}>{t('export.doc.fabric_comp')}</th>
-                      {[0,1,2].slice(0, actualMaterials).map(i => (
+                      {[0, 1, 2].slice(0, actualMaterials).map(i => (
                         <td key={i} colSpan={actualMaterials === 1 ? 2 : 1} className="val-center val-bold">
-                           {order.materials?.[i]?.name || ''}
+                          {order.materials?.[i]?.name || ''}
                         </td>
                       ))}
                     </tr>
                     <tr>
                       <th colSpan={1} className="hdr-light" style={{ backgroundColor: '#d0dbe5', whiteSpace: 'nowrap', padding: '4px 6px' }}>{t('export.doc.percentage')}</th>
-                      {[0,1,2].slice(0, actualMaterials).map(i => (
+                      {[0, 1, 2].slice(0, actualMaterials).map(i => (
                         <td key={i} colSpan={actualMaterials === 1 ? 2 : 1} className="val-center val-bold" style={{ color: order.materials?.[i] ? '#38761d' : 'inherit' }}>
-                           {order.materials?.[i] ? `${order.materials[i].percentage}%` : ''}
+                          {order.materials?.[i] ? `${order.materials[i].percentage}%` : ''}
                         </td>
                       ))}
                     </tr>
@@ -1142,13 +1142,13 @@ const ExportOrder = () => {
               <tr>
                 <th colSpan={1} className="hdr-blue">{t('export.doc.colors_qty')}</th>
                 <td colSpan={totalTableCols - 1} className="val-center val-bold bg-light-blue" style={{ fontSize: '16px' }}>
-                   {activeColors.length || '0'}
+                  {activeColors.length || '0'}
                 </td>
               </tr>
-              
+
               {(() => {
                 if (activeColors.length === 0) return null;
-                
+
                 const CHUNK_SIZE = 6;
                 const numChunks = Math.ceil(activeColors.length / CHUNK_SIZE);
                 const chunks = [];
@@ -1164,14 +1164,14 @@ const ExportOrder = () => {
                   }
                   chunks.push(chunkColors);
                 }
-                
+
                 const getColSpans = (total, count) => {
                   if (count === 0) return [];
                   const base = Math.floor(total / count);
                   const rem = total % count;
                   return Array(count).fill(0).map((_, i) => base + (i < rem ? 1 : 0));
                 };
-                
+
                 return chunks.map((chunk, chunkIndex) => {
                   const spans = getColSpans(totalTableCols - 1, chunk.length);
                   return (
@@ -1179,46 +1179,46 @@ const ExportOrder = () => {
                       <tr>
                         <th colSpan={1} className="hdr-light" style={{ borderTop: chunkIndex > 0 ? '3px solid #000' : '1px solid #000' }}><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.colors_zh')}</FitOneLine></th>
                         {chunk.map((c, i) => {
-                           let hex = '';
-                           if (c) {
-                             const cInfo = lookups.colors?.find(color => typeof color === 'object' ? color.name === c : color === c);
-                             if (cInfo && typeof cInfo === 'object' && cInfo.hex) hex = cInfo.hex;
-                           }
-                           return (
-                             <td key={`c-${i}`} colSpan={spans[i]} className={c ? "val-center val-bold bg-light-blue" : ""} style={{ borderTop: chunkIndex > 0 ? '3px solid #000' : '1px solid #000' }}>
-                               {c ? (
-                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', width: '100%', overflow: 'hidden' }}>
-                                   {hex && <div style={{ width: '14px', height: '14px', borderRadius: '50%', backgroundColor: hex, border: '1px solid #000', flexShrink: 0 }} />}
-                                   <FitOneLine maxFontSize={11} minFontSize={5}>{c}</FitOneLine>
-                                 </div>
-                               ) : ''}
-                             </td>
-                           );
+                          let hex = '';
+                          if (c) {
+                            const cInfo = lookups.colors?.find(color => typeof color === 'object' ? color.name === c : color === c);
+                            if (cInfo && typeof cInfo === 'object' && cInfo.hex) hex = cInfo.hex;
+                          }
+                          return (
+                            <td key={`c-${i}`} colSpan={spans[i]} className={c ? "val-center val-bold bg-light-blue" : ""} style={{ borderTop: chunkIndex > 0 ? '3px solid #000' : '1px solid #000' }}>
+                              {c ? (
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', width: '100%', overflow: 'hidden' }}>
+                                  {hex && <div style={{ width: '14px', height: '14px', borderRadius: '50%', backgroundColor: hex, border: '1px solid #000', flexShrink: 0 }} />}
+                                  <FitOneLine maxFontSize={11} minFontSize={5}>{c}</FitOneLine>
+                                </div>
+                              ) : ''}
+                            </td>
+                          );
                         })}
                       </tr>
                       <tr>
                         <th colSpan={1} className="hdr-light"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.qty_zh')}</FitOneLine></th>
                         {chunk.map((c, i) => {
-                           if (!c) return <td key={`q-${i}`} colSpan={spans[i]}></td>;
-                           const qty = sizesToRender.reduce((sum, s) => sum + (parseInt(order.colorDistribution[c]?.[s]) || 0), 0);
-                           return <td key={`q-${i}`} colSpan={spans[i]} className="val-center val-bold bg-light-blue"><FitOneLine maxFontSize={12} minFontSize={6}>{qty}</FitOneLine></td>;
+                          if (!c) return <td key={`q-${i}`} colSpan={spans[i]}></td>;
+                          const qty = sizesToRender.reduce((sum, s) => sum + (parseInt(order.colorDistribution[c]?.[s]) || 0), 0);
+                          return <td key={`q-${i}`} colSpan={spans[i]} className="val-center val-bold bg-light-blue"><FitOneLine maxFontSize={12} minFontSize={6}>{qty}</FitOneLine></td>;
                         })}
                       </tr>
                       <tr>
                         <th colSpan={1} className="hdr-light"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.color_barcodes')}</FitOneLine></th>
                         {chunk.map((c, i) => {
-                           if (!c) return <td key={`b-${i}`} colSpan={spans[i]}></td>;
-                           const cInfo = lookups.colors?.find(color => typeof color === 'object' ? color.name === c : color === c);
-                           const code = (cInfo && typeof cInfo === 'object') ? (cInfo.abbr || cInfo.code || '') : '';
-                           return <td key={`b-${i}`} colSpan={spans[i]} className="val-center val-bold" style={{ whiteSpace: 'nowrap' }}>
-                              <FitOneLine maxFontSize={11} minFontSize={5}>{order.barcode ? `${order.barcode}${code ? '-' + code : ''}` : '-'}</FitOneLine>
-                           </td>;
+                          if (!c) return <td key={`b-${i}`} colSpan={spans[i]}></td>;
+                          const cInfo = lookups.colors?.find(color => typeof color === 'object' ? color.name === c : color === c);
+                          const code = (cInfo && typeof cInfo === 'object') ? (cInfo.abbr || cInfo.code || '') : '';
+                          return <td key={`b-${i}`} colSpan={spans[i]} className="val-center val-bold" style={{ whiteSpace: 'nowrap' }}>
+                            <FitOneLine maxFontSize={11} minFontSize={5}>{order.barcode ? `${order.barcode}${code ? '-' + code : ''}` : '-'}</FitOneLine>
+                          </td>;
                         })}
                       </tr>
                       <tr>
                         <th colSpan={1} className="hdr-light" style={{ height: '70px', verticalAlign: 'middle' }}>{t('export.doc.fabric_samples')}</th>
                         {chunk.map((_, i) => (
-                           <td key={`s-${i}`} colSpan={spans[i]}></td>
+                          <td key={`s-${i}`} colSpan={spans[i]}></td>
                         ))}
                       </tr>
                     </React.Fragment>
@@ -1229,11 +1229,11 @@ const ExportOrder = () => {
           </table>
 
           {/* ═══ FOOTER SIGNATURES (منفصلة تماماً في تذييل الصفحة) ═══ */}
-          <div className="export-signatures-footer" style={{ 
-            marginTop: 'auto', 
-            paddingTop: '15px', 
+          <div className="export-signatures-footer" style={{
+            marginTop: 'auto',
+            paddingTop: '15px',
             paddingBottom: '5px',
-            paddingLeft: '25px', 
+            paddingLeft: '25px',
             paddingRight: '25px',
             backgroundColor: '#ffffff'
           }}>
@@ -1243,16 +1243,16 @@ const ExportOrder = () => {
                   {t('export.doc.name_zh')} <span style={{ color: '#c0392b', marginLeft: '35px' }}>{t('export.doc.buyer_sign')}</span>
                 </div>
                 <div style={{ fontSize: '13px', fontWeight: 800, display: 'flex', alignItems: 'flex-end' }}>
-                  {t('export.doc.signature_zh')} 
+                  {t('export.doc.signature_zh')}
                   <div style={{ display: 'inline-block', width: '180px', borderBottom: '2px solid #000', marginLeft: '12px' }}></div>
                 </div>
               </div>
-              
+
               <div style={{ textAlign: 'center' }}>
                 <div style={{ color: '#c0392b', fontWeight: 800, fontSize: '13px', marginBottom: '20px' }}>{t('export.doc.coordinator_sign')}</div>
                 <div style={{ display: 'inline-block', width: '210px', borderBottom: '2px solid #000' }}></div>
               </div>
-              
+
               <div style={{ textAlign: 'center' }}>
                 <div style={{ color: '#c0392b', fontWeight: 800, fontSize: '13px', marginBottom: '20px' }}>{t('export.doc.factory_sign')}</div>
                 <div style={{ display: 'inline-block', width: '210px', borderBottom: '2px solid #000' }}></div>
@@ -1288,7 +1288,7 @@ const ExportOptionsModal = ({ config, onClose, onConfirm, t }) => {
   const isPdf = config.type === 'pdf';
 
   return (
-    <div 
+    <div
       style={{
         position: 'fixed',
         inset: 0,
@@ -1303,7 +1303,7 @@ const ExportOptionsModal = ({ config, onClose, onConfirm, t }) => {
       }}
       onClick={onClose}
     >
-      <div 
+      <div
         style={{
           backgroundColor: 'var(--surface-color, #1e293b)',
           color: 'var(--text-main, #f8fafc)',
@@ -1335,7 +1335,7 @@ const ExportOptionsModal = ({ config, onClose, onConfirm, t }) => {
             </div>
             <div>
               <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-strong, #fff)' }}>
-                {isPdf 
+                {isPdf
                   ? t('export.export_modal.pdf_title', { defaultValue: 'خيارات تحميل عقد ومستند التصدير (PDF)' })
                   : t('export.export_modal.print_title', { defaultValue: 'خيارات طباعة عقد ومستند التصدير' })
                 }
@@ -1345,7 +1345,7 @@ const ExportOptionsModal = ({ config, onClose, onConfirm, t }) => {
               </p>
             </div>
           </div>
-          <button 
+          <button
             onClick={onClose}
             style={{
               background: 'transparent',
@@ -1489,9 +1489,9 @@ const ExportOptionsModal = ({ config, onClose, onConfirm, t }) => {
 
         {/* Modal Footer */}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
-          <button 
-            type="button" 
-            className="btn btn-outline" 
+          <button
+            type="button"
+            className="btn btn-outline"
             onClick={onClose}
             style={{ minWidth: '100px', borderColor: 'var(--border-color)' }}
           >

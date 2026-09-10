@@ -231,7 +231,7 @@ const OrderReports = () => {
 
   const [fixedTerms, setFixedTerms] = useState(() => {
     try {
-      const saved = JSON.parse(localStorage.getItem('gh_fixed_order_terms') || '[]');
+      const saved = JSON.parse(localStorage.getItem('gh_fixed_reports_terms') || '[]');
       return Array.isArray(saved) ? saved : [];
     } catch {
       return [];
@@ -239,7 +239,7 @@ const OrderReports = () => {
   });
   const [selectedTerms, setSelectedTerms] = useState(() => {
     try {
-      const saved = JSON.parse(localStorage.getItem('gh_fixed_order_terms') || '[]');
+      const saved = JSON.parse(localStorage.getItem('gh_fixed_reports_terms') || '[]');
       return Array.isArray(saved) ? saved : [];
     } catch {
       return [];
@@ -254,7 +254,7 @@ const OrderReports = () => {
     setFixedTerms(prev => {
       const isAlreadyFixed = prev.includes(termName);
       const next = isAlreadyFixed ? prev.filter(t => t !== termName) : [...prev, termName];
-      localStorage.setItem('gh_fixed_order_terms', JSON.stringify(next));
+      localStorage.setItem('gh_fixed_reports_terms', JSON.stringify(next));
       if (!isAlreadyFixed) {
         setSelectedTerms(curr => curr.includes(termName) ? curr : [...curr, termName]);
         setTempSelectedTerms(curr => curr.includes(termName) ? curr : [...curr, termName]);
@@ -269,7 +269,7 @@ const OrderReports = () => {
   const handleSaveCurrentAsFixed = () => {
     const toSave = [...tempSelectedTerms];
     setFixedTerms(toSave);
-    localStorage.setItem('gh_fixed_order_terms', JSON.stringify(toSave));
+    localStorage.setItem('gh_fixed_reports_terms', JSON.stringify(toSave));
     setSelectedTerms(toSave);
     setShowTermsDropdown(false);
     toast.success(t('reports.messages.terms_saved_fixed', { count: toSave.length, defaultValue: `📌 تم حفظ (${toSave.length}) شروط ثابتة افتراضياً لكل الفواتير القادمة!` }), { id: 'fixed-terms-toast' });

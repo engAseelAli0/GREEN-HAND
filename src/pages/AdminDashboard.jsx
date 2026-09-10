@@ -109,10 +109,6 @@ const AdminDashboard = () => {
     let newItem = newValue.trim();
     if (activeTab === 'products') {
       const prefix = newValuePrefix.trim();
-      if (prefix && currentList.some((item, idx) => idx !== editIndex && typeof item === 'object' && item.codePrefix === prefix)) {
-        toast.error(t('admin.messages.duplicate_prefix'));
-        return;
-      }
       const partsArr = selectedPartsArr.length > 0 ? [...selectedPartsArr] : [newValue.trim()];
       newItem = { name: newValue.trim(), codePrefix: prefix, parts: partsArr };
     } else if (activeTab === 'measurements') {

@@ -102,7 +102,7 @@ const DataEntryWizard = () => {
   const [newFactory, setNewFactory] = useState({ name: '', code: '', mobile: '', address: '' });
   const [fixedPackagingTerms, setFixedPackagingTerms] = useState(() => {
     try {
-      const saved = JSON.parse(localStorage.getItem('gh_fixed_order_terms') || '[]');
+      const saved = JSON.parse(localStorage.getItem('gh_fixed_entry_terms') || localStorage.getItem('gh_fixed_order_terms') || '[]');
       return Array.isArray(saved) ? saved : [];
     } catch {
       return [];
@@ -113,7 +113,7 @@ const DataEntryWizard = () => {
     setFixedPackagingTerms(prev => {
       const isAlreadyFixed = prev.includes(termName);
       const next = isAlreadyFixed ? prev.filter(t => t !== termName) : [...prev, termName];
-      localStorage.setItem('gh_fixed_order_terms', JSON.stringify(next));
+      localStorage.setItem('gh_fixed_entry_terms', JSON.stringify(next));
       if (!isAlreadyFixed) {
         updateOrder('packagingConditions', { ...(currentOrder?.packagingConditions || {}), [termName]: true });
         setTempPackagingConditions(curr => ({ ...curr, [termName]: true }));
@@ -177,7 +177,7 @@ const DataEntryWizard = () => {
   const handleSaveCurrentPackagingAsFixed = () => {
     const activeTerms = Object.keys(tempPackagingConditions).filter(k => !!tempPackagingConditions[k]);
     setFixedPackagingTerms(activeTerms);
-    localStorage.setItem('gh_fixed_order_terms', JSON.stringify(activeTerms));
+    localStorage.setItem('gh_fixed_entry_terms', JSON.stringify(activeTerms));
     updateOrder('packagingConditions', tempPackagingConditions);
     setShowPackagingPicker(false);
     toast.success(t('entry.packaging.messages.terms_saved_fixed', { count: activeTerms.length, defaultValue: `📌 تم حفظ (${activeTerms.length}) شروط ثابتة افتراضياً لكل الطلبيات القادمة!` }), { id: 'fixed-pkg-toast' });
@@ -186,7 +186,7 @@ const DataEntryWizard = () => {
   useEffect(() => {
     if (!isEditMode && (!currentOrder?.packagingConditions || Object.keys(currentOrder.packagingConditions).length === 0)) {
       try {
-        const saved = JSON.parse(localStorage.getItem('gh_fixed_order_terms') || '[]');
+        const saved = JSON.parse(localStorage.getItem('gh_fixed_entry_terms') || localStorage.getItem('gh_fixed_order_terms') || '[]');
         if (Array.isArray(saved) && saved.length > 0) {
           const initConditions = {};
           saved.forEach(t => { initConditions[t] = true; });
@@ -1298,7 +1298,7 @@ const DataEntryWizard = () => {
     
     let initConditions = {};
     try {
-      const saved = JSON.parse(localStorage.getItem('gh_fixed_order_terms') || '[]');
+      const saved = JSON.parse(localStorage.getItem('gh_fixed_entry_terms') || localStorage.getItem('gh_fixed_order_terms') || '[]');
       if (Array.isArray(saved) && saved.length > 0) {
         saved.forEach(t => { initConditions[t] = true; });
       }
@@ -2686,7 +2686,7 @@ const DataEntryWizard = () => {
         {/* ═══ 13. الشروط المطلوبة ═══ */}
         <div className="card" id="section-conditions" style={{ scrollMarginTop: '5.5rem', marginBottom: 0 }}>
           <div className="tab-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-                <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
                   <CheckSquare size={22} color="var(--accent-color)" />
                   <span>{t('entry.packaging.section_title')}</span>
                   <span style={{ 
@@ -2698,11 +2698,26 @@ const DataEntryWizard = () => {
                     padding: '2px 10px',
                     display: 'inline-flex',
                     alignItems: 'center',
-                    gap: '4px'
+                    gap: '4px',
+                    fontWeight: '600'
                   }}>
-                    <CheckCircle2 size={12} />
-                    {selectedConditions.length > 0 ? t('entry.packaging.conditions_selected_count', { count: selectedConditions.length, defaultValue: `تم اختيار ${selectedConditions.length} شرط` }) : t('entry.packaging.no_conditions_selected', { defaultValue: 'لم يتم اختيار شروط' })}
-                    {fixedPackagingTerms.length > 0 && t('entry.packaging.fixed_status_count', { count: fixedPackagingTerms.length, defaultValue: ` (${fixedPackagingTerms.length} ثابتة تلقائياً)` })}
+                    <Pin size={12} style={{ fill: 'currentColor' }} />
+                    <span>{t('entry.packaging.fixed_terms_title', { defaultValue: 'الشروط المثبتة' })}: {fixedSelected.length}</span>
+                  </span>
+                  <span style={{ 
+                    fontSize: '0.8rem', 
+                    backgroundColor: extraSelected.length > 0 ? 'rgba(59, 130, 246, 0.12)' : 'rgba(255, 255, 255, 0.05)', 
+                    color: extraSelected.length > 0 ? '#60a5fa' : 'var(--text-muted)', 
+                    border: `1px solid ${extraSelected.length > 0 ? 'rgba(59, 130, 246, 0.3)' : 'var(--border-color)'}`, 
+                    borderRadius: '20px', 
+                    padding: '2px 10px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    fontWeight: '600'
+                  }}>
+                    <Sparkles size={12} />
+                    <span>{t('entry.packaging.extra_terms_title', { defaultValue: 'الشروط الإضافية المختارة' })}: {extraSelected.length}</span>
                   </span>
                 </h3>
 
@@ -2922,86 +2937,40 @@ const DataEntryWizard = () => {
                   </div>
                 )}
 
-                {/* Grouped Selected Badges Display */}
-                {selectedConditions.length > 0 ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                    {/* Fixed Conditions Section */}
-                    {fixedSelected.length > 0 && (
-                      <div>
-                        <div style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--accent-color)', marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <Pin size={13} style={{ fill: 'currentColor' }} />
-                          <span>{t('entry.packaging.fixed_terms_section_title', { defaultValue: 'الشروط الثابتة الدائمة (تتسجل تلقائياً مع كل طلبية):' })}</span>
-                        </div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                          {fixedSelected.map((cond, i) => (
-                            <span key={i} style={{
-                              display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
-                              padding: '0.35rem 0.75rem', borderRadius: '6px',
-                              backgroundColor: 'rgba(212, 175, 55, 0.15)',
-                              border: '1px solid var(--accent-color)',
-                              fontSize: '0.85rem', fontWeight: '500',
-                              color: 'var(--text-strong)',
-                              animation: 'fadeIn 0.2s ease'
-                            }}>
-                              <Pin size={12} style={{ fill: 'currentColor', color: 'var(--accent-color)' }} />
-                              <span>{cond}</span>
-                              <button 
-                                type="button" 
-                                onClick={() => handlePackagingConditionChange(cond, false)} 
-                                style={{
-                                  background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer',
-                                  padding: '0', display: 'flex', alignItems: 'center', marginRight: '-0.2rem'
-                                }} 
-                                title={t('entry.packaging.unpin_for_this_order', { defaultValue: 'إلغاء التحديد لهذه الطلبية فقط' })}
-                              >
-                                <X size={14} />
-                              </button>
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+                {/* ملخص الشروط دون ظهورهن في الشاشة */}
+                {!showPackagingPicker && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                    <div style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      padding: '0.45rem 1rem',
+                      borderRadius: '8px',
+                      backgroundColor: 'rgba(212, 175, 55, 0.12)',
+                      border: '1px solid var(--accent-color)',
+                      color: 'var(--accent-color)',
+                      fontSize: '0.88rem',
+                      fontWeight: 'bold'
+                    }}>
+                      <Pin size={15} style={{ fill: 'currentColor' }} />
+                      <span>{t('entry.packaging.fixed_terms_title', { defaultValue: 'الشروط المثبتة' })}: {fixedSelected.length}</span>
+                    </div>
 
-                    {/* Additional Conditions Section */}
-                    {extraSelected.length > 0 && (
-                      <div>
-                        <div style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--text-muted)', marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <Sparkles size={13} />
-                          <span>{t('entry.packaging.additional_terms_section_title', { defaultValue: 'الشروط الإضافية المحددة لهذه الطلبية:' })}</span>
-                        </div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                          {extraSelected.map((cond, i) => (
-                            <span key={i} style={{
-                              display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
-                              padding: '0.35rem 0.75rem', borderRadius: '6px',
-                              backgroundColor: 'var(--bg-color)',
-                              border: '1px solid var(--border-color)',
-                              fontSize: '0.85rem',
-                              color: 'var(--text-main)',
-                              animation: 'fadeIn 0.2s ease'
-                            }}>
-                              <span>{cond}</span>
-                              <button 
-                                type="button" 
-                                onClick={() => handlePackagingConditionChange(cond, false)} 
-                                style={{
-                                  background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer',
-                                  padding: '0', display: 'flex', alignItems: 'center', marginRight: '-0.2rem'
-                                }} 
-                                title={t('entry.packaging.remove_extra_term', { defaultValue: 'حذف الشرط الإضافي' })}
-                              >
-                                <X size={14} />
-                              </button>
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div style={{ textAlign: 'center', padding: '2rem 1rem', color: 'var(--text-muted)', fontSize: '0.92rem' }}>
-                    <CheckSquare size={36} style={{ opacity: 0.25, display: 'block', margin: '0 auto 0.5rem' }} />
-                    {t('entry.packaging.no_conditions_hint')}
+                    <div style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      padding: '0.45rem 1rem',
+                      borderRadius: '8px',
+                      backgroundColor: extraSelected.length > 0 ? 'rgba(59, 130, 246, 0.12)' : 'rgba(255, 255, 255, 0.04)',
+                      border: `1px solid ${extraSelected.length > 0 ? 'rgba(59, 130, 246, 0.35)' : 'var(--border-color)'}`,
+                      color: extraSelected.length > 0 ? '#60a5fa' : 'var(--text-muted)',
+                      fontSize: '0.88rem',
+                      fontWeight: '600'
+                    }}>
+                      <Sparkles size={15} />
+                      <span>{t('entry.packaging.extra_terms_title', { defaultValue: 'الشروط الإضافية المختارة' })}: {extraSelected.length}</span>
+                    </div>
                   </div>
                 )}
               </div>

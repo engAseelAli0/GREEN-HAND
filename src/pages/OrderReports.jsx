@@ -1194,7 +1194,7 @@ const OrderReports = () => {
               {t('reports.detailed_terms', { defaultValue: 'الشروط المطلوبة للفاتورة' })}
             </h3>
             
-            {/* Quick Status Count */}
+            {/* ليبل الشروط الثابتة */}
             <span style={{ 
               fontSize: '0.8rem', 
               backgroundColor: 'rgba(212, 175, 55, 0.12)', 
@@ -1204,11 +1204,28 @@ const OrderReports = () => {
               padding: '2px 10px',
               display: 'inline-flex',
               alignItems: 'center',
-              gap: '4px'
+              gap: '4px',
+              fontWeight: '600'
             }}>
-              <CheckCircle2 size={12} />
-              {selectedTerms.length > 0 ? t('reports.selected_terms_count', { count: selectedTerms.length, defaultValue: `تم اختيار ${selectedTerms.length} شرط` }) : t('reports.no_conditions_selected', { defaultValue: 'لم يتم اختيار شروط' })}
-              {fixedTerms.length > 0 && t('reports.fixed_status_count', { count: fixedTerms.length, defaultValue: ` (${fixedTerms.length} ثابتة تلقائياً)` })}
+              <Pin size={12} style={{ fill: 'currentColor' }} />
+              <span>{t('entry.packaging.fixed_terms_title', { defaultValue: 'الشروط المثبتة' })}: {selectedTerms.filter(t => fixedTerms.includes(t)).length}</span>
+            </span>
+
+            {/* ليبل الشروط الإضافية المختارة */}
+            <span style={{ 
+              fontSize: '0.8rem', 
+              backgroundColor: selectedTerms.filter(t => !fixedTerms.includes(t)).length > 0 ? 'rgba(59, 130, 246, 0.12)' : 'rgba(255, 255, 255, 0.05)', 
+              color: selectedTerms.filter(t => !fixedTerms.includes(t)).length > 0 ? '#60a5fa' : 'var(--text-muted)', 
+              border: `1px solid ${selectedTerms.filter(t => !fixedTerms.includes(t)).length > 0 ? 'rgba(59, 130, 246, 0.3)' : 'var(--border-color)'}`, 
+              borderRadius: '20px', 
+              padding: '2px 10px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              fontWeight: '600'
+            }}>
+              <Sparkles size={12} />
+              <span>{t('entry.packaging.extra_terms_title', { defaultValue: 'الشروط الإضافية المختارة' })}: {selectedTerms.filter(t => !fixedTerms.includes(t)).length}</span>
             </span>
           </div>
 
@@ -1441,111 +1458,48 @@ const OrderReports = () => {
           </div>
         )}
 
-        {/* Selected Terms Badges Display (Always clean & clearly organized) */}
-        {selectedTerms.length > 0 && (
+        {/* ملخص الشروط دون ظهور النص بالكامل في الشاشة */}
+        {!showTermsDropdown && (
           <div style={{ 
-            marginTop: '1.25rem',
+            marginTop: '1rem',
             paddingTop: '0.75rem',
             borderTop: '1px dashed var(--border-color)',
             display: 'flex',
-            flexDirection: 'column',
-            gap: '0.75rem'
+            alignItems: 'center',
+            gap: '1rem',
+            flexWrap: 'wrap'
           }}>
-            {/* 1. Fixed Terms Section */}
-            {selectedTerms.filter(t => fixedTerms.includes(t)).length > 0 && (
-              <div>
-                <div style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--accent-color)', marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <Pin size={13} style={{ fill: 'currentColor' }} />
-                  <span>{t('reports.fixed_terms_section_title', { defaultValue: 'الشروط الثابتة الدائمة (ستظهر في النصف الأول من الفاتورة):' })}</span>
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                  {selectedTerms.filter(t => fixedTerms.includes(t)).map((term, i) => (
-                    <div 
-                      key={i}
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '0.4rem',
-                        backgroundColor: 'rgba(212, 175, 55, 0.15)',
-                        border: '1px solid var(--accent-color)',
-                        borderRadius: '6px',
-                        padding: '0.3rem 0.7rem',
-                        fontSize: '0.85rem',
-                        color: 'var(--text-strong)',
-                        fontWeight: '500'
-                      }}
-                    >
-                      <Pin size={12} style={{ fill: 'currentColor', color: 'var(--accent-color)' }} />
-                      <span>{term}</span>
-                      <button 
-                        type="button"
-                        onClick={() => setSelectedTerms(prev => prev.filter(t => t !== term))}
-                        title={t('reports.unpin_for_this_invoice', { defaultValue: 'إلغاء التحديد لهذه الفاتورة فقط' })}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          padding: 0,
-                          cursor: 'pointer',
-                          color: '#ef4444',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          marginRight: '2px'
-                        }}
-                      >
-                        <X size={14} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              padding: '0.45rem 1rem',
+              borderRadius: '8px',
+              backgroundColor: 'rgba(212, 175, 55, 0.12)',
+              border: '1px solid var(--accent-color)',
+              color: 'var(--accent-color)',
+              fontSize: '0.88rem',
+              fontWeight: 'bold'
+            }}>
+              <Pin size={15} style={{ fill: 'currentColor' }} />
+              <span>{t('entry.packaging.fixed_terms_title', { defaultValue: 'الشروط المثبتة' })}: {selectedTerms.filter(t => fixedTerms.includes(t)).length}</span>
+            </div>
 
-            {/* 2. Additional Custom Terms Section */}
-            {selectedTerms.filter(t => !fixedTerms.includes(t)).length > 0 && (
-              <div>
-                <div style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--text-muted)', marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <Sparkles size={13} />
-                  <span>{t('reports.additional_terms_section_title', { defaultValue: 'الشروط الإضافية الخاصة (ستظهر في النصف الثاني من الفاتورة):' })}</span>
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                  {selectedTerms.filter(t => !fixedTerms.includes(t)).map((term, i) => (
-                    <div 
-                      key={i}
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '0.4rem',
-                        backgroundColor: 'var(--surface-color)',
-                        border: '1px solid var(--border-color)',
-                        borderRadius: '6px',
-                        padding: '0.3rem 0.7rem',
-                        fontSize: '0.85rem',
-                        color: 'var(--text-main)'
-                      }}
-                    >
-                      <span>{term}</span>
-                      <button 
-                        type="button"
-                        onClick={() => setSelectedTerms(prev => prev.filter(t => t !== term))}
-                        title={t('reports.remove_extra_term', { defaultValue: 'حذف الشرط الإضافي' })}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          padding: 0,
-                          cursor: 'pointer',
-                          color: '#ef4444',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          marginRight: '2px'
-                        }}
-                      >
-                        <X size={14} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              padding: '0.45rem 1rem',
+              borderRadius: '8px',
+              backgroundColor: selectedTerms.filter(t => !fixedTerms.includes(t)).length > 0 ? 'rgba(59, 130, 246, 0.12)' : 'rgba(255, 255, 255, 0.04)',
+              border: `1px solid ${selectedTerms.filter(t => !fixedTerms.includes(t)).length > 0 ? 'rgba(59, 130, 246, 0.35)' : 'var(--border-color)'}`,
+              color: selectedTerms.filter(t => !fixedTerms.includes(t)).length > 0 ? '#60a5fa' : 'var(--text-muted)',
+              fontSize: '0.88rem',
+              fontWeight: '600'
+            }}>
+              <Sparkles size={15} />
+              <span>{t('entry.packaging.extra_terms_title', { defaultValue: 'الشروط الإضافية المختارة' })}: {selectedTerms.filter(t => !fixedTerms.includes(t)).length}</span>
+            </div>
           </div>
         )}
       </div>

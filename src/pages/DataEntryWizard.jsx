@@ -57,6 +57,7 @@ const DataEntryWizard = () => {
   const SECTIONS = [
     { id: 'section-factory', label: t('entry.factory.section_title'), icon: Box },
     { id: 'section-model', label: t('entry.buyer.serial_no_manual'), icon: Hash },
+    { id: 'section-other-info', label: t('entry.buyer.section_title'), icon: Info },
     { id: 'section-images', label: t('entry.buyer.product_images'), icon: Camera },
     { id: 'section-remarks', label: t('entry.buyer.remarks'), icon: MessageSquare },
     { id: 'section-packaging', label: t('entry.factory.carton_package'), icon: Package },
@@ -66,7 +67,6 @@ const DataEntryWizard = () => {
     { id: 'section-measurements', label: t('entry.measurements.section_title'), icon: Ruler },
     { id: 'section-dates', label: t('entry.dates.section_title'), icon: Calendar },
     { id: 'section-trademark', label: t('entry.fabrics.trade_mark'), icon: Award },
-    { id: 'section-other-info', label: t('entry.buyer.section_title'), icon: Info },
     { id: 'section-conditions', label: t('entry.packaging.section_title'), icon: CheckSquare },
   ];
   const TABS = SECTIONS;
@@ -1655,6 +1655,178 @@ const DataEntryWizard = () => {
           </div>
         </div>
 
+        {/* ═══ 3. بيانات المشتري والمنتج ═══ */}
+        <div className="card" id="section-other-info" style={{ scrollMarginTop: '5.5rem', marginBottom: 0 }}>
+          <div className="tab-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+            <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+              <Info size={20} color="var(--accent-color)" />
+              <span>{t('entry.buyer.section_title')}</span>
+            </h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(212, 175, 55, 0.1)', padding: '0.4rem 1rem', borderRadius: '8px', border: '1px dashed var(--accent-color)' }}>
+              <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>{t('entry.buyer.order_no')}</span>
+              <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--accent-color)' }}>{currentOrder.orderNumber || '---'}</span>
+            </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem' }}>
+            <div className="form-group">
+              <label className="form-label">{t('entry.buyer.product_name')}</label>
+              <ClearableSelect className="form-control" value={currentOrder.productName} onChange={(e) => updateOrder('productName', e.target.value)} clearTitle={t('entry.actions.clear_btn')}>
+                <option value="">{t('entry.buyer.product_name_placeholder')}</option>
+                {lookups.products?.map((p, i) => {
+                  const val = typeof p === 'object' ? p.name : p;
+                  return <option key={i} value={val}>{val}</option>;
+                })}
+              </ClearableSelect>
+            </div>
+                <div className="form-group">
+                   <label className="form-label">{t('entry.buyer.buyer_code')}</label>
+                   <ClearableSelect className="form-control" value={currentOrder.buyerMobile || ''} onChange={(e) => updateOrder('buyerMobile', e.target.value)} clearTitle={t('entry.actions.clear_btn')}>
+                    <option value="">{t('entry.buyer.buyer_code_placeholder')}</option>
+                    {lookups.buyerCodes?.map((code, i) => {
+                      const val = typeof code === 'object' ? code.name : code;
+                      return <option key={i} value={val}>{val}</option>;
+                    })}
+                  </ClearableSelect>
+                </div>
+                <div className="form-group">
+                   <label className="form-label">{t('entry.buyer.buyer_number')}</label>
+                  <input type="text" className="form-control" value={currentOrder.buyerNumber || ''} onChange={(e) => updateOrder('buyerNumber', e.target.value)} />
+                </div>
+
+                <div className="form-group">
+                   <label className="form-label">{t('entry.buyer.company_name')}</label>
+                     <select className="form-control" value={currentOrder.buyerCompany || ''} onChange={(e) => updateOrder('buyerCompany', e.target.value)}>
+                        <option value="">{t('entry.actions.select_company_placeholder')}</option>
+                       {filteredLookups.companies?.map((c, i) => <option key={i} value={typeof c === 'object' ? c.name : c}>{typeof c === 'object' ? c.name : c}</option>)}
+                     </select>
+                </div>
+                {currentOrder.buyerCompany && (() => {
+                  const selectedCompanyObj = Array.isArray(lookups.companies) ? lookups.companies.find(c => (c.name === currentOrder.buyerCompany || c === currentOrder.buyerCompany)) : null;
+                  if (selectedCompanyObj && (selectedCompanyObj.mobile || selectedCompanyObj.fax || selectedCompanyObj.address)) {
+                    return (
+                      <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+                        {selectedCompanyObj.mobile && (
+                          <div className="form-group" style={{ flex: 1, minWidth: '150px', marginBottom: 0 }}>
+                            <label className="form-label" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('admin.company_mobile') || 'Company Mobile'}</label>
+                            <input type="text" className="form-control" value={selectedCompanyObj.mobile} readOnly style={{ backgroundColor: 'var(--bg-color)', opacity: 0.8, borderStyle: 'dashed' }} />
+                          </div>
+                        )}
+                        {selectedCompanyObj.fax && (
+                          <div className="form-group" style={{ flex: 1, minWidth: '150px', marginBottom: 0 }}>
+                            <label className="form-label" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('admin.company_fax') || 'Company Fax'}</label>
+                            <input type="text" className="form-control" value={selectedCompanyObj.fax} readOnly style={{ backgroundColor: 'var(--bg-color)', opacity: 0.8, borderStyle: 'dashed' }} />
+                          </div>
+                        )}
+                        {selectedCompanyObj.address && (
+                          <div className="form-group" style={{ flex: 2, minWidth: '200px', marginBottom: 0 }}>
+                            <label className="form-label" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('admin.company_address') || 'Company Address'}</label>
+                            <input type="text" className="form-control" value={selectedCompanyObj.address} readOnly style={{ backgroundColor: 'var(--bg-color)', opacity: 0.8, borderStyle: 'dashed' }} />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+
+                            <div className="form-group">
+                   <label className="form-label">{t('entry.buyer.price_currency')}</label>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                     <input type="text" inputMode="decimal" className="form-control" placeholder={t('entry.buyer.price_placeholder')} style={{ flex: 2, textAlign: 'right' }} value={currentOrder.productPrice || ''} onChange={(e) => updateOrder('productPrice', e.target.value.replace(/[^0-9.]/g, ''))} />
+                     <ClearableSelect className="form-control" style={{ flex: 1 }} value={currentOrder.currency || ''} onChange={(e) => updateOrder('currency', e.target.value)} clearTitle={t('entry.actions.clear_btn')}>
+                       <option value="">{t('entry.buyer.currency_placeholder')}</option>
+                      {lookups.currencies?.map((c, i) => <option key={i} value={c}>{c}</option>)}
+                    </ClearableSelect>
+                  </div>
+                </div>
+
+                <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                   <label className="form-label">{t('entry.buyer.sale_type')}</label>
+                  <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                     <ClearableSelect className="form-control" style={{ flex: '0 0 200px' }} value={currentOrder.saleType || ''} onChange={(e) => {
+                       const val = e.target.value;
+                       updateOrder('saleType', val);
+                       if (val === 'تجزئة') {
+                          updateOrder('retailPercentage', '100');
+                          updateOrder('wholesalePercentage', '0');
+                       } else if (val === 'جملة') {
+                          updateOrder('wholesalePercentage', '100');
+                          updateOrder('retailPercentage', '0');
+                       } else {
+                          updateOrder('retailPercentage', '');
+                          updateOrder('wholesalePercentage', '');
+                       }
+                     }} clearTitle={t('entry.actions.clear_btn')}>
+                       <option value="">{t('entry.buyer.sale_type_placeholder')}</option>
+                       <option value="تجزئة">{t('entry.buyer.retail')}</option>
+                       <option value="جملة">{t('entry.buyer.wholesale')}</option>
+                       <option value="جملة وتجزئة">{t('entry.buyer.both')}</option>
+                    </ClearableSelect>
+
+                    {currentOrder.saleType === 'تجزئة' && (
+                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                           <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{t('entry.buyer.retail_percentage')}</span>
+                          <input type="text" className="form-control" value="100%" readOnly style={{ width: '80px', backgroundColor: 'var(--bg-color)', color: 'var(--accent-color)', fontWeight: 'bold', textAlign: 'center' }} />
+                       </div>
+                    )}
+                    
+                    {currentOrder.saleType === 'جملة' && (
+                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                           <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{t('entry.buyer.wholesale_percentage')}</span>
+                          <input type="text" className="form-control" value="100%" readOnly style={{ width: '80px', backgroundColor: 'var(--bg-color)', color: 'var(--accent-color)', fontWeight: 'bold', textAlign: 'center' }} />
+                       </div>
+                    )}
+
+                    {currentOrder.saleType === 'جملة وتجزئة' && (
+                       <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <span style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}>{t('entry.buyer.wholesale')} %:</span>
+                             <input type="number" min="0" max="100" className="form-control" placeholder={t('entry.buyer.example', { value: 60 })} 
+                               style={{ width: '100px' }}
+                               value={currentOrder.wholesalePercentage || ''} 
+                               onChange={(e) => {
+                                  let val = e.target.value;
+                                  let num = parseInt(val) || 0;
+                                  let other = parseInt(currentOrder.retailPercentage) || 0;
+                                  if (num + other > 100) {
+                                     toast.error(t('entry.messages.material_limit_error', { allowed: 100 - other }));
+                                     return;
+                                  }
+                                  updateOrder('wholesalePercentage', val);
+                               }} 
+                             />
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <span style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}>{t('entry.buyer.retail')} %:</span>
+                             <input type="number" min="0" max="100" className="form-control" placeholder={t('entry.buyer.example', { value: 40 })} 
+                               style={{ width: '100px' }}
+                               value={currentOrder.retailPercentage || ''}
+                               onChange={(e) => {
+                                  let val = e.target.value;
+                                  let num = parseInt(val) || 0;
+                                  let other = parseInt(currentOrder.wholesalePercentage) || 0;
+                                  if (num + other > 100) {
+                                     toast.error(t('entry.messages.material_limit_error', { allowed: 100 - other }));
+                                     return;
+                                  }
+                                  updateOrder('retailPercentage', val);
+                               }} 
+                             />
+                          </div>
+                       </div>
+                    )}
+                  </div>
+                </div>
+
+
+                            <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                  <label className="form-label">{t('entry.dates.total_quantity')}</label>
+                  <input type="text" inputMode="numeric" className="form-control" style={{ textAlign: 'right' }} value={currentOrder.totalQuantity || ''} onChange={(e) => updateOrder('totalQuantity', e.target.value.replace(/[^0-9]/g, ''))} />
+                </div>
+
+          </div>
+        </div>
+
         {/* ═══ 3. رفع الصور ═══ */}
         <div className="card" id="section-images" style={{ scrollMarginTop: '5.5rem', marginBottom: 0 }}>
           <div className="tab-section-header" style={{ marginBottom: '1.25rem' }}>
@@ -2511,178 +2683,6 @@ const DataEntryWizard = () => {
           </div>
         </div>
 
-        {/* ═══ 12. الاشياء الاخرى ═══ */}
-        <div className="card" id="section-other-info" style={{ scrollMarginTop: '5.5rem', marginBottom: 0 }}>
-          <div className="tab-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-            <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
-              <Info size={20} color="var(--accent-color)" />
-              <span>{t('entry.buyer.section_title')}</span>
-            </h3>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(212, 175, 55, 0.1)', padding: '0.4rem 1rem', borderRadius: '8px', border: '1px dashed var(--accent-color)' }}>
-              <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>{t('entry.buyer.order_no')}</span>
-              <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--accent-color)' }}>{currentOrder.orderNumber || '---'}</span>
-            </div>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem' }}>
-            <div className="form-group">
-              <label className="form-label">{t('entry.buyer.product_name')}</label>
-              <ClearableSelect className="form-control" value={currentOrder.productName} onChange={(e) => updateOrder('productName', e.target.value)} clearTitle={t('entry.actions.clear_btn')}>
-                <option value="">{t('entry.buyer.product_name_placeholder')}</option>
-                {lookups.products?.map((p, i) => {
-                  const val = typeof p === 'object' ? p.name : p;
-                  return <option key={i} value={val}>{val}</option>;
-                })}
-              </ClearableSelect>
-            </div>
-                <div className="form-group">
-                   <label className="form-label">{t('entry.buyer.buyer_code')}</label>
-                   <ClearableSelect className="form-control" value={currentOrder.buyerMobile || ''} onChange={(e) => updateOrder('buyerMobile', e.target.value)} clearTitle={t('entry.actions.clear_btn')}>
-                    <option value="">{t('entry.buyer.buyer_code_placeholder')}</option>
-                    {lookups.buyerCodes?.map((code, i) => {
-                      const val = typeof code === 'object' ? code.name : code;
-                      return <option key={i} value={val}>{val}</option>;
-                    })}
-                  </ClearableSelect>
-                </div>
-                <div className="form-group">
-                   <label className="form-label">{t('entry.buyer.buyer_number')}</label>
-                  <input type="text" className="form-control" value={currentOrder.buyerNumber || ''} onChange={(e) => updateOrder('buyerNumber', e.target.value)} />
-                </div>
-
-                <div className="form-group">
-                   <label className="form-label">{t('entry.buyer.company_name')}</label>
-                     <select className="form-control" value={currentOrder.buyerCompany || ''} onChange={(e) => updateOrder('buyerCompany', e.target.value)}>
-                        <option value="">{t('entry.actions.select_company_placeholder')}</option>
-                       {filteredLookups.companies?.map((c, i) => <option key={i} value={typeof c === 'object' ? c.name : c}>{typeof c === 'object' ? c.name : c}</option>)}
-                     </select>
-                </div>
-                {currentOrder.buyerCompany && (() => {
-                  const selectedCompanyObj = Array.isArray(lookups.companies) ? lookups.companies.find(c => (c.name === currentOrder.buyerCompany || c === currentOrder.buyerCompany)) : null;
-                  if (selectedCompanyObj && (selectedCompanyObj.mobile || selectedCompanyObj.fax || selectedCompanyObj.address)) {
-                    return (
-                      <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-                        {selectedCompanyObj.mobile && (
-                          <div className="form-group" style={{ flex: 1, minWidth: '150px', marginBottom: 0 }}>
-                            <label className="form-label" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('admin.company_mobile') || 'Company Mobile'}</label>
-                            <input type="text" className="form-control" value={selectedCompanyObj.mobile} readOnly style={{ backgroundColor: 'var(--bg-color)', opacity: 0.8, borderStyle: 'dashed' }} />
-                          </div>
-                        )}
-                        {selectedCompanyObj.fax && (
-                          <div className="form-group" style={{ flex: 1, minWidth: '150px', marginBottom: 0 }}>
-                            <label className="form-label" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('admin.company_fax') || 'Company Fax'}</label>
-                            <input type="text" className="form-control" value={selectedCompanyObj.fax} readOnly style={{ backgroundColor: 'var(--bg-color)', opacity: 0.8, borderStyle: 'dashed' }} />
-                          </div>
-                        )}
-                        {selectedCompanyObj.address && (
-                          <div className="form-group" style={{ flex: 2, minWidth: '200px', marginBottom: 0 }}>
-                            <label className="form-label" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('admin.company_address') || 'Company Address'}</label>
-                            <input type="text" className="form-control" value={selectedCompanyObj.address} readOnly style={{ backgroundColor: 'var(--bg-color)', opacity: 0.8, borderStyle: 'dashed' }} />
-                          </div>
-                        )}
-                      </div>
-                    );
-                  }
-                  return null;
-                })()}
-
-                            <div className="form-group">
-                   <label className="form-label">{t('entry.buyer.price_currency')}</label>
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                     <input type="text" inputMode="decimal" className="form-control" placeholder={t('entry.buyer.price_placeholder')} style={{ flex: 2, textAlign: 'right' }} value={currentOrder.productPrice || ''} onChange={(e) => updateOrder('productPrice', e.target.value.replace(/[^0-9.]/g, ''))} />
-                     <ClearableSelect className="form-control" style={{ flex: 1 }} value={currentOrder.currency || ''} onChange={(e) => updateOrder('currency', e.target.value)} clearTitle={t('entry.actions.clear_btn')}>
-                       <option value="">{t('entry.buyer.currency_placeholder')}</option>
-                      {lookups.currencies?.map((c, i) => <option key={i} value={c}>{c}</option>)}
-                    </ClearableSelect>
-                  </div>
-                </div>
-
-                <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-                   <label className="form-label">{t('entry.buyer.sale_type')}</label>
-                  <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
-                     <ClearableSelect className="form-control" style={{ flex: '0 0 200px' }} value={currentOrder.saleType || ''} onChange={(e) => {
-                       const val = e.target.value;
-                       updateOrder('saleType', val);
-                       if (val === 'تجزئة') {
-                          updateOrder('retailPercentage', '100');
-                          updateOrder('wholesalePercentage', '0');
-                       } else if (val === 'جملة') {
-                          updateOrder('wholesalePercentage', '100');
-                          updateOrder('retailPercentage', '0');
-                       } else {
-                          updateOrder('retailPercentage', '');
-                          updateOrder('wholesalePercentage', '');
-                       }
-                     }} clearTitle={t('entry.actions.clear_btn')}>
-                       <option value="">{t('entry.buyer.sale_type_placeholder')}</option>
-                       <option value="تجزئة">{t('entry.buyer.retail')}</option>
-                       <option value="جملة">{t('entry.buyer.wholesale')}</option>
-                       <option value="جملة وتجزئة">{t('entry.buyer.both')}</option>
-                    </ClearableSelect>
-
-                    {currentOrder.saleType === 'تجزئة' && (
-                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                           <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{t('entry.buyer.retail_percentage')}</span>
-                          <input type="text" className="form-control" value="100%" readOnly style={{ width: '80px', backgroundColor: 'var(--bg-color)', color: 'var(--accent-color)', fontWeight: 'bold', textAlign: 'center' }} />
-                       </div>
-                    )}
-                    
-                    {currentOrder.saleType === 'جملة' && (
-                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                           <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{t('entry.buyer.wholesale_percentage')}</span>
-                          <input type="text" className="form-control" value="100%" readOnly style={{ width: '80px', backgroundColor: 'var(--bg-color)', color: 'var(--accent-color)', fontWeight: 'bold', textAlign: 'center' }} />
-                       </div>
-                    )}
-
-                    {currentOrder.saleType === 'جملة وتجزئة' && (
-                       <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                              <span style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}>{t('entry.buyer.wholesale')} %:</span>
-                             <input type="number" min="0" max="100" className="form-control" placeholder={t('entry.buyer.example', { value: 60 })} 
-                               style={{ width: '100px' }}
-                               value={currentOrder.wholesalePercentage || ''} 
-                               onChange={(e) => {
-                                  let val = e.target.value;
-                                  let num = parseInt(val) || 0;
-                                  let other = parseInt(currentOrder.retailPercentage) || 0;
-                                  if (num + other > 100) {
-                                     toast.error(t('entry.messages.material_limit_error', { allowed: 100 - other }));
-                                     return;
-                                  }
-                                  updateOrder('wholesalePercentage', val);
-                               }} 
-                             />
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                              <span style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}>{t('entry.buyer.retail')} %:</span>
-                             <input type="number" min="0" max="100" className="form-control" placeholder={t('entry.buyer.example', { value: 40 })} 
-                               style={{ width: '100px' }}
-                               value={currentOrder.retailPercentage || ''}
-                               onChange={(e) => {
-                                  let val = e.target.value;
-                                  let num = parseInt(val) || 0;
-                                  let other = parseInt(currentOrder.wholesalePercentage) || 0;
-                                  if (num + other > 100) {
-                                     toast.error(t('entry.messages.material_limit_error', { allowed: 100 - other }));
-                                     return;
-                                  }
-                                  updateOrder('retailPercentage', val);
-                               }} 
-                             />
-                          </div>
-                       </div>
-                    )}
-                  </div>
-                </div>
-
-
-                            <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-                  <label className="form-label">{t('entry.dates.total_quantity')}</label>
-                  <input type="text" inputMode="numeric" className="form-control" style={{ textAlign: 'right' }} value={currentOrder.totalQuantity || ''} onChange={(e) => updateOrder('totalQuantity', e.target.value.replace(/[^0-9]/g, ''))} />
-                </div>
-
-          </div>
-        </div>
-
         {/* ═══ 13. الشروط المطلوبة ═══ */}
         <div className="card" id="section-conditions" style={{ scrollMarginTop: '5.5rem', marginBottom: 0 }}>
           <div className="tab-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
@@ -3199,80 +3199,6 @@ return (
 
               </div>
 
-      {/* ═══ Sticky Section Navigation Bar ═══ */}
-      <div style={{
-        display: 'flex',
-        flexWrap: 'wrap',
-        gap: '0.45rem',
-        padding: '0.65rem 0.85rem',
-        background: 'var(--glass-bg, rgba(20, 20, 25, 0.88))',
-        backdropFilter: 'blur(16px)',
-        border: '1px solid rgba(212, 175, 55, 0.22)',
-        borderRadius: 'var(--radius-lg)',
-        position: 'sticky',
-        top: '0.5rem',
-        zIndex: 25,
-        boxShadow: '0 4px 20px rgba(0, 0, 0, 0.4)',
-        marginBottom: '1.5rem'
-      }}>
-        {SECTIONS.map((sec, idx) => {
-          const Icon = sec.icon;
-          return (
-            <button
-              key={sec.id}
-              type="button"
-              onClick={() => {
-                const el = document.getElementById(sec.id);
-                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-              }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.4rem',
-                padding: '0.4rem 0.75rem',
-                border: '1px solid rgba(212, 175, 55, 0.18)',
-                background: 'rgba(212, 175, 55, 0.07)',
-                color: 'var(--text-muted)',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                fontSize: '0.8rem',
-                fontWeight: '600',
-                transition: 'all 0.2s ease',
-                flexShrink: 0,
-              }}
-              onMouseEnter={e => {
-                e.currentTarget.style.background = 'rgba(212, 175, 55, 0.2)';
-                e.currentTarget.style.color = 'var(--accent-color)';
-                e.currentTarget.style.borderColor = 'rgba(212, 175, 55, 0.5)';
-                e.currentTarget.style.transform = 'translateY(-1px)';
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.background = 'rgba(212, 175, 55, 0.07)';
-                e.currentTarget.style.color = 'var(--text-muted)';
-                e.currentTarget.style.borderColor = 'rgba(212, 175, 55, 0.18)';
-                e.currentTarget.style.transform = 'translateY(0)';
-              }}
-            >
-              <span style={{ 
-                fontSize: '0.72rem', 
-                backgroundColor: 'rgba(212, 175, 55, 0.25)', 
-                color: 'var(--accent-color)', 
-                borderRadius: '50%', 
-                width: '18px', 
-                height: '18px', 
-                display: 'inline-flex', 
-                alignItems: 'center', 
-                justifyContent: 'center',
-                fontWeight: 'bold'
-              }}>
-                {idx + 1}
-              </span>
-              <Icon size={14} />
-              {sec.label}
-            </button>
-          );
-        })}
-      </div>
 
       <div className="tab-content-wrapper" style={{ 
         pointerEvents: (isEditMode && !hasPermission('entry', 'edit')) || (!isEditMode && !hasPermission('entry', 'add')) ? 'none' : 'auto', 

@@ -166,9 +166,11 @@
       "serial_no_manual": "Serial Number (Manual Entry)",
       "serial_placeholder": "Enter number and press Enter to fetch...",
       "checking": "Checking...",
-      "used": "⚠️ Already Used!",
-      "used_in_old": "⚠️ Exists in Old Items List!",
-      "available": "✅ Number available for use.",
+      "used": "⚠️ Model number already used in orders!",
+      "used_in_old": "⚠️ Exists in legacy items list!",
+      "available": "✅ Number is available for use.",
+      "current_received": "🔒 This model is already received (change it to create a new copy)",
+      "current_order": "ℹ️ Current model number for this order",
       "fetch_hint": "Press Enter to fetch product data",
       "generated_barcode": "Generated Barcode:",
       "buyer_code": "Customer Code",
@@ -197,7 +199,9 @@
       "gallery_upload": "Choose from Gallery",
       "camera_upload": "Capture from Camera",
       "uploading": "Uploading images...",
-      "no_images": "No images added yet — click buttons above to upload product photos"
+      "no_images": "No images added yet — click buttons above to upload product photos",
+      "locked_badge": "Locked",
+      "editable_for_copy": "The only field editable when creating a new copy"
     },
     "dates": {
       "section_title": "Dates, Quantity & Sizes",
@@ -237,7 +241,14 @@
       "carton_size": "Carton Size",
       "plastic_bag_size": "Plastic Bag Sizes",
       "auto_calc_placeholder": "Calculated automatically...",
-      "not_enough_qty": "Insufficient Quantity"
+      "not_enough_qty": "Insufficient Quantity",
+      "add_name_required": "Please enter factory name",
+      "add_duplicate_name": "This factory already exists",
+      "add_success": "Factory added and selected successfully",
+      "add_failed": "Failed to save factory, please try again",
+      "add_factory": "Add Factory",
+      "add_saving": "Saving...",
+      "add_save": "Save Factory"
     },
     "colors": {
       "section_title": "Color & Size Distribution",
@@ -283,7 +294,21 @@
         "term_pinned": "📌 Pinned \"{{name}}\" as default condition for all orders!",
         "term_unpinned": "Unpinned \"{{name}}\" from default conditions",
         "terms_saved_fixed": "📌 Saved ({{count}}) default conditions for all future orders!"
-      }
+      },
+      "fixed_terms_title": "Fixed Terms",
+      "extra_terms_title": "Selected Additional Terms",
+      "empty_condition": "Please enter term text",
+      "edit_success": "Updated successfully",
+      "add_success": "Added successfully",
+      "confirm_delete": "Are you sure you want to delete this term from the master list?",
+      "delete_success": "Deleted successfully",
+      "edit_conditions_list": "Manage Master Terms List",
+      "new_condition_placeholder": "Enter new term text...",
+      "btn_edit": "Edit",
+      "btn_add": "Add",
+      "btn_cancel": "Cancel",
+      "btn_delete": "Delete",
+      "no_conditions_yet": "No terms added yet."
     },
     "measurements": {
       "section_title": "Detailed Product Measurements",
@@ -316,15 +341,15 @@
       "download_pdf_tooltip": "Download export document and invoice as PDF"
     },
     "messages": {
-      "enter_serial": "Please enter serial number",
-      "checking_serial": "Checking serial number...",
-      "serial_available": "Serial number is available",
-      "serial_taken": "Serial number is already taken!",
+      "enter_serial": "Please enter model number",
+      "checking_serial": "Checking model number...",
+      "serial_available": "Model number available",
+      "serial_taken": "Model number is already taken!",
       "saving": "Saving new order...",
       "save_success": "New order ({{serial}}) saved successfully!",
       "save_error": "An error occurred while saving!",
       "confirm_delete": "Are you sure you want to delete order No ({{serial}}) entirely?\n\n- Data will be permanently removed from the database.\n- The Item No will be released for reuse.\n- All associated images will be deleted.",
-      "delete_error": "Error deleting order",
+      "delete_error": "Error deleting item",
       "copy_success": "New copy saved with No ({{serial}}) successfully!",
       "missing_serial": "Serial data missing",
       "connection_error": "Connection error",
@@ -335,6 +360,8 @@
       "confirm_delete_image": "Are you sure you want to delete this image?",
       "delete_success_image": "Image deleted successfully",
       "received_already": "This product has already been received by the warehouse and cannot be edited",
+      "product_received_no_edit": "⚠️ This item has been received at the warehouse and cannot be edited! You may only change the model number to save as a new copy.",
+      "product_received_badge": "Notice: This product has already been received in the warehouse",
       "save_as_copy": "Save as Copy",
       "delete_btn": "Delete Order",
       "edit_image": "Edit Image",
@@ -378,7 +405,9 @@
       "cleared_success": "All fields cleared successfully",
       "material_limit_error": "Reached maximum (100%). Allowed for this field is {{allowed}}% only.",
       "all_colors_selected": "All colors selected ({{count}})",
-      "delivery_date_reset": "Delivery date cleared because it became earlier than the new request date"
+      "delivery_date_reset": "Delivery date cleared because it became earlier than the new request date",
+      "insufficient_quantity": "Total quantity is insufficient for one carton",
+      "upload_in_progress": "Images are currently uploading, please wait for completion!"
     },
     "units": {
       "carton": "Carton",
@@ -459,6 +488,18 @@
       "preparing_pdf": "Preparing PDF for download...",
       "download_success": "PDF downloaded successfully!",
       "download_error": "Error downloading PDF"
+    },
+    "export_modal": {
+      "pdf_title": "Export Document & Contract Download Options (PDF)",
+      "print_title": "Export Document & Contract Print Options",
+      "subtitle": "Choose how prices and financial data are displayed",
+      "prompt_question": "Do you want to include prices and financial totals in the document?",
+      "with_prices_title": "Document With Prices (Show Item Price & Total)",
+      "with_prices_badge": "With Prices",
+      "with_prices_desc": "Displays unit price (¥) and grand total. Suitable for management and accounting.",
+      "no_prices_title": "Document Without Prices (Hide Financial Amounts)",
+      "no_prices_badge": "For Factories & Workshops",
+      "no_prices_desc": "Omits unit price and total amount columns to preserve price confidentiality when sending contracts to factories."
     }
   },
   "receiving": {
@@ -541,6 +582,9 @@
       "received_status_required": "Change status to \"Received\" first",
       "qty_mismatch_warning": "Note: Received quantity ({{received}}) does not match original ({{expected}})",
       "colors_mismatch_warning": "Note: Color quantities ({{colors}}) do not match total pieces ({{total}})"
+    },
+    "table": {
+      "auto": "Auto"
     }
   },
   "owner": {
@@ -616,7 +660,8 @@
       "generate_btn": "Generate Table",
       "loading": "Fetching...",
       "setup_btn": "Page Setup",
-      "print_btn": "Proceed to Print"
+      "print_btn": "Proceed to Print",
+      "title": "Serial Numbers List"
     },
     "stats": {
       "total_pcs": "Total Pieces",
@@ -732,7 +777,9 @@
         "review_order": "Review",
         "review_tooltip": "Review & edit order in Data Entry wizard",
         "actions": "Actions"
-      }
+      },
+      "total_sum": "Total (合计)",
+      "items_count": "{{count}} items"
     },
     "detailed_terms": "Required Conditions for Invoice",
     "no_terms_available": "No additional terms available at the moment. You can add them in Settings.",
@@ -763,7 +810,10 @@
       "pdf_error": "Error downloading PDF",
       "term_pinned": "📌 Set \"{{name}}\" as default condition!",
       "term_unpinned": "Unpinned \"{{name}}\" from default conditions",
-      "terms_saved_fixed": "📌 Saved ({{count}}) default conditions for all future invoices!"
+      "terms_saved_fixed": "📌 Saved ({{count}}) default conditions for all future invoices!",
+      "excel_success": "Excel exported successfully (with prices)",
+      "excel_success_no_prices": "Excel exported successfully (without prices)",
+      "pdf_success_no_prices": "Contract PDF exported successfully (without prices)"
     },
     "excel_headers": {
       "serial": "Model NO. (Serial)",
@@ -780,7 +830,11 @@
       "remarks": "Remarks",
       "order_date": "Order Date",
       "delivery_date": "Delivery Date",
-      "system_date": "System Add Date"
+      "system_date": "System Add Date",
+      "barcode": "Barcode",
+      "colors_count": "Colors Count",
+      "sizes_count": "Sizes Count",
+      "sheet_name": "Orders Report"
     },
     "selected_terms_count": "{{count}} conditions selected",
     "select_terms_placeholder": "Select required conditions...",
@@ -802,7 +856,21 @@
     "unpin_for_this_invoice": "Deselect for this invoice only",
     "remove_extra_term": "Remove additional condition",
     "fixed_status_count": "({{count}} default permanent)",
-    "no_conditions_selected": "No conditions selected"
+    "no_conditions_selected": "No conditions selected",
+    "edit_master_list": "Edit System Master Terms List",
+    "edit_list_btn": "Manage Master Terms",
+    "export_modal": {
+      "pdf_title": "Order Contract Download Options (PDF)",
+      "excel_title": "Report Export Options (Excel)",
+      "subtitle": "Choose how prices and financial data are displayed in the file",
+      "prompt_question": "Do you want to include price, currency, and total amount columns?",
+      "with_prices_title": "Contract With Prices (Show Prices & Currency)",
+      "with_prices_badge": "Complete Version",
+      "with_prices_desc": "Displays currency, unit price, and total amount columns. Suitable for accounting and management.",
+      "no_prices_title": "Contract Without Prices (Hide Financial Amounts)",
+      "no_prices_badge": "For Factories & Workshops",
+      "no_prices_desc": "Hides currency, unit price, and total amount columns for confidentiality when sending to factories."
+    }
   },
   "shipping": {
     "title": "Shipping Invoice & Comprehensive Reports",
@@ -858,7 +926,8 @@
       "invoice_total": "Invoice Total",
       "say_total": "SAY TOTAL AMOUNT IS",
       "container_no": "CONTAINER NO :",
-      "seal_no": "SEAL NO :"
+      "seal_no": "SEAL NO :",
+      "ctn": "CTN"
     },
     "fetch_dialog": {
       "title": "Fetch Product Data",
@@ -1057,7 +1126,19 @@
       "account_suspended": "This account is suspended, please contact administration",
       "wrong_password": "Incorrect password",
       "account_deleted_suspended": "This account is deleted or suspended!",
-      "login_error": "An error occurred while trying to log in"
+      "login_error": "An error occurred while trying to log in",
+      "mfa_setup_failed": "Failed to initialize two-factor authentication",
+      "copied_success": "Secret key copied!",
+      "invalid_totp_format": "Code must be 6 digits",
+      "mfa_enabled_success": "Two-factor authentication successfully enabled!",
+      "wrong_totp_code": "Invalid or expired verification code",
+      "confirm_disable_mfa": "Are you sure you want to disable two-factor authentication? This reduces account security.",
+      "mfa_disabled_success": "Two-factor authentication disabled successfully.",
+      "mfa_disable_failed": "Failed to disable two-factor authentication",
+      "fill_all_digits": "Please enter all 6 digits",
+      "no_mfa_factors": "No two-factor authentication factors enabled",
+      "mfa_verified_success": "Verification successful!",
+      "unauthorized": "You are not authorized to view orders for this factory"
     },
     "login_desc": "Enter your credentials to access the system",
     "logout": "Logout",
@@ -1102,7 +1183,13 @@
     "user_saved": "User saved successfully!",
     "user_deleted": "User deleted successfully!",
     "confirm_delete": "Are you sure you want to delete this user?",
-    "delete_error": "Error deleting user"
+    "delete_error": "Error deleting user",
+    "activating": "Activating...",
+    "mfa_title": "Two-Factor Authentication (2FA)",
+    "mfa_subtitle": "Please enter the 6-digit code generated in your authenticator app.",
+    "verifying": "Verifying...",
+    "verify_btn": "Verify Code",
+    "logout_btn": "Log Out & Return"
   },
   "admin": {
     "title": "Strategic Dashboard",
@@ -1168,7 +1255,9 @@
       "packagingConditionsList": "Required Conditions",
       "buyerCodes": "Buyer Codes",
       "oldItems": "Old Items List",
-      "system_users": "User Management"
+      "system_users": "User Management",
+      "backup": "Backup & Restore",
+      "security": "Account Security"
     },
     "messages": {
       "valid_name_required": "Please enter a valid name or value",
@@ -1185,7 +1274,9 @@
       "add_success": "Added successfully ✅",
       "item_deleted": "Item deleted 🗑️",
       "reorder_success": "Item reordered successfully ✨",
-      "edit_mode_active": "Edit mode is active..."
+      "edit_mode_active": "Edit mode is active...",
+      "upload_failed": "Failed to upload file",
+      "db_error": "Error fetching data from cloud"
     },
     "fields": {
       "name": "Name",
@@ -1203,7 +1294,47 @@
       "delete": "Delete",
       "assign_parts": "Assign Component Parts"
     },
-    "select_color_title": "Select Display Color"
+    "select_color_title": "Select Display Color",
+    "old_items": {
+      "empty_file": "Excel file is empty and contains no data rows!",
+      "no_valid_rows": "No valid rows found (each row must contain at least an item code or barcode)",
+      "parse_success": "File parsed successfully! Ready to upload {{count}} items.",
+      "parse_error": "Error reading Excel file. Please verify the file format.",
+      "uploading_toast": "Starting item upload...",
+      "upload_progress": "Uploading data: {{uploaded}} of {{total}} ({{percent}}%)",
+      "upload_complete": "Congratulations! Successfully uploaded {{total}} items.",
+      "upload_fail": "Upload failed.",
+      "confirm_delete_single": "Are you sure you want to delete item ({{code}})?",
+      "delete_single_success": "Item deleted successfully.",
+      "delete_fail": "Error deleting item",
+      "confirm_clear_all": "⚠️ Critical Warning:\n\nAre you sure you want to delete all old items ({{count}} items) from the database?\nThis action cannot be undone.",
+      "clearing": "Clearing all data...",
+      "clear_success": "Old items table cleared successfully!",
+      "clear_fail": "Failed to clear data!",
+      "upload_title": "Import Items & Barcodes from Legacy System",
+      "upload_desc": "Upload an Excel file containing two columns: Item Code and Barcode. The system cross-references new orders against this list to prevent duplicates.",
+      "change_file": "Change File",
+      "select_file": "Select Excel File",
+      "rows_count": "rows",
+      "uploading_active": "Uploading rapidly...",
+      "confirm_upload": "Start Fast Upload for Entire File",
+      "search_placeholder": "🔍 Search by item code or legacy barcode...",
+      "total_recorded": "Total Recorded Items:",
+      "clear_all_btn": "Clear Entire Table",
+      "loading": "Loading old items list...",
+      "no_results": "No results match your search!",
+      "no_records": "Old items list is completely empty!",
+      "try_other_search": "Please ensure the item code or barcode is entered correctly.",
+      "upload_to_start": "Please select and upload an Excel file to populate this table.",
+      "item_code_col": "Item Code (Model No.)",
+      "barcode_col": "Legacy Barcode",
+      "date_col": "Upload Date",
+      "page_indicator": "Page {{page}} of {{total}} (showing {{shown}} items)",
+      "prev_btn": "Previous",
+      "next_btn": "Next"
+    },
+    "actions_header": "Actions",
+    "reorder_success": "Item reordered successfully ✨"
   },
   "user_mgmt": {
     "title": "System Permissions Management",
@@ -1253,8 +1384,13 @@
       "username_required": "Username is required",
       "password_required": "Password is required for new users",
       "save_error": "Error saving user",
-      "permissions_copied": "Permissions copied successfully!"
-    }
+      "permissions_copied": "Permissions copied successfully!",
+      "loading_users_error": "Failed to load users"
+    },
+    "allowed_factories": "Allowed Factories",
+    "allowed_factories_desc": "If no factory is selected, the user can view all factories. If specific factories are chosen, access is restricted to them.",
+    "allowed_companies": "Allowed Companies",
+    "allowed_companies_desc": "If no company is selected, the user can view all companies."
   },
   "image_editor": {
     "title": "Image Editor",
@@ -1369,5 +1505,108 @@
     "sql_copied": "SQL Script copied to clipboard!",
     "cloud_connected": "Cloud Connected (Supabase)",
     "local_resilient": "Local Resilient Storage"
+  },
+  "common": {
+    "loading": "Loading...",
+    "cancel": "Cancel"
+  },
+  "security": {
+    "mfa_status_active": "Two-Factor Authentication is Active",
+    "mfa_status_active_desc": "Your account is protected with an additional layer of security.",
+    "mfa_info_active": "When logging in next time, you will be asked for the 6-digit code from your authenticator app.",
+    "disable_mfa_btn": "Disable Two-Factor Authentication",
+    "mfa_status_inactive": "Two-Factor Authentication is Inactive",
+    "mfa_status_inactive_desc": "Your account is currently protected by password only.",
+    "mfa_info_inactive": "We strongly recommend enabling two-factor authentication (MFA) to safeguard system data.",
+    "enable_mfa_btn": "Set Up Two-Factor Authentication",
+    "setup_title": "Two-Factor Authentication Setup",
+    "setup_step_1": "Scan the QR code below using an authenticator app (e.g. Google Authenticator or Authy):",
+    "setup_secret_label": "If you cannot scan the QR code, manually enter this key in your app:",
+    "setup_step_2": "Enter the 6-digit code generated in the app to confirm activation:",
+    "activate_btn": "Confirm & Activate"
+  },
+  "backup": {
+    "exporting": "Generating backup...",
+    "export_success": "Backup downloaded successfully!",
+    "export_failed": "Failed to export data",
+    "confirm_import": "Warning: Restoring data will merge with existing server data. Are you sure you want to proceed?",
+    "importing": "Importing data and updating database...",
+    "import_success": "Data restored and database updated successfully!",
+    "title": "Backup & Data Restore",
+    "description": "Create and save a full backup of all system tables, orders, and settings locally, and restore anytime to safeguard data.",
+    "export_title": "Download Backup",
+    "export_desc": "Downloads a JSON backup file containing orders, settings, users, and warehouse receipts.",
+    "export_btn": "Download Backup File",
+    "import_title": "Restore Backup",
+    "import_desc": "Upload a valid JSON backup file to restore system tables and records.",
+    "import_btn": "Upload and Restore Backup",
+    "warning_title": "Critical Security Notice",
+    "warning_desc": "Restoring a backup will update and merge database records. Please ensure file validity before restoring to prevent data corruption."
+  },
+  "units": {
+    "carton": "Carton",
+    "piece": "Piece"
+  },
+  "pcs": "Quantity (Pcs)",
+  "audit": {
+    "title": "System Audit & Activity Logs",
+    "subtitle": "Track, monitor, and document all operations performed across the system, with deleted order restoration support",
+    "search_placeholder": "Search by model, user, screen, or action text...",
+    "all_screens": "All Screens & Sections",
+    "loading": "Loading and synchronizing audit logs...",
+    "reset_filters": "Reset All Filters",
+    "refresh_success": "Logs refreshed successfully ({{count}} records)",
+    "load_error": "Error loading audit logs",
+    "restore_fail": "Failed to restore order",
+    "restore_error": "Unexpected error during restore",
+    "total_indexed": "Total Indexed Activities:",
+    "no_results_desc": "Try changing search or filter options to view other records.",
+    "from_screen": "From Screen:",
+    "by_user": "By User:",
+    "copied_from": "Copied from:",
+    "to_new_model": "To new model:",
+    "copied_and_generated": "Cloned order generated with serial:",
+    "other_changes": "+{{count}} more changes",
+    "general_save_notice": "Order data saved & confirmed (general record/attachments update)",
+    "table": {
+      "date_time": "Date & Time",
+      "user": "Responsible User",
+      "screen": "Source Screen",
+      "action_type": "Action Type",
+      "entity": "Model / Identifier",
+      "details": "Full Details",
+      "actions": "Actions",
+      "default_user": "User",
+      "view_btn": "View"
+    },
+    "pagination": {
+      "showing": "Showing {{start}} to {{end}} of {{total}} activities",
+      "per_page": "Per page:",
+      "first_page": "First Page",
+      "prev": "Previous",
+      "next": "Next",
+      "last_page": "Last Page"
+    },
+    "modal": {
+      "activity_id": "Activity ID:",
+      "close": "Close"
+    },
+    "snapshot": {
+      "original_model": "Original Model (Copied From)",
+      "new_model": "New Model (Cloned Target)",
+      "previous_archive": "Previous Model (Archive)",
+      "general_update_title": "General update and save of order record",
+      "general_update_desc": "Logged when an order is saved or confirmed without core discrepancies.",
+      "serial_no": "Serial No:",
+      "product_name": "Product Name:",
+      "buyer": "Buyer:",
+      "factory": "Factory:",
+      "total_qty": "Total Quantity:",
+      "product_price": "Unit Price:",
+      "user_agent": "Browser & System Info:"
+    },
+    "from_original": "From original",
+    "to_new": "to",
+    "unspecified": "Unspecified"
   }
 }

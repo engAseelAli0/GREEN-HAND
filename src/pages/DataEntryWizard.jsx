@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useAppData, defaultOrderState } from '../context/AppDataContext';
 import { useAuth } from '../context/AuthContext';
 import { useFilteredLookups } from '../hooks/useFilteredLookups';
-import { Save, RefreshCw, Hash, Calendar, Box, Scissors, Palette, LayoutGrid, ChevronRight, ChevronLeft, MessageSquare, CheckSquare, Square, Ruler, Camera, X, ImagePlus, Edit3, Copy, Trash2, Layers, PanelTop, Search, DownloadCloud, Pin, Sparkles, CheckCircle2, Package, Award, Info, FileText, Plus } from 'lucide-react';
+import { Save, RefreshCw, Hash, Calendar, Box, Scissors, Palette, LayoutGrid, ChevronRight, ChevronLeft, MessageSquare, CheckSquare, Square, Ruler, Camera, X, ImagePlus, Edit3, Copy, Trash2, Layers, PanelTop, Search, DownloadCloud, Pin, Sparkles, CheckCircle2, Package, Award, Info, FileText, Plus, Lock } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import toast from 'react-hot-toast';
 import { compressImage, normalizeImageUrl } from '../utils/imageUtils';
@@ -14,6 +14,7 @@ import ExportOrderDocument, { downloadOrderPDF } from '../components/ExportOrder
 import { appendActivity, createActivityItem, summarizeOrderChanges } from '../utils/activityLog';
 import { logAuditEvent } from '../utils/auditLogger';
 import { isOrderAllowedForUser, fetchAllowedSerials } from '../utils/permissionUtils';
+import { sanitizeItemCode } from '../utils/textUtils';
 
 const ClearableSelect = ({ value, onChange, children, className = "form-control", style, disabled, clearTitle }) => {
   const { t } = useTranslation();
@@ -45,12 +46,80 @@ const ClearableSelect = ({ value, onChange, children, className = "form-control"
   );
 };
 
+const LockedCardOverlay = ({ isLocked, message }) => {
+  const { t } = useTranslation();
+  if (!isLocked) return null;
+  return (
+    <div 
+      style={{
+        position: 'absolute',
+        inset: 0,
+        zIndex: 25,
+        cursor: 'not-allowed',
+        backgroundColor: 'rgba(15, 23, 42, 0.02)',
+        borderRadius: 'inherit'
+      }}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        toast.error(message, { id: 'received-locked-toast' });
+      }}
+      onMouseDown={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        toast.error(message, { id: 'received-locked-toast' });
+      }}
+      onTouchStart={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        toast.error(message, { id: 'received-locked-toast' });
+      }}
+      title={message}
+    >
+      <div style={{
+        position: 'absolute',
+        top: '10px',
+        left: '10px',
+        background: 'rgba(245, 158, 11, 0.15)',
+        border: '1px solid rgba(245, 158, 11, 0.4)',
+        color: '#d97706',
+        borderRadius: '20px',
+        padding: '3px 9px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '4px',
+        fontSize: '0.75rem',
+        fontWeight: 'bold',
+        pointerEvents: 'none',
+        boxShadow: '0 2px 5px rgba(0,0,0,0.04)'
+      }}>
+        <Lock size={12} />
+        <span>{t('entry.buyer.locked_badge', { defaultValue: 'مقفل' })}</span>
+      </div>
+    </div>
+  );
+};
+
 const DataEntryWizard = () => {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
   const fetchedParamSerialRef = useRef(null);
-  const { lookups, updateLookup, currentOrder, updateOrder, setCurrentOrder } = useAppData();
+  const { lookups, updateLookup, currentOrder, updateOrder: rawUpdateOrder, setCurrentOrder } = useAppData();
+  const [isReceivedOrder, setIsReceivedOrder] = useState(false);
+
+  const lockedMessage = t('entry.messages.product_received_no_edit', { 
+    defaultValue: '⚠️ هذا المنتج مستلم في المستودع ولا يمكن تعديل بياناته! يمكنك فقط تعديل رقم الموديل لحفظه كنسخة جديدة.' 
+  });
+
+  const updateOrder = useCallback((field, value) => {
+    if (isReceivedOrder && field !== 'serialNumber') {
+      toast.error(lockedMessage, { id: 'received-locked-toast' });
+      return;
+    }
+    rawUpdateOrder(field, value);
+  }, [isReceivedOrder, rawUpdateOrder, lockedMessage]);
+
   const { user, hasPermission } = useAuth();
   const filteredLookups = useFilteredLookups();
 
@@ -131,6 +200,10 @@ const DataEntryWizard = () => {
   };
 
   const handleAddFactory = async () => {
+    if (isReceivedOrder) {
+      toast.error(lockedMessage, { id: 'received-locked-toast' });
+      return;
+    }
     const name = newFactory.name.trim();
     const code = newFactory.code.trim();
     const mobile = newFactory.mobile.trim();
@@ -309,19 +382,83 @@ const DataEntryWizard = () => {
     try { localStorage.setItem('gh_viewMode', next); } catch { /* ignore unavailable storage */ }
   };
 
-  const fetchNextAvailableSerial = async () => {
+  const fetchNextAvailableSerial = async (preferredBase = null) => {
     try {
-      const { data } = await supabase
+      // 1. Fetch all existing serial numbers from orders
+      const { data: orderRows } = await supabase
         .from('orders')
-        .select('serial_number')
-        .order('created_at', { ascending: false })
-        .limit(1);
-        
-      if (data && data.length > 0) {
-        const match = data[0].serial_number.match(/\d+/);
-        if (match) return (parseInt(match[0]) + 1).toString();
+        .select('serial_number');
+
+      const existingOrderSerials = new Set();
+      let maxSerial = 0;
+
+      if (orderRows && orderRows.length > 0) {
+        for (const row of orderRows) {
+          const s = String(row.serial_number || '').trim();
+          if (s) {
+            existingOrderSerials.add(s.toLowerCase());
+            const match = s.match(/\d+/);
+            if (match) {
+              const num = parseInt(match[0], 10);
+              if (!isNaN(num) && num > maxSerial && num < 10000000) {
+                maxSerial = num;
+              }
+            }
+          }
+        }
       }
-      return '1';
+
+      // 2. Determine candidate starting number:
+      // If preferredBase is provided, start from preferredBase + 1.
+      // Otherwise, start from latest order created + 1 or maxSerial + 1.
+      let startNum = 1;
+      const baseMatch = preferredBase ? String(preferredBase).match(/\d+/) : null;
+      if (baseMatch) {
+        startNum = parseInt(baseMatch[0], 10) + 1;
+      } else {
+        const { data: latestOrder } = await supabase
+          .from('orders')
+          .select('serial_number')
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        const latestMatch = latestOrder?.[0]?.serial_number?.match(/\d+/);
+        if (latestMatch) {
+          startNum = parseInt(latestMatch[0], 10) + 1;
+        } else if (maxSerial > 0) {
+          startNum = maxSerial + 1;
+        }
+      }
+
+      let candidate = startNum > 0 ? startNum : 1;
+
+      // 3. Increment sequentially until candidate is NOT in orders and NOT in old_items
+      for (let i = 0; i < 2000; i++) {
+        const candStr = candidate.toString();
+
+        // Check in-memory against orders
+        if (existingOrderSerials.has(candStr.toLowerCase())) {
+          candidate++;
+          continue;
+        }
+
+        // Check against old_items table
+        const { data: oldRows } = await supabase
+          .from('old_items')
+          .select('id')
+          .or(`item_code.ilike.${candStr},barcode.ilike.${candStr}`)
+          .limit(1);
+
+        if (oldRows && oldRows.length > 0) {
+          candidate++;
+          continue;
+        }
+
+        // Truly available!
+        return candStr;
+      }
+
+      return candidate.toString();
     } catch (err) {
       console.error('Error fetching latest serial', err);
       return '1';
@@ -354,6 +491,100 @@ const DataEntryWizard = () => {
     }
   };
 
+  const checkSerialSeqRef = useRef(0);
+  const checkSerialTimerRef = useRef(null);
+
+  const checkSerialStatus = useCallback((rawVal, options = {}) => {
+    const { 
+      immediate = false, 
+      overrideOriginal = null, 
+      overrideIsEdit = null, 
+      overrideIsReceived = null 
+    } = options;
+
+    if (checkSerialTimerRef.current) {
+      clearTimeout(checkSerialTimerRef.current);
+      checkSerialTimerRef.current = null;
+    }
+
+    const val = sanitizeItemCode(rawVal);
+    if (!val) {
+      setSerialStatus(null);
+      return;
+    }
+
+    const effectiveIsEdit = overrideIsEdit !== null ? overrideIsEdit : isEditMode;
+    const effectiveOriginal = overrideOriginal !== null ? overrideOriginal : originalSerial;
+    const effectiveIsReceived = overrideIsReceived !== null ? overrideIsReceived : isReceivedOrder;
+
+    // Check if it matches the current loaded order in edit mode
+    const isCurrentSameOrder = Boolean(effectiveIsEdit && effectiveOriginal && (val.toLowerCase() === effectiveOriginal.toLowerCase()));
+
+    if (isCurrentSameOrder) {
+      setSerialStatus(effectiveIsReceived ? 'current_received' : 'current_order');
+      return;
+    }
+
+    setSerialStatus('checking');
+    const currentSeq = ++checkSerialSeqRef.current;
+
+    const doQuery = async () => {
+      try {
+        // 1. Check orders table using limit(1) with ilike (case-insensitive)
+        const { data: orderRows, error: orderErr } = await supabase
+          .from('orders')
+          .select('serial_number')
+          .ilike('serial_number', val)
+          .limit(1);
+
+        if (checkSerialSeqRef.current !== currentSeq) return; // Stale request, discard!
+
+        if (!orderErr && orderRows && orderRows.length > 0) {
+          const matched = orderRows[0].serial_number;
+          if (effectiveIsEdit && effectiveOriginal && matched.toLowerCase() === effectiveOriginal.toLowerCase()) {
+            setSerialStatus(effectiveIsReceived ? 'current_received' : 'current_order');
+          } else {
+            setSerialStatus('used');
+          }
+          return;
+        }
+
+        // 2. Check old_items table (item_code or barcode)
+        const safeVal = val.replace(/,/g, '');
+        const { data: oldRows, error: oldErr } = await supabase
+          .from('old_items')
+          .select('id')
+          .or(`item_code.ilike.${safeVal},barcode.ilike.${safeVal}`)
+          .limit(1);
+
+        if (checkSerialSeqRef.current !== currentSeq) return; // Stale request, discard!
+
+        if (!oldErr && oldRows && oldRows.length > 0) {
+          setSerialStatus('used_in_old');
+          return;
+        }
+
+        setSerialStatus('available');
+      } catch (err) {
+        if (checkSerialSeqRef.current !== currentSeq) return;
+        console.error("Error verifying serial duplicate:", err);
+        setSerialStatus(null);
+      }
+    };
+
+    if (immediate) {
+      doQuery();
+    } else {
+      checkSerialTimerRef.current = setTimeout(doQuery, 200);
+    }
+  }, [isEditMode, originalSerial, isReceivedOrder]);
+
+  const handleSerialChange = (rawVal) => {
+    const val = sanitizeItemCode(rawVal);
+    updateOrder('serialNumber', val);
+    checkSerialStatus(val, { immediate: false });
+  };
+
   useEffect(() => {
     const serialParam = searchParams.get('serial') || location.state?.serial;
     if (serialParam) {
@@ -362,7 +593,7 @@ const DataEntryWizard = () => {
     if (!currentOrder.serialNumber) {
        fetchNextAvailableSerial().then(nextNum => {
          updateOrder('serialNumber', nextNum);
-         setSerialStatus('available');
+         checkSerialStatus(nextNum, { immediate: true, overrideIsEdit: false, overrideOriginal: '' });
        });
     }
     if (!currentOrder.orderNumber) {
@@ -375,8 +606,8 @@ const DataEntryWizard = () => {
   useEffect(() => {
     const serialParam = searchParams.get('serial') || location.state?.serial;
     if (serialParam && String(serialParam).trim()) {
-      const cleanSerial = String(serialParam).trim();
-      if (fetchedParamSerialRef.current !== cleanSerial) {
+      const cleanSerial = sanitizeItemCode(String(serialParam));
+      if (cleanSerial && fetchedParamSerialRef.current !== cleanSerial && fetchedParamSerialRef.current !== '__CLEARED__') {
         fetchedParamSerialRef.current = cleanSerial;
         handleFetch(cleanSerial);
       }
@@ -390,6 +621,10 @@ const DataEntryWizard = () => {
 
   // ─── Image Upload & Editor Handlers ───
   const handleImageUpload = async (e) => {
+    if (isReceivedOrder) {
+      toast.error(lockedMessage, { id: 'received-locked-toast' });
+      return;
+    }
     const originalFiles = Array.from(e.target.files);
     if (!originalFiles.length) return;
 
@@ -512,6 +747,10 @@ const DataEntryWizard = () => {
   };
 
   const handleEditExistingImage = async (index, imgObj) => {
+    if (isReceivedOrder) {
+      toast.error(lockedMessage, { id: 'received-locked-toast' });
+      return;
+    }
     try {
       const toastId = toast.loading(t('entry.messages.loading_image'));
       const response = await fetch(imgObj.preview || imgObj.url);
@@ -531,6 +770,10 @@ const DataEntryWizard = () => {
   };
 
   const handleRemoveImage = async (index) => {
+    if (isReceivedOrder) {
+      toast.error(lockedMessage, { id: 'received-locked-toast' });
+      return;
+    }
     if (!window.confirm(t('entry.messages.confirm_delete_image'))) return;
     
     const imgToRemove = productImages[index];
@@ -579,6 +822,10 @@ const DataEntryWizard = () => {
   }, [currentOrder.manualSizes, currentOrder.sizeFrom, currentOrder.sizeTo, lookups.sizes]);
 
   const toggleColor = (colorName) => {
+    if (isReceivedOrder) {
+      toast.error(lockedMessage, { id: 'received-locked-toast' });
+      return;
+    }
     setSelectedColorsArr(prev => {
       let nextArr;
       if (prev.includes(colorName)) {
@@ -635,49 +882,20 @@ const DataEntryWizard = () => {
     }
   }, [currentOrder.totalQuantity, currentOrder.cartonPackage, currentOrder.cartonQty, updateOrder, t]);
 
-  const handleSerialChange = async (val) => {
-    updateOrder('serialNumber', val);
-    if (!val.trim()) {
-      setSerialStatus(null);
-      return;
-    }
-    setSerialStatus('checking');
-    try {
-      const { data } = await supabase
-        .from('orders')
-        .select('serial_number')
-        .eq('serial_number', val)
-        .single();
-      if (data) {
-        setSerialStatus('used');
-        return;
-      }
-
-      // Check if it exists in old_items as item_code or barcode
-      const { data: oldItem } = await supabase
-        .from('old_items')
-        .select('id')
-        .or(`item_code.eq.${val},barcode.eq.${val}`)
-        .limit(1);
-
-      if (oldItem && oldItem.length > 0) {
-        setSerialStatus('used_in_old');
-      } else {
-        setSerialStatus('available');
-      }
-    } catch (err) {
-       console.error("Error verifying serial change duplicate:", err);
-       setSerialStatus('available');
-    }
-  };
-
   const validateForm = () => {
     if (uploadingImage) {
       toast.error(t('entry.messages.upload_in_progress', { defaultValue: 'جاري رفع الصور حالياً، يرجى الانتظار حتى يكتمل الرفع!' }));
       return false;
     }
 
-    if (!currentOrder.serialNumber) { toast.error(t('entry.messages.serial_required')); return false; }
+    const cleanSerial = sanitizeItemCode(currentOrder.serialNumber);
+    if (!cleanSerial) { 
+      toast.error(t('entry.messages.serial_required')); 
+      return false; 
+    }
+    if (currentOrder.serialNumber !== cleanSerial) {
+      updateOrder('serialNumber', cleanSerial);
+    }
     
     const required = [
       { key: 'productName', label: t('entry.buyer.product_name') },
@@ -805,20 +1023,31 @@ const DataEntryWizard = () => {
   const handleSaveNew = async () => {
     if (!validateForm()) return;
 
+    const cleanSerial = sanitizeItemCode(currentOrder.serialNumber);
+    if (!cleanSerial) {
+      toast.error(t('entry.messages.serial_required'));
+      return;
+    }
+
     setIsSaving(true);
     const toastId = toast.loading(t('entry.messages.saving'));
     try {
-      const { data: existing } = await supabase.from('orders').select('id').eq('serial_number', currentOrder.serialNumber).single();
-      if (existing) {
+      const { data: existing } = await supabase
+        .from('orders')
+        .select('serial_number')
+        .ilike('serial_number', cleanSerial)
+        .limit(1);
+      if (existing && existing.length > 0) {
          toast.error(t('entry.messages.serial_used_error'), { id: toastId });
          return;
       }
 
       // Verify in old system items to prevent duplicates
+      const safeSerial = cleanSerial.replace(/,/g, '');
       const { data: oldItem } = await supabase
         .from('old_items')
         .select('id')
-        .or(`item_code.eq.${currentOrder.serialNumber},barcode.eq.${currentOrder.serialNumber}`)
+        .or(`item_code.ilike.${safeSerial},barcode.ilike.${safeSerial}`)
         .limit(1);
 
       if (oldItem && oldItem.length > 0) {
@@ -827,14 +1056,15 @@ const DataEntryWizard = () => {
       }
 
       const baseOrder = getCleanOrder();
+      baseOrder.serialNumber = cleanSerial;
       const orderWithActivity = appendActivity(baseOrder, createActivityItem({
         action: 'create',
         user,
-        note: t('activity.notes.created', { serial: currentOrder.serialNumber }),
-        changes: summarizeOrderChanges({}, currentOrder)
+        note: t('activity.notes.created', { serial: cleanSerial }),
+        changes: summarizeOrderChanges({}, { ...currentOrder, serialNumber: cleanSerial })
       }));
       const payload = {
-        serial_number: currentOrder.serialNumber,
+        serial_number: cleanSerial,
         order_data: orderWithActivity
       };
       const { error } = await supabase.from('orders').insert([payload]);
@@ -871,7 +1101,7 @@ const DataEntryWizard = () => {
       }).catch(() => {});
 
       toast.success(t('entry.messages.save_success', { serial: currentOrder.serialNumber }), { id: toastId });
-      await handleClear();
+      await handleClear(currentOrder.serialNumber);
     } catch (err) {
       console.error(err);
       toast.error(t('entry.messages.save_error'), { id: toastId });
@@ -881,24 +1111,39 @@ const DataEntryWizard = () => {
   };
 
   const handleUpdate = async () => {
+    if (isReceivedOrder) {
+      toast.error(lockedMessage, { id: 'received-locked-toast' });
+      return;
+    }
     if (!validateForm()) return;
+    const cleanSerial = sanitizeItemCode(currentOrder.serialNumber);
+    const cleanOriginal = sanitizeItemCode(originalSerial);
+    if (!cleanSerial) {
+      toast.error(t('entry.messages.serial_required'));
+      return;
+    }
     setIsSaving(true);
     const toastId = toast.loading(t('entry.messages.updating'));
     try {
-      if (currentOrder.serialNumber !== originalSerial) {
+      if (cleanSerial.toLowerCase() !== cleanOriginal.toLowerCase()) {
          // Verify in orders
-         const { data: existing } = await supabase.from('orders').select('id').eq('serial_number', currentOrder.serialNumber).single();
-         if (existing) {
+         const { data: existing } = await supabase
+           .from('orders')
+           .select('serial_number')
+           .ilike('serial_number', cleanSerial)
+           .limit(1);
+         if (existing && existing.length > 0) {
             toast.error(t('entry.messages.serial_used_error'), { id: toastId });
             setIsSaving(false);
             return;
          }
 
          // Verify in old system items
+         const safeSerial = cleanSerial.replace(/,/g, '');
          const { data: oldItem } = await supabase
            .from('old_items')
            .select('id')
-           .or(`item_code.eq.${currentOrder.serialNumber},barcode.eq.${currentOrder.serialNumber}`)
+           .or(`item_code.ilike.${safeSerial},barcode.ilike.${safeSerial}`)
            .limit(1);
 
          if (oldItem && oldItem.length > 0) {
@@ -911,21 +1156,22 @@ const DataEntryWizard = () => {
       const { data: previous } = await supabase
         .from('orders')
         .select('order_data')
-        .eq('serial_number', originalSerial)
+        .eq('serial_number', cleanOriginal)
         .single();
       const baseOrder = getCleanOrder();
+      baseOrder.serialNumber = cleanSerial;
       const orderWithActivity = appendActivity(baseOrder, createActivityItem({
         action: 'update',
         user,
-        note: t('activity.notes.updated', { serial: baseOrder.serialNumber }),
+        note: t('activity.notes.updated', { serial: cleanSerial }),
         changes: summarizeOrderChanges(previous?.order_data, baseOrder),
-        meta: { source: 'data-entry', previousSerial: originalSerial },
+        meta: { source: 'data-entry', previousSerial: cleanOriginal },
       }));
       const payload = {
-        serial_number: baseOrder.serialNumber,
+        serial_number: cleanSerial,
         order_data: orderWithActivity
       };
-      const { error } = await supabase.from('orders').update(payload).eq('serial_number', originalSerial);
+      const { error } = await supabase.from('orders').update(payload).eq('serial_number', cleanOriginal);
       if (error) throw error;
 
       const changesList = summarizeOrderChanges(previous?.order_data, baseOrder) || [];
@@ -935,22 +1181,22 @@ const DataEntryWizard = () => {
         action: 'UPDATE_ORDER',
         actionType: 'UPDATE',
         entityType: 'order',
-        entityId: baseOrder.serialNumber,
+        entityId: cleanSerial,
         user,
         screenKey: 'entry',
         screenName: 'أوامر الإنتاج وتوثيق الطلبات',
-        summary: `قام الموظف بتعديل بيانات الطلبية #${baseOrder.serialNumber} من شاشة أوامر الإنتاج ${changesSummary ? `(شملت: ${changesSummary})` : ''}`,
+        summary: `قام الموظف بتعديل بيانات الطلبية #${cleanSerial} من شاشة أوامر الإنتاج ${changesSummary ? `(شملت: ${changesSummary})` : ''}`,
         details: {
           screenKey: 'entry',
           screenName: 'أوامر الإنتاج وتوثيق الطلبات',
-          serialNumber: baseOrder.serialNumber,
-          previousSerial: originalSerial,
+          serialNumber: cleanSerial,
+          previousSerial: cleanOriginal,
           changes: changesList,
         },
       }).catch(() => {});
 
-      toast.success(t('entry.messages.update_success', { serial: baseOrder.serialNumber }), { id: toastId });
-      await handleClear();
+      toast.success(t('entry.messages.update_success', { serial: cleanSerial }), { id: toastId });
+      await handleClear(cleanSerial);
     } catch (err) {
       console.error(err);
       toast.error(t('entry.messages.save_error'), { id: toastId });
@@ -962,23 +1208,32 @@ const DataEntryWizard = () => {
   const handleSaveAsCopy = async () => {
      if (!validateForm()) return;
      
-     const newSerial = currentOrder.serialNumber;
+     const newSerial = sanitizeItemCode(currentOrder.serialNumber);
+     if (!newSerial) {
+        toast.error(t('entry.messages.serial_required'));
+        return;
+     }
 
      setIsSaving(true);
      const toastId = toast.loading(t('entry.messages.saving'));
      try {
-       const { data: existing } = await supabase.from('orders').select('id').eq('serial_number', newSerial).single();
-       if (existing) {
+       const { data: existing } = await supabase
+         .from('orders')
+         .select('serial_number')
+         .ilike('serial_number', newSerial)
+         .limit(1);
+       if (existing && existing.length > 0) {
           toast.error(t('entry.messages.serial_used_error'), { id: toastId });
           setIsSaving(false);
           return;
        }
 
        // Verify in old system items
+       const safeSerial = newSerial.replace(/,/g, '');
        const { data: oldItem } = await supabase
          .from('old_items')
          .select('id')
-         .or(`item_code.eq.${newSerial},barcode.eq.${newSerial}`)
+         .or(`item_code.ilike.${safeSerial},barcode.ilike.${safeSerial}`)
          .limit(1);
 
        if (oldItem && oldItem.length > 0) {
@@ -987,114 +1242,12 @@ const DataEntryWizard = () => {
           return;
        }
 
-       // Duplicate existing product images in Supabase storage for the new serial number
-       let copiedProductImages = [];
-       if (currentOrder.productImages && currentOrder.productImages.length > 0) {
-         const safeNewSerial = newSerial.replace(/[/\\?%*:|"<>]/g, '-');
-         for (let idx = 0; idx < currentOrder.productImages.length; idx++) {
-           const origImg = currentOrder.productImages[idx];
-           if (!origImg) continue;
-
-           const origName = typeof origImg === 'string' ? origImg : (origImg.name || origImg.path || 'image.jpg');
-           const ext = origName.split('.').pop() || 'jpg';
-           const newFileName = idx === 0 ? `${safeNewSerial}.${ext}` : `${safeNewSerial}_${idx}.${ext}`;
-           const newFilePath = `product-images/${newFileName}`;
-           
-           // Get source URL and old storage path
-           const sourceUrl = normalizeImageUrl(origImg);
-           let oldPath = (typeof origImg === 'object' && origImg.path) ? origImg.path : '';
-           if (!oldPath && sourceUrl) {
-             const match = sourceUrl.match(/\/product_images\/(?:product-images\/)?([^\?#]+)/);
-             if (match) {
-               oldPath = `product-images/${decodeURIComponent(match[1])}`;
-             } else if (!sourceUrl.startsWith('http') && !sourceUrl.startsWith('blob:') && !sourceUrl.startsWith('data:')) {
-               oldPath = sourceUrl.startsWith('product-images/') ? sourceUrl : `product-images/${sourceUrl}`;
-             }
-           }
-           if (oldPath && oldPath.startsWith('/')) oldPath = oldPath.slice(1);
-
-           let duplicatedSuccessfully = false;
-
-           // Strategy 1: Server-side storage copy
-           if (oldPath) {
-             try {
-               const { error: copyErr } = await supabase.storage.from('product_images').copy(oldPath, newFilePath);
-               if (!copyErr) {
-                 const { data: urlData } = supabase.storage.from('product_images').getPublicUrl(newFilePath);
-                 copiedProductImages.push({
-                   name: newFileName,
-                   path: newFilePath,
-                   url: urlData.publicUrl
-                 });
-                 duplicatedSuccessfully = true;
-               } else {
-                 console.warn('Storage server-side copy failed, attempting binary download & upload fallback:', copyErr);
-               }
-             } catch (e) {
-               console.warn('Storage copy error:', e);
-             }
-           }
-
-           // Strategy 2: Fetch image binary (Blob) and upload directly under new name
-           if (!duplicatedSuccessfully && sourceUrl) {
-             try {
-               let imageBlob = null;
-               // Try storage download if oldPath exists
-               if (oldPath) {
-                 const { data: blobData, error: dlErr } = await supabase.storage.from('product_images').download(oldPath);
-                 if (blobData && !dlErr) {
-                   imageBlob = blobData;
-                 }
-               }
-               // If not downloaded via storage API, fetch from public URL / blob URL
-               if (!imageBlob && (sourceUrl.startsWith('http') || sourceUrl.startsWith('blob:') || sourceUrl.startsWith('data:'))) {
-                 const resp = await fetch(sourceUrl);
-                 if (resp.ok) {
-                   imageBlob = await resp.blob();
-                 }
-               }
-
-               if (imageBlob) {
-                 const uploadFile = new File([imageBlob], newFileName, { type: imageBlob.type || 'image/jpeg' });
-                 const { error: upErr } = await supabase.storage.from('product_images').upload(newFilePath, uploadFile, { upsert: true });
-                 if (!upErr) {
-                   const { data: urlData } = supabase.storage.from('product_images').getPublicUrl(newFilePath);
-                   copiedProductImages.push({
-                     name: newFileName,
-                     path: newFilePath,
-                     url: urlData.publicUrl
-                   });
-                   duplicatedSuccessfully = true;
-                 } else {
-                   console.error('Storage binary upload fallback failed:', upErr);
-                 }
-               }
-             } catch (fallbackErr) {
-               console.error('Image binary fallback failed:', fallbackErr);
-             }
-           }
-
-           // Strategy 3: Ultimate fallback - keep existing valid public URL so link doesn't break
-           if (!duplicatedSuccessfully) {
-             if (sourceUrl && (sourceUrl.startsWith('http://') || sourceUrl.startsWith('https://'))) {
-               copiedProductImages.push({
-                 name: origName,
-                 path: oldPath || origName,
-                 url: sourceUrl
-               });
-             } else if (typeof origImg === 'object') {
-               copiedProductImages.push({ ...origImg });
-             }
-           }
-         }
-       }
-
        const baseOrder = getCleanOrder();
        const updatedOrderState = {
          ...baseOrder,
          serialNumber: newSerial,
          orderNumber: null,
-         productImages: copiedProductImages
+         productImages: [] // لا يتم نسخ الصور للموديل المستنسخ الجديد
        };
 
        const sourceSerial = (originalSerial && originalSerial !== newSerial) ? originalSerial : 'موديل سابق';
@@ -1134,12 +1287,7 @@ const DataEntryWizard = () => {
         }).catch(() => {});
 
        toast.success(t('entry.messages.copy_success', { serial: newSerial }), { id: toastId });
-       setCurrentOrder(newOrderData);
-       setProductImages(copiedProductImages.map(img => ({ ...img, preview: normalizeImageUrl(img) })));
-       setOriginalSerial(newSerial);
-       setIsEditMode(true);
-       setAutoFocusLastSize(false);
-       window.scrollTo({ top: 0, behavior: 'smooth' });
+       await handleClear(newSerial);
      } catch (err) {
        console.error(err);
        toast.error(t('entry.messages.save_error'), { id: toastId });
@@ -1149,6 +1297,10 @@ const DataEntryWizard = () => {
   };
 
   const handleDeleteOrder = async () => {
+    if (isReceivedOrder) {
+      toast.error(lockedMessage, { id: 'received-locked-toast' });
+      return;
+    }
     if (!window.confirm(t('entry.messages.confirm_delete', { serial: originalSerial }))) return;
     
     setIsSaving(true);
@@ -1193,7 +1345,7 @@ const DataEntryWizard = () => {
         ...deletedArchive,
       ].slice(0, 100)));
       toast.success(t('entry.messages.delete_success', { serial: originalSerial }), { id: toastId });
-      await handleClear();
+      await handleClear(originalSerial);
     } catch (err) {
       console.error(err);
       toast.error(t('entry.messages.save_error'), { id: toastId });
@@ -1228,7 +1380,8 @@ const DataEntryWizard = () => {
   };
 
   const handleFetch = async (s) => {
-    const searchVal = typeof s === 'string' ? s : document.getElementById('fetchSerialInput')?.value;
+    const rawVal = typeof s === 'string' ? s : document.getElementById('fetchSerialInput')?.value;
+    const searchVal = sanitizeItemCode(rawVal);
     if (!searchVal) {
       toast.error(t('entry.messages.search_hint'));
       return;
@@ -1243,16 +1396,17 @@ const DataEntryWizard = () => {
       }
       
       const { data: recData } = await supabase.from('receivings').select('receive_data').ilike('serial_number', searchVal).maybeSingle();
-      const isReceived = recData && recData.receive_data && recData.receive_data.status && typeof recData.receive_data.status === 'string' && (
-        recData.receive_data.status.includes('Received') ||
+      const isReceived = Boolean(recData && recData.receive_data && recData.receive_data.status && (
+        String(recData.receive_data.status).includes('Received') ||
+        String(recData.receive_data.status).toLowerCase().includes('received') ||
         recData.receive_data.status === 'مستلمة' ||
+        recData.receive_data.status === 'مستلم' ||
+        recData.receive_data.status === 'تم الاستلام' ||
         recData.receive_data.status === '已收货' ||
         recData.receive_data.status === t('receiving.info.received')
-      );
-      if (isReceived) {
-        toast.error(t('entry.messages.received_already'), { id: toastId, duration: 4000 });
-        return;
-      }
+      ));
+
+      setIsReceivedOrder(isReceived);
 
       if (!isOrderAllowedForUser(data, user, lookups?.factories)) {
          toast.error(t('auth.unauthorized_factory', { defaultValue: 'ليس لديك صلاحية للوصول إلى بيانات هذا المصنع' }), { id: toastId });
@@ -1271,19 +1425,52 @@ const DataEntryWizard = () => {
       setProductImages(finalOrder.productImages?.map(img => ({ ...img, preview: normalizeImageUrl(img) })) || []);
       setIsEditMode(true);
       setOriginalSerial(finalOrder.serialNumber);
+      checkSerialStatus(finalOrder.serialNumber, {
+        immediate: true,
+        overrideOriginal: finalOrder.serialNumber,
+        overrideIsEdit: true,
+        overrideIsReceived: isReceived
+      });
       setActiveTab('basic');
       window.scrollTo({ top: 0, behavior: 'smooth' });
-      toast.success(t('entry.messages.fetch_success', { serial: finalOrder.serialNumber }), { id: toastId });
+      if (isReceived) {
+        toast.dismiss(toastId);
+        toast(lockedMessage, {
+          id: 'received-locked-toast',
+          duration: 7000,
+          icon: '🔒',
+          style: {
+            background: '#FEF3C7',
+            color: '#92400E',
+            fontWeight: 600,
+            border: '1.5px solid #F59E0B'
+          }
+        });
+      } else {
+        toast.success(t('entry.messages.fetch_success', { serial: finalOrder.serialNumber }), { id: toastId });
+      }
       if (document.getElementById('fetchSerialInput')) document.getElementById('fetchSerialInput').value = '';
     } catch {
       toast.error(t('entry.messages.save_error'), { id: toastId });
     }
   };
 
-  const handleClear = async () => {
-    fetchedParamSerialRef.current = null;
+  const handleClear = async (preferredBase = null) => {
+    if (checkSerialTimerRef.current) {
+      clearTimeout(checkSerialTimerRef.current);
+      checkSerialTimerRef.current = null;
+    }
+    setIsReceivedOrder(false);
+    fetchedParamSerialRef.current = '__CLEARED__';
     if (searchParams.get('serial')) {
       setSearchParams({}, { replace: true });
+    }
+    if (location.state?.serial) {
+      try {
+        window.history.replaceState({}, document.title);
+      } catch {
+        // ignore
+      }
     }
     setProductImages([]);
     setSelectedColorsArr([]);
@@ -1293,7 +1480,8 @@ const DataEntryWizard = () => {
     setActiveTab('basic');
     window.scrollTo({ top: 0, behavior: 'smooth' });
     
-    const nextSerial = await fetchNextAvailableSerial();
+    const baseToUse = preferredBase || currentOrder?.serialNumber || originalSerial;
+    const nextSerial = await fetchNextAvailableSerial(baseToUse);
     const nextOrder = await fetchNextOrderNumber();
     
     let initConditions = {};
@@ -1307,7 +1495,12 @@ const DataEntryWizard = () => {
     }
     setCurrentOrder({ ...defaultOrderState, packagingConditions: initConditions, serialNumber: nextSerial, orderNumber: nextOrder });
     setAutoFocusLastSize(false);
-    setSerialStatus('available');
+    checkSerialStatus(nextSerial, {
+      immediate: true,
+      overrideOriginal: '',
+      overrideIsEdit: false,
+      overrideIsReceived: false
+    });
     
     toast.success(t('entry.messages.cleared_success'));
   };
@@ -1327,6 +1520,10 @@ const DataEntryWizard = () => {
   };
 
   const handleColorChange = (color, size, qty) => {
+    if (isReceivedOrder) {
+      toast.error(lockedMessage, { id: 'received-locked-toast' });
+      return;
+    }
     const dist = { ...(currentOrder.colorDistribution || {}) };
     if (dist[color]) {
       dist[color] = { ...dist[color] };
@@ -1366,6 +1563,10 @@ const DataEntryWizard = () => {
   };
 
   const handleMaterialChange = (index, field, value) => {
+    if (isReceivedOrder) {
+      toast.error(lockedMessage, { id: 'received-locked-toast' });
+      return;
+    }
     const newMaterials = (currentOrder.materials || []).map(m => ({ ...m }));
     while (newMaterials.length <= index) {
       newMaterials.push({ name: '', percentage: '' });
@@ -1394,6 +1595,10 @@ const DataEntryWizard = () => {
   };
 
   const handleMeasurementChange = (part, mName, size, value) => {
+    if (isReceivedOrder) {
+      toast.error(lockedMessage, { id: 'received-locked-toast' });
+      return;
+    }
     const grouped = { ...(currentOrder.groupedMeasurements || {}) };
     if (!grouped[part]) grouped[part] = {};
     if (!grouped[part][mName]) grouped[part][mName] = {};
@@ -1402,12 +1607,20 @@ const DataEntryWizard = () => {
   };
   
   const handlePackagingConditionChange = (cond, isChecked) => {
+    if (isReceivedOrder) {
+      toast.error(lockedMessage, { id: 'received-locked-toast' });
+      return;
+    }
     const pc = { ...(currentOrder.packagingConditions || {}) };
     pc[cond] = isChecked;
     updateOrder('packagingConditions', pc);
   };
 
   const distributeQuantity = (colorsArr, isSilent = false, overrideTotalQty) => {
+    if (isReceivedOrder && !isSilent) {
+      toast.error(lockedMessage, { id: 'received-locked-toast' });
+      return;
+    }
     let totalQty = overrideTotalQty !== undefined ? overrideTotalQty : parseInt(currentOrder.totalQuantity, 10);
     if (!totalQty || isNaN(totalQty)) {
       if (!isSilent) toast.error(t('entry.messages.qty_error'));
@@ -1487,139 +1700,142 @@ const DataEntryWizard = () => {
         
         {/* ═══ 1. تحديد المصنع ورقم الموديل ═══ */}
         <div className="card" id="section-factory" style={{ scrollMarginTop: '5.5rem', marginBottom: 0 }}>
-          <div className="tab-section-header" style={{ marginBottom: '1.25rem' }}>
-            <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
-              <Box size={20} color="var(--accent-color)" />
-              <span>{t('entry.factory.section_title')}</span>
-            </h3>
-          </div>
-          
-          <div className="form-group">
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
-              <label className="form-label" style={{ margin: 0 }}>{t('entry.factory.factory_select')}</label>
-              <button
-                type="button"
-                className="btn btn-outline"
-                onClick={() => setShowAddFactoryForm(prev => !prev)}
-                style={{ padding: '0.45rem 0.75rem', fontSize: '0.85rem', borderColor: 'rgba(212, 175, 55, 0.35)', color: 'var(--accent-color)' }}
-                title={t('entry.factory.add_factory', { defaultValue: 'إضافة مصنع' })}
-              >
-                {showAddFactoryForm ? <X size={16} /> : <Plus size={16} />}
-                <span>{showAddFactoryForm ? t('entry.actions.cancel_edit', { defaultValue: 'إلغاء' }) : t('entry.factory.add_factory', { defaultValue: 'إضافة مصنع' })}</span>
-              </button>
+          <div style={{ position: 'relative' }}>
+            <LockedCardOverlay isLocked={isReceivedOrder} message={lockedMessage} />
+            <div className="tab-section-header" style={{ marginBottom: '1.25rem' }}>
+              <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+                <Box size={20} color="var(--accent-color)" />
+                <span>{t('entry.factory.section_title')}</span>
+              </h3>
             </div>
-            <ClearableSelect className="form-control" value={currentOrder.factoryId || ''} onChange={(e) => updateOrder('factoryId', e.target.value)} clearTitle={t('entry.actions.clear_btn')}>
-              <option value="">{t('entry.factory.factory_placeholder')}</option>
-              {factorySelectOptions.map((f, i) => <option key={`${f.name || f}-${i}`} value={f.name || f}>{f.name || f}</option>)}
-            </ClearableSelect>
-          </div>
-
-          {showAddFactoryForm && (
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-              gap: '0.75rem',
-              padding: '1rem',
-              marginBottom: '1rem',
-              border: '1px dashed rgba(212, 175, 55, 0.35)',
-              borderRadius: 'var(--radius-md)',
-              background: 'rgba(212, 175, 55, 0.06)'
-            }}>
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">{t('admin.factory_name', { defaultValue: 'اسم المصنع' })}</label>
-                <input
-                  type="text"
-                  className="form-control"
-                  value={newFactory.name}
-                  onChange={(e) => setNewFactory(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder={t('admin.factory_name', { defaultValue: 'اسم المصنع' })}
-                />
-              </div>
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">{t('entry.factory.factory_code')}</label>
-                <input
-                  type="text"
-                  className="form-control"
-                  value={newFactory.code}
-                  onChange={(e) => setNewFactory(prev => ({ ...prev, code: e.target.value }))}
-                  placeholder={t('entry.factory.factory_code')}
-                />
-              </div>
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">{t('entry.factory.factory_mobile')}</label>
-                <input
-                  type="text"
-                  className="form-control"
-                  value={newFactory.mobile}
-                  onChange={(e) => setNewFactory(prev => ({ ...prev, mobile: e.target.value }))}
-                  placeholder={t('entry.factory.factory_mobile')}
-                />
-              </div>
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">{t('entry.factory.factory_address')}</label>
-                <input
-                  type="text"
-                  className="form-control"
-                  value={newFactory.address}
-                  onChange={(e) => setNewFactory(prev => ({ ...prev, address: e.target.value }))}
-                  placeholder={t('entry.factory.factory_address')}
-                />
-              </div>
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: '0.5rem', gridColumn: '1 / -1', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+            
+            <div className="form-group">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
+                <label className="form-label" style={{ margin: 0 }}>{t('entry.factory.factory_select')}</label>
                 <button
                   type="button"
                   className="btn btn-outline"
-                  onClick={resetNewFactoryForm}
-                  disabled={isAddingFactory}
-                  style={{ padding: '0.55rem 0.9rem', fontSize: '0.9rem' }}
+                  onClick={() => setShowAddFactoryForm(prev => !prev)}
+                  style={{ padding: '0.45rem 0.75rem', fontSize: '0.85rem', borderColor: 'rgba(212, 175, 55, 0.35)', color: 'var(--accent-color)' }}
+                  title={t('entry.factory.add_factory', { defaultValue: 'إضافة مصنع' })}
                 >
-                  <X size={16} />
-                  {t('entry.actions.cancel_edit', { defaultValue: 'إلغاء' })}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={handleAddFactory}
-                  disabled={isAddingFactory}
-                  style={{ padding: '0.55rem 1rem', fontSize: '0.9rem', opacity: isAddingFactory ? 0.65 : 1, cursor: isAddingFactory ? 'not-allowed' : 'pointer' }}
-                >
-                  {isAddingFactory ? <RefreshCw size={16} /> : <Save size={16} />}
-                  {isAddingFactory
-                    ? t('entry.factory.add_saving', { defaultValue: 'جاري الحفظ...' })
-                    : t('entry.factory.add_save', { defaultValue: 'حفظ المصنع' })}
+                  {showAddFactoryForm ? <X size={16} /> : <Plus size={16} />}
+                  <span>{showAddFactoryForm ? t('entry.actions.cancel_edit', { defaultValue: 'إلغاء' }) : t('entry.factory.add_factory', { defaultValue: 'إضافة مصنع' })}</span>
                 </button>
               </div>
+              <ClearableSelect className="form-control" value={currentOrder.factoryId || ''} onChange={(e) => updateOrder('factoryId', e.target.value)} clearTitle={t('entry.actions.clear_btn')}>
+                <option value="">{t('entry.factory.factory_placeholder')}</option>
+                {factorySelectOptions.map((f, i) => <option key={`${f.name || f}-${i}`} value={f.name || f}>{f.name || f}</option>)}
+              </ClearableSelect>
             </div>
-          )}
 
-          {currentOrder.factoryId && (() => {
-            const selectedFactoryObj = Array.isArray(lookups.factories) ? lookups.factories.find(f => (f.name === currentOrder.factoryId || f === currentOrder.factoryId)) : null;
-            if (selectedFactoryObj && (selectedFactoryObj.mobile || selectedFactoryObj.code || selectedFactoryObj.address)) {
-              return (
-                <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-                  {selectedFactoryObj.code && (
-                    <div className="form-group" style={{ flex: 1, minWidth: '120px', marginBottom: 0 }}>
-                      <label className="form-label" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('entry.factory.factory_code')}</label>
-                      <input type="text" className="form-control" value={selectedFactoryObj.code} readOnly style={{ backgroundColor: 'var(--bg-color)', opacity: 0.8, borderStyle: 'dashed', color: 'var(--accent-color)', fontWeight: 'bold' }} />
-                    </div>
-                  )}
-                  {selectedFactoryObj.mobile && (
-                    <div className="form-group" style={{ flex: 1, minWidth: '150px', marginBottom: 0 }}>
-                      <label className="form-label" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('entry.factory.factory_mobile')}</label>
-                      <input type="text" className="form-control" value={selectedFactoryObj.mobile} readOnly style={{ backgroundColor: 'var(--bg-color)', opacity: 0.8, borderStyle: 'dashed' }} />
-                    </div>
-                  )}
-                  {selectedFactoryObj.address && (
-                    <div className="form-group" style={{ flex: 2, minWidth: '200px', marginBottom: 0 }}>
-                      <label className="form-label" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('entry.factory.factory_address')}</label>
-                      <input type="text" className="form-control" value={selectedFactoryObj.address} readOnly style={{ backgroundColor: 'var(--bg-color)', opacity: 0.8, borderStyle: 'dashed' }} />
-                    </div>
-                  )}
+            {showAddFactoryForm && (
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                gap: '0.75rem',
+                padding: '1rem',
+                marginBottom: '1rem',
+                border: '1px dashed rgba(212, 175, 55, 0.35)',
+                borderRadius: 'var(--radius-md)',
+                background: 'rgba(212, 175, 55, 0.06)'
+              }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">{t('admin.factory_name', { defaultValue: 'اسم المصنع' })}</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={newFactory.name}
+                    onChange={(e) => setNewFactory(prev => ({ ...prev, name: e.target.value }))}
+                    placeholder={t('admin.factory_name', { defaultValue: 'اسم المصنع' })}
+                  />
                 </div>
-              );
-            }
-            return null;
-          })()}
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">{t('entry.factory.factory_code')}</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={newFactory.code}
+                    onChange={(e) => setNewFactory(prev => ({ ...prev, code: e.target.value }))}
+                    placeholder={t('entry.factory.factory_code')}
+                  />
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">{t('entry.factory.factory_mobile')}</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={newFactory.mobile}
+                    onChange={(e) => setNewFactory(prev => ({ ...prev, mobile: e.target.value }))}
+                    placeholder={t('entry.factory.factory_mobile')}
+                  />
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">{t('entry.factory.factory_address')}</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={newFactory.address}
+                    onChange={(e) => setNewFactory(prev => ({ ...prev, address: e.target.value }))}
+                    placeholder={t('entry.factory.factory_address')}
+                  />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '0.5rem', gridColumn: '1 / -1', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    onClick={resetNewFactoryForm}
+                    disabled={isAddingFactory}
+                    style={{ padding: '0.55rem 0.9rem', fontSize: '0.9rem' }}
+                  >
+                    <X size={16} />
+                    {t('entry.actions.cancel_edit', { defaultValue: 'إلغاء' })}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={handleAddFactory}
+                    disabled={isAddingFactory}
+                    style={{ padding: '0.55rem 1rem', fontSize: '0.9rem', opacity: isAddingFactory ? 0.65 : 1, cursor: isAddingFactory ? 'not-allowed' : 'pointer' }}
+                  >
+                    {isAddingFactory ? <RefreshCw size={16} /> : <Save size={16} />}
+                    {isAddingFactory
+                      ? t('entry.factory.add_saving', { defaultValue: 'جاري الحفظ...' })
+                      : t('entry.factory.add_save', { defaultValue: 'حفظ المصنع' })}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {currentOrder.factoryId && (() => {
+              const selectedFactoryObj = Array.isArray(lookups.factories) ? lookups.factories.find(f => (f.name === currentOrder.factoryId || f === currentOrder.factoryId)) : null;
+              if (selectedFactoryObj && (selectedFactoryObj.mobile || selectedFactoryObj.code || selectedFactoryObj.address)) {
+                return (
+                  <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+                    {selectedFactoryObj.code && (
+                      <div className="form-group" style={{ flex: 1, minWidth: '120px', marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('entry.factory.factory_code')}</label>
+                        <input type="text" className="form-control" value={selectedFactoryObj.code} readOnly style={{ backgroundColor: 'var(--bg-color)', opacity: 0.8, borderStyle: 'dashed', color: 'var(--accent-color)', fontWeight: 'bold' }} />
+                      </div>
+                    )}
+                    {selectedFactoryObj.mobile && (
+                      <div className="form-group" style={{ flex: 1, minWidth: '150px', marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('entry.factory.factory_mobile')}</label>
+                        <input type="text" className="form-control" value={selectedFactoryObj.mobile} readOnly style={{ backgroundColor: 'var(--bg-color)', opacity: 0.8, borderStyle: 'dashed' }} />
+                      </div>
+                    )}
+                    {selectedFactoryObj.address && (
+                      <div className="form-group" style={{ flex: 2, minWidth: '200px', marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('entry.factory.factory_address')}</label>
+                        <input type="text" className="form-control" value={selectedFactoryObj.address} readOnly style={{ backgroundColor: 'var(--bg-color)', opacity: 0.8, borderStyle: 'dashed' }} />
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+              return null;
+            })()}
+          </div>
 
           {/* ═══ 2. رقم الموديل (مباشرة تحت اختيار المصنع) ═══ */}
           <div id="section-model" style={{ scrollMarginTop: '5.5rem', paddingTop: '1rem', borderTop: '1px dashed rgba(212, 175, 55, 0.25)', marginTop: '1rem' }}>
@@ -1627,24 +1843,97 @@ const DataEntryWizard = () => {
               <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontWeight: 'bold', fontSize: '0.95rem' }}>
                 <Hash size={17} color="var(--accent-color)" />
                 {t('entry.buyer.serial_no_manual')}
+                {isReceivedOrder && (
+                  <span style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    fontSize: '0.8rem',
+                    color: '#059669',
+                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                    border: '1px solid rgba(16, 185, 129, 0.3)',
+                    borderRadius: '4px',
+                    padding: '2px 8px',
+                    fontWeight: 600,
+                    marginRight: 'auto'
+                  }}>
+                    ✏️ {t('entry.buyer.editable_for_copy', { defaultValue: 'الحقل الوحيد المتاح للتعديل لإنشاء نسخة جديدة' })}
+                  </span>
+                )}
               </label>
               <input 
                 type="text" 
                 className="form-control" 
-                value={currentOrder.serialNumber} 
+                value={currentOrder.serialNumber || ''} 
                 onChange={(e) => handleSerialChange(e.target.value)} 
-                onKeyDown={(e) => e.key === 'Enter' && handleFetch(currentOrder.serialNumber)}
+                onKeyDown={(e) => {
+                  if (e.key === ' ' || e.code === 'Space' || e.keyCode === 32) {
+                    e.preventDefault();
+                    return;
+                  }
+                  if (e.key === 'Enter') {
+                    handleFetch(currentOrder.serialNumber);
+                  }
+                }}
+                onPaste={(e) => {
+                  e.preventDefault();
+                  const pasteText = e.clipboardData?.getData('text') || '';
+                  const clean = sanitizeItemCode(pasteText);
+                  const input = e.target;
+                  const start = input.selectionStart ?? 0;
+                  const end = input.selectionEnd ?? 0;
+                  const current = currentOrder.serialNumber || '';
+                  const nextVal = sanitizeItemCode(current.slice(0, start) + clean + current.slice(end));
+                  updateOrder('serialNumber', nextVal);
+                  checkSerialStatus(nextVal, { immediate: true });
+                }}
+                onBlur={(e) => {
+                  if (e.target.value) {
+                    checkSerialStatus(e.target.value, { immediate: true });
+                  }
+                }}
                 data-enter-ignore="true"
                 placeholder={t('entry.buyer.serial_placeholder')} 
               />
-              <div style={{ display: 'flex', justifyContent: 'space-between', margin: '4px 0' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '4px 0', minHeight: '22px' }}>
                 <span>
-                  {serialStatus === 'checking' && <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('entry.buyer.checking')}</span>}
-                  {serialStatus === 'used' && <span style={{ fontSize: '0.8rem', color: '#ef4444', fontWeight: 'bold' }}>{t('entry.buyer.used')}</span>}
-                  {serialStatus === 'used_in_old' && <span style={{ fontSize: '0.8rem', color: '#f59e0b', fontWeight: 'bold' }}>{t('entry.buyer.used_in_old', { defaultValue: '⚠️ موجود في الأصناف القديمة!' })}</span>}
-                  {serialStatus === 'available' && <span style={{ fontSize: '0.8rem', color: '#22c55e', fontWeight: 'bold' }}>{t('entry.buyer.available')}</span>}
+                  {serialStatus === 'checking' && (
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                      <span className="spinner-border spinner-border-sm" style={{ width: '12px', height: '12px', borderWidth: '1.5px' }} role="status"></span>
+                      {t('entry.buyer.checking')}
+                    </span>
+                  )}
+                  {serialStatus === 'current_received' && (
+                    <span style={{ fontSize: '0.8rem', color: '#f59e0b', fontWeight: 'bold' }}>
+                      {t('entry.buyer.current_received', { defaultValue: '🔒 هذا الموديل مستلم مسبقاً (قم بتغييره لإنشاء نسخة جديدة)' })}
+                    </span>
+                  )}
+                  {serialStatus === 'current_order' && (
+                    <span style={{ fontSize: '0.8rem', color: '#38bdf8', fontWeight: 'bold' }}>
+                      {t('entry.buyer.current_order', { defaultValue: 'ℹ️ رقم الموديل الحالي لهذه الطلبية' })}
+                    </span>
+                  )}
+                  {serialStatus === 'used' && (
+                    <span style={{ fontSize: '0.8rem', color: '#ef4444', fontWeight: 'bold' }}>
+                      {t('entry.buyer.used')}
+                    </span>
+                  )}
+                  {serialStatus === 'used_in_old' && (
+                    <span style={{ fontSize: '0.8rem', color: '#f59e0b', fontWeight: 'bold' }}>
+                      {t('entry.buyer.used_in_old', { defaultValue: '⚠️ موجود في الأصناف القديمة!' })}
+                    </span>
+                  )}
+                  {serialStatus === 'available' && (
+                    <span style={{ fontSize: '0.8rem', color: '#22c55e', fontWeight: 'bold' }}>
+                      {t('entry.buyer.available')}
+                    </span>
+                  )}
                 </span>
-                {serialStatus === 'used' && <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{t('entry.buyer.fetch_hint')}</span>}
+                {serialStatus === 'used' && (
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                    {t('entry.buyer.fetch_hint')}
+                  </span>
+                )}
               </div>
               {currentOrder.barcode && (
                 <div style={{ marginTop: '8px', padding: '6px', backgroundColor: 'rgba(212, 175, 55, 0.1)', border: '1px dashed var(--accent-color)', borderRadius: '6px', color: 'var(--accent-color)', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -1656,7 +1945,8 @@ const DataEntryWizard = () => {
         </div>
 
         {/* ═══ 3. بيانات المشتري والمنتج ═══ */}
-        <div className="card" id="section-other-info" style={{ scrollMarginTop: '5.5rem', marginBottom: 0 }}>
+        <div className="card" id="section-other-info" style={{ position: 'relative', scrollMarginTop: '5.5rem', marginBottom: 0 }}>
+          <LockedCardOverlay isLocked={isReceivedOrder} message={lockedMessage} />
           <div className="tab-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
             <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
               <Info size={20} color="var(--accent-color)" />
@@ -1828,7 +2118,8 @@ const DataEntryWizard = () => {
         </div>
 
         {/* ═══ 3. رفع الصور ═══ */}
-        <div className="card" id="section-images" style={{ scrollMarginTop: '5.5rem', marginBottom: 0 }}>
+        <div className="card" id="section-images" style={{ position: 'relative', scrollMarginTop: '5.5rem', marginBottom: 0 }}>
+          <LockedCardOverlay isLocked={isReceivedOrder} message={lockedMessage} />
           <div className="tab-section-header" style={{ marginBottom: '1.25rem' }}>
             <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
               <Camera size={20} color="var(--accent-color)" />
@@ -1993,7 +2284,8 @@ const DataEntryWizard = () => {
         </div>
 
         {/* ═══ 4. حقل الملاحظات ═══ */}
-        <div className="card" id="section-remarks" style={{ scrollMarginTop: '5.5rem', marginBottom: 0 }}>
+        <div className="card" id="section-remarks" style={{ position: 'relative', scrollMarginTop: '5.5rem', marginBottom: 0 }}>
+          <LockedCardOverlay isLocked={isReceivedOrder} message={lockedMessage} />
           <div className="tab-section-header" style={{ marginBottom: '1.25rem' }}>
             <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
               <MessageSquare size={20} color="var(--accent-color)" />
@@ -2012,7 +2304,8 @@ const DataEntryWizard = () => {
         </div>
 
         {/* ═══ 5. التعبئة والتغليف ═══ */}
-        <div className="card" id="section-packaging" style={{ scrollMarginTop: '5.5rem', marginBottom: 0 }}>
+        <div className="card" id="section-packaging" style={{ position: 'relative', scrollMarginTop: '5.5rem', marginBottom: 0 }}>
+          <LockedCardOverlay isLocked={isReceivedOrder} message={lockedMessage} />
           <div className="tab-section-header" style={{ marginBottom: '1.25rem' }}>
             <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
               <Package size={20} color="var(--accent-color)" />
@@ -2066,7 +2359,8 @@ const DataEntryWizard = () => {
         </div>
 
         {/* ═══ 6. تحديد الالوان ═══ */}
-        <div className="card" id="section-colors" style={{ scrollMarginTop: '5.5rem', marginBottom: 0 }}>
+        <div className="card" id="section-colors" style={{ position: 'relative', scrollMarginTop: '5.5rem', marginBottom: 0 }}>
+          <LockedCardOverlay isLocked={isReceivedOrder} message={lockedMessage} />
           <div className="tab-section-header" style={{ justifyContent: 'space-between' }}>
                 <h3><Palette size={22} /> {t('entry.colors.section_title')}</h3>
                 {selectedColorsArr.length > 0 && sizesReady && (
@@ -2279,7 +2573,8 @@ const DataEntryWizard = () => {
         </div>
 
         {/* ═══ 7. تحديد القماش وتركيباته ═══ */}
-        <div className="card" id="section-fabrics" style={{ scrollMarginTop: '5.5rem', marginBottom: 0 }}>
+        <div className="card" id="section-fabrics" style={{ position: 'relative', scrollMarginTop: '5.5rem', marginBottom: 0 }}>
+          <LockedCardOverlay isLocked={isReceivedOrder} message={lockedMessage} />
           <div className="tab-section-header" style={{ marginBottom: '1.25rem' }}>
             <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
               <Scissors size={20} color="var(--accent-color)" />
@@ -2359,7 +2654,8 @@ const DataEntryWizard = () => {
         </div>
 
         {/* ═══ 8. اختيار القياسات ═══ */}
-        <div className="card" id="section-sizes" style={{ scrollMarginTop: '5.5rem', marginBottom: 0 }}>
+        <div className="card" id="section-sizes" style={{ position: 'relative', scrollMarginTop: '5.5rem', marginBottom: 0 }}>
+          <LockedCardOverlay isLocked={isReceivedOrder} message={lockedMessage} />
           <div className="tab-section-header" style={{ marginBottom: '1.25rem' }}>
             <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
               <Ruler size={20} color="var(--accent-color)" />
@@ -2529,7 +2825,8 @@ const DataEntryWizard = () => {
         </div>
 
         {/* ═══ 9. المقاسات التفصيلية ═══ */}
-        <div className="card" id="section-measurements" style={{ scrollMarginTop: '5.5rem', marginBottom: 0 }}>
+        <div className="card" id="section-measurements" style={{ position: 'relative', scrollMarginTop: '5.5rem', marginBottom: 0 }}>
+          <LockedCardOverlay isLocked={isReceivedOrder} message={lockedMessage} />
           <div className="sub-section-header" style={{ marginBottom: '1.25rem' }}>
                 <h4 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--accent-color)', margin: 0, fontSize: '1.05rem', fontWeight: '600' }}>
                   <Ruler size={18} /> {t('entry.measurements.section_title')}
@@ -2613,7 +2910,8 @@ const DataEntryWizard = () => {
         </div>
 
         {/* ═══ 10. تواريخ طلب المشتري وطلب التسليم من المصنع ═══ */}
-        <div className="card" id="section-dates" style={{ scrollMarginTop: '5.5rem', marginBottom: 0 }}>
+        <div className="card" id="section-dates" style={{ position: 'relative', scrollMarginTop: '5.5rem', marginBottom: 0 }}>
+          <LockedCardOverlay isLocked={isReceivedOrder} message={lockedMessage} />
           <div className="tab-section-header" style={{ marginBottom: '1.25rem' }}>
             <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
               <Calendar size={20} color="var(--accent-color)" />
@@ -2644,7 +2942,8 @@ const DataEntryWizard = () => {
         </div>
 
         {/* ═══ 11. تحديد صورة الشعار ═══ */}
-        <div className="card" id="section-trademark" style={{ scrollMarginTop: '5.5rem', marginBottom: 0 }}>
+        <div className="card" id="section-trademark" style={{ position: 'relative', scrollMarginTop: '5.5rem', marginBottom: 0 }}>
+          <LockedCardOverlay isLocked={isReceivedOrder} message={lockedMessage} />
           <div className="tab-section-header" style={{ marginBottom: '1.25rem' }}>
             <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
               <Award size={20} color="var(--accent-color)" />
@@ -2684,7 +2983,8 @@ const DataEntryWizard = () => {
         </div>
 
         {/* ═══ 13. الشروط المطلوبة ═══ */}
-        <div className="card" id="section-conditions" style={{ scrollMarginTop: '5.5rem', marginBottom: 0 }}>
+        <div className="card" id="section-conditions" style={{ position: 'relative', scrollMarginTop: '5.5rem', marginBottom: 0 }}>
+          <LockedCardOverlay isLocked={isReceivedOrder} message={lockedMessage} />
           <div className="tab-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
                 <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
                   <CheckSquare size={22} color="var(--accent-color)" />
@@ -2999,7 +3299,21 @@ return (
                 className="form-control" 
                 placeholder={t('entry.actions.fetch_placeholder')} 
                 style={{ width: '210px' }} 
-                onKeyDown={handleF9Press}
+                onKeyDown={(e) => {
+                  if (e.key === ' ' || e.code === 'Space' || e.keyCode === 32) {
+                    e.preventDefault();
+                    return;
+                  }
+                  handleF9Press(e);
+                }}
+                onChange={(e) => {
+                  e.target.value = sanitizeItemCode(e.target.value);
+                }}
+                onPaste={(e) => {
+                  e.preventDefault();
+                  const pasteText = e.clipboardData?.getData('text') || '';
+                  e.target.value = sanitizeItemCode(pasteText);
+                }}
                 autoComplete="off"
               />
               <button
@@ -3110,14 +3424,19 @@ return (
                       type="text"
                       placeholder={t('entry.actions.search_serial_placeholder')}
                       value={serialSearchQuery}
-                      onChange={(e) => setSerialSearchQuery(e.target.value)}
+                      onChange={(e) => setSerialSearchQuery(sanitizeItemCode(e.target.value))}
                       onKeyDown={(e) => {
+                        if (e.key === ' ' || e.code === 'Space' || e.keyCode === 32) {
+                          e.preventDefault();
+                          return;
+                        }
                         if (e.key === 'Escape') {
                           setShowSerialsList(false);
                           setSerialSearchQuery('');
                         }
                         if (e.key === 'Enter') {
-                          const filtered = availableSerials.filter(s => s.toString().includes(serialSearchQuery));
+                          const query = sanitizeItemCode(serialSearchQuery);
+                          const filtered = availableSerials.filter(s => sanitizeItemCode(s).includes(query));
                           if (filtered.length > 0) {
                             const input = document.getElementById('fetchSerialInput');
                             if (input) input.value = filtered[0];
@@ -3200,6 +3519,45 @@ return (
               </div>
 
 
+      {isReceivedOrder && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.85rem',
+          padding: '1rem 1.25rem',
+          background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(217, 119, 6, 0.08))',
+          border: '1.5px solid #F59E0B',
+          borderRadius: '12px',
+          color: '#B45309',
+          fontWeight: '600',
+          fontSize: '0.98rem',
+          boxShadow: '0 4px 14px rgba(245, 158, 11, 0.12)',
+          marginBottom: '1rem'
+        }}>
+          <div style={{
+            width: '38px',
+            height: '38px',
+            borderRadius: '50%',
+            backgroundColor: '#FEF3C7',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+            color: '#D97706'
+          }}>
+            <Lock size={20} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 'bold', fontSize: '1.05rem', marginBottom: '3px', color: '#92400E' }}>
+              {t('entry.messages.product_received_badge', { defaultValue: 'تنبيه: هذا المنتج تم استلامه مسبقاً في المستودع' })}
+            </div>
+            <div style={{ fontSize: '0.92rem', color: '#78350F', fontWeight: 'normal' }}>
+              {lockedMessage}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="tab-content-wrapper" style={{ 
         pointerEvents: (isEditMode && !hasPermission('entry', 'edit')) || (!isEditMode && !hasPermission('entry', 'add')) ? 'none' : 'auto', 
         opacity: (isEditMode && !hasPermission('entry', 'edit')) || (!isEditMode && !hasPermission('entry', 'add')) ? 0.7 : 1,
@@ -3248,7 +3606,7 @@ return (
           </button>
           <button
             className="btn btn-outline"
-            onClick={handleClear}
+            onClick={() => handleClear(originalSerial || currentOrder?.serialNumber)}
             style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem', borderColor: 'rgba(212, 175, 55, 0.3)' }}
           >
             <X size={14} /> {t('entry.actions.cancel_edit')}
@@ -3271,7 +3629,7 @@ return (
           }}
           onClick={() => {
             if (window.confirm(t('entry.messages.confirm_clear'))) {
-              handleClear();
+              handleClear(originalSerial || currentOrder?.serialNumber);
             }
           }}
           onMouseEnter={(e) => {
@@ -3334,7 +3692,7 @@ return (
 
         {isEditMode ? (
           <>
-            {hasPermission('entry', 'delete') && (
+            {hasPermission('entry', 'delete') && !isReceivedOrder && (
               <button
                 className="btn btn-outline"
                 disabled={isSaving}
@@ -3349,21 +3707,43 @@ return (
               <button
                 className="btn"
                 disabled={isSaving}
-                style={{ flex: 1.5, maxWidth: '250px', fontSize: '1rem', padding: '0.9rem', backgroundColor: '#3b82f6', color: '#fff', fontWeight: 'bold', opacity: isSaving ? 0.5 : 1, cursor: isSaving ? 'not-allowed' : 'pointer' }}
+                style={{
+                  flex: isReceivedOrder ? 2.5 : 1.5,
+                  maxWidth: isReceivedOrder ? '450px' : '250px',
+                  fontSize: isReceivedOrder ? '1.1rem' : '1rem',
+                  padding: '0.9rem',
+                  backgroundColor: isReceivedOrder ? 'var(--accent-color, #d4af37)' : '#3b82f6',
+                  color: isReceivedOrder ? '#000' : '#fff',
+                  fontWeight: 'bold',
+                  opacity: isSaving ? 0.5 : 1,
+                  cursor: isSaving ? 'not-allowed' : 'pointer',
+                  boxShadow: isReceivedOrder ? '0 4px 15px rgba(212, 175, 55, 0.4)' : undefined
+                }}
                 onClick={handleSaveAsCopy}
               >
-                <Copy size={18} /> {t('entry.actions.save_as_copy')}
+                <Copy size={isReceivedOrder ? 20 : 18} /> {t('entry.actions.save_as_copy')}
               </button>
             )}
             
             {hasPermission('entry', 'edit') && (
               <button
                 className="btn btn-primary"
-                disabled={isSaving}
-                style={{ flex: 2, maxWidth: '350px', fontSize: '1.1rem', padding: '0.9rem', fontWeight: 'bold', opacity: isSaving ? 0.5 : 1, cursor: isSaving ? 'not-allowed' : 'pointer' }}
-                onClick={handleUpdate}
+                disabled={isSaving || isReceivedOrder}
+                style={{
+                  flex: isReceivedOrder ? 1 : 2,
+                  maxWidth: isReceivedOrder ? '220px' : '350px',
+                  fontSize: '1.1rem',
+                  padding: '0.9rem',
+                  fontWeight: 'bold',
+                  opacity: (isSaving || isReceivedOrder) ? 0.5 : 1,
+                  cursor: (isSaving || isReceivedOrder) ? 'not-allowed' : 'pointer',
+                  backgroundColor: isReceivedOrder ? 'var(--border-color, #64748b)' : undefined,
+                  borderColor: isReceivedOrder ? 'var(--border-color, #64748b)' : undefined
+                }}
+                onClick={isReceivedOrder ? () => toast.error(lockedMessage, { id: 'received-locked-toast' }) : handleUpdate}
+                title={isReceivedOrder ? lockedMessage : undefined}
               >
-                <Save size={20} /> {t('entry.actions.update_btn', { serial: originalSerial })}
+                {isReceivedOrder ? <Lock size={20} /> : <Save size={20} />} {t('entry.actions.update_btn', { serial: originalSerial })}
               </button>
             )}
           </>

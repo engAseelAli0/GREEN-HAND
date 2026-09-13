@@ -4,7 +4,7 @@ import { supabase } from '../supabaseClient';
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
 import { Search, Printer, ArrowRight, Barcode as BarcodeIcon, Hash, Package, Layers, Palette, Ruler, BarChart3, Sparkles, X, Settings, Save, RotateCcw } from 'lucide-react';
-import { englishOnly } from '../utils/textUtils';
+import { englishOnly, sanitizeItemCode } from '../utils/textUtils';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { isOrderAllowedForUser, fetchAllowedSerials } from '../utils/permissionUtils';
@@ -140,8 +140,9 @@ const PrintBarcodes = () => {
   const serialSearchRef = React.useRef(null);
   
   const handleFetchOrder = async (overrideSerial) => {
-    const termToSearch = typeof overrideSerial === 'string' ? overrideSerial : serialInput;
-    if (!termToSearch.trim()) {
+    const rawTerm = typeof overrideSerial === 'string' ? overrideSerial : serialInput;
+    const termToSearch = sanitizeItemCode(rawTerm);
+    if (!termToSearch) {
       toast.error(t('print.messages.enter_serial'));
       return;
     }
@@ -1062,8 +1063,19 @@ const PrintBarcodes = () => {
                 className="bc-search-input"
                 placeholder={t('print.search.placeholder')}
                 value={serialInput}
-                onChange={(e) => setSerialInput(e.target.value)}
-                onKeyDown={handleF9Press}
+                onChange={(e) => setSerialInput(sanitizeItemCode(e.target.value))}
+                onKeyDown={(e) => {
+                  if (e.key === ' ' || e.code === 'Space' || e.keyCode === 32) {
+                    e.preventDefault();
+                    return;
+                  }
+                  handleF9Press(e);
+                }}
+                onPaste={(e) => {
+                  e.preventDefault();
+                  const pasteText = e.clipboardData?.getData('text') || '';
+                  setSerialInput(sanitizeItemCode(pasteText));
+                }}
                 autoComplete="off"
               />
               
@@ -1090,14 +1102,19 @@ const PrintBarcodes = () => {
                       type="text"
                       placeholder={t('export.search_placeholder')}
                       value={serialSearchQuery}
-                      onChange={(e) => setSerialSearchQuery(e.target.value)}
+                      onChange={(e) => setSerialSearchQuery(sanitizeItemCode(e.target.value))}
                       onKeyDown={(e) => {
+                        if (e.key === ' ' || e.code === 'Space' || e.keyCode === 32) {
+                          e.preventDefault();
+                          return;
+                        }
                         if (e.key === 'Escape') {
                           setShowSerialsList(false);
                           setSerialSearchQuery('');
                         }
                         if (e.key === 'Enter') {
-                          const filtered = availableSerials.filter(s => s.toString().includes(serialSearchQuery));
+                          const query = sanitizeItemCode(serialSearchQuery);
+                          const filtered = availableSerials.filter(s => sanitizeItemCode(s).includes(query));
                           if (filtered.length > 0) {
                             setShowSerialsList(false);
                             setSerialSearchQuery('');

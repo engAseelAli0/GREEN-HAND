@@ -2,6 +2,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { logAuditEvent } from '../utils/auditLogger';
+import { sanitizeItemCode } from '../utils/textUtils';
 
 const AppDataContext = createContext();
 
@@ -151,7 +152,11 @@ export const AppDataProvider = ({ children }) => {
   };
 
   const updateOrder = (field, value) => {
-    setCurrentOrder(prev => ({ ...prev, [field]: value }));
+    let finalValue = value;
+    if (field === 'serialNumber' && typeof value === 'string') {
+      finalValue = sanitizeItemCode(value);
+    }
+    setCurrentOrder(prev => ({ ...prev, [field]: finalValue }));
   };
 
   return (

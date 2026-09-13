@@ -106,3 +106,18 @@ export const extractColorCSS = (colorStr, definedColors = []) => {
     const englishPart = colorStr.split(/[-_]/)[0].trim().replace(/\s+/g, '');
     return englishPart || 'transparent';
 };
+
+/**
+ * Sanitize item code / serial number (رقم الصنف / رقم الموديل):
+ * - Rejects any spaces completely (no internal, leading, or trailing spaces).
+ * - Accepts ONLY letters and numbers (Unicode letters: Arabic, English, etc. + digits).
+ * - Normalizes Arabic-Indic and Persian numerals (٠-٩ / ۰-۹) to standard Latin digits (0-9).
+ */
+export const sanitizeItemCode = (val) => {
+  if (val === null || val === undefined) return '';
+  return String(val)
+    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 1632))
+    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 1776))
+    .replace(/[^\p{L}\d]/gu, '');
+};
+

@@ -25,7 +25,23 @@ import {
 const PAGE_SIZE_OPTIONS = [15, 25, 50, 100];
 
 const AuditLog = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const isRtl = i18n.language === 'ar';
+  const isZh = i18n.language === 'zh';
+
+  const getActionLabel = (meta) => {
+    if (!meta) return '';
+    if (isZh) return meta.labelZh || meta.label;
+    if (isRtl) return meta.label;
+    return meta.labelEn || meta.label;
+  };
+
+  const getScreenName = (screen) => {
+    if (!screen) return '';
+    if (isZh) return screen.nameZh || screen.nameAr;
+    if (isRtl) return screen.nameAr;
+    return screen.nameEn || screen.nameAr;
+  };
   const { user } = useAuth();
   const contentTopRef = useRef(null);
 
@@ -59,11 +75,11 @@ const AuditLog = () => {
       setLogs(res.logs || []);
       setIsCloudConnected(res.isCloudConnected);
       if (showToast) {
-        toast.success(`تم تحديث السجل بنجاح (${res.logs?.length || 0} حركة مسجلة)`);
+        toast.success(t('audit.refresh_success', { count: res.logs?.length || 0, defaultValue: 'تم تحديث السجل بنجاح ({{count}} حركة مسجلة)' }));
       }
     } catch (err) {
       console.error('Error loading audit logs:', err);
-      toast.error('حدث خطأ أثناء تحميل سجل العمليات');
+      toast.error(t('audit.load_error', { defaultValue: 'حدث خطأ أثناء تحميل سجل العمليات' }));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -136,7 +152,7 @@ const AuditLog = () => {
         const matchesUser = item.username?.toLowerCase().includes(q);
         const matchesSummary = item.summary?.toLowerCase().includes(q);
         const matchesAction = item.action?.toLowerCase().includes(q);
-        const matchesScreen = screen?.nameAr?.toLowerCase().includes(q);
+        const matchesScreen = (screen?.nameAr?.toLowerCase().includes(q)) || (screen?.nameZh?.toLowerCase().includes(q)) || (screen?.nameEn?.toLowerCase().includes(q));
         if (!matchesSerial && !matchesUser && !matchesSummary && !matchesAction && !matchesScreen) {
           return false;
         }
@@ -219,18 +235,18 @@ const AuditLog = () => {
         setSelectedLog(null);
         await loadLogs();
       } else {
-        toast.error(res.error || 'فشلت عملية استعادة الطلبية');
+        toast.error(res.error || t('audit.restore_fail', { defaultValue: 'فشلت عملية استعادة الطلبية' }));
       }
     } catch (err) {
       console.error(err);
-      toast.error('حدث خطأ غير متوقع أثناء الاستعادة');
+      toast.error(t('audit.restore_error', { defaultValue: 'حدث خطأ غير متوقع أثناء الاستعادة' }));
     } finally {
       setIsRestoring(false);
     }
   };
 
   const getActionMeta = (actionType) => {
-    return ACTION_TYPES[actionType] || { label: actionType, color: '#94a3b8', bg: 'rgba(148, 163, 184, 0.12)', border: 'rgba(148, 163, 184, 0.3)' };
+    return ACTION_TYPES[actionType] || { label: actionType, labelZh: actionType, labelEn: actionType, color: '#94a3b8', bg: 'rgba(148, 163, 184, 0.12)', border: 'rgba(148, 163, 184, 0.3)' };
   };
 
   const getActionIcon = (actionType) => {
@@ -351,7 +367,7 @@ const AuditLog = () => {
               {isCloudConnected ? t('audit_log.cloud_connected', { defaultValue: 'متصل سحابياً (Supabase)' }) : t('audit_log.local_resilient', { defaultValue: 'حفظ محلي فوري ومؤمن' })}
             </div>
             <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-              إجمالي الحركات المفهرسة: <strong style={{ color: 'var(--accent-color)' }}>{logs.length.toLocaleString('ar-SA')}</strong>
+              {t('audit.total_indexed', { defaultValue: 'إجمالي الحركات المفهرسة:' })} <strong style={{ color: 'var(--accent-color)' }}>{isRtl ? logs.length.toLocaleString('ar-SA') : logs.length.toLocaleString()}</strong>
             </span>
           </div>
         </div>
@@ -555,7 +571,7 @@ const AuditLog = () => {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="بحث برقم الموديل، الموظف، الشاشة، أو نص الإجراء..."
+              placeholder={t('audit.search_placeholder', { defaultValue: 'بحث برقم الموديل، الموظف، الشاشة، أو نص الإجراء...' })}
               style={{
                 width: '100%',
                 padding: '0.75rem 2.8rem 0.75rem 1rem',
@@ -601,10 +617,10 @@ const AuditLog = () => {
                 cursor: 'pointer'
               }}
             >
-              <option value="ALL">جميع الشاشات والأقسام</option>
+              <option value="ALL">{t('audit.all_screens', { defaultValue: 'جميع الشاشات والأقسام' })}</option>
               {screensList.map(([sKey, sMeta]) => (
                 <option key={sKey} value={sKey}>
-                  {sMeta.icon} {sMeta.nameAr}
+                  {sMeta.icon} {getScreenName(sMeta)}
                 </option>
               ))}
             </select>
@@ -760,7 +776,7 @@ const AuditLog = () => {
                 }}
               >
                 <span style={{ color: meta.color }}>{getActionIcon(typeKey)}</span>
-                {meta.label}
+                {getActionLabel(meta)}
                 <span style={{
                   background: isSelected ? meta.color : 'rgba(255,255,255,0.1)',
                   color: isSelected ? '#000' : 'var(--text-muted)',
@@ -782,7 +798,7 @@ const AuditLog = () => {
         {loading ? (
           <div style={{ textAlign: 'center', padding: '5rem 2rem', color: 'var(--text-muted)' }}>
             <RefreshCw size={36} className="spin-anim" style={{ margin: '0 auto 1rem auto', color: 'var(--accent-color)' }} />
-            <p style={{ fontSize: '1.1rem' }}>جاري تحميل ومزامنة سجل العمليات...</p>
+            <p style={{ fontSize: '1.1rem' }}>{t('audit.loading', { defaultValue: 'جاري تحميل ومزامنة سجل العمليات...' })}</p>
           </div>
         ) : filteredLogs.length === 0 ? (
           <div style={{
@@ -796,13 +812,13 @@ const AuditLog = () => {
             <ShieldAlert size={48} style={{ margin: '0 auto 1rem auto', opacity: 0.5, color: 'var(--accent-color)' }} />
             <h3 style={{ color: 'var(--text-main)', marginBottom: '0.5rem' }}>{t('audit_log.empty_logs', { defaultValue: 'لا توجد حركات مسجلة تطابق معايير البحث والفلترة المحددة.' })}</h3>
             <p style={{ fontSize: '0.9rem', maxWidth: '450px', margin: '0 auto 1.5rem auto' }}>
-              يمكنك تجربة تغيير خيارات البحث أو الفلترة للاطلاع على حركات أخرى.
+              {t('audit.no_results_desc', { defaultValue: 'يمكنك تجربة تغيير خيارات البحث أو الفلترة للاطلاع على حركات أخرى.' })}
             </p>
             <button
               onClick={() => { setSelectedActionType('ALL'); setSelectedEmployee('ALL'); setSelectedScreen('ALL'); setSelectedTimeRange('ALL'); setSearchQuery(''); }}
               className="btn btn-outline"
             >
-              إعادة تعيين جميع الفلاتر
+              {t('audit.reset_filters', { defaultValue: 'إعادة تعيين جميع الفلاتر' })}
             </button>
           </div>
         ) : viewMode === 'timeline' ? (
@@ -896,7 +912,7 @@ const AuditLog = () => {
                           gap: '0.35rem'
                         }}>
                           <span>{screen.icon || '🖥️'}</span>
-                          من شاشة: {screen.nameAr}
+                          {t('audit.from_screen', { defaultValue: 'من شاشة:' })} {getScreenName(screen)}
                         </span>
 
                         {/* Model / Entity ID */}
@@ -926,9 +942,9 @@ const AuditLog = () => {
                           marginRight: '0.35rem'
                         }}>
                           <User size={14} color="var(--accent-color)" />
-                          بواسطة الموظف: <strong style={{ color: 'var(--accent-color)' }}>{log.username}</strong>
+                          {t('audit.by_user', { defaultValue: 'بواسطة الموظف:' })} <strong style={{ color: 'var(--accent-color)' }}>{log.username}</strong>
                           <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 'normal' }}>
-                            ({log.user_role || 'مستخدم'})
+                            ({log.user_role || t('audit.table.default_user', { defaultValue: 'مستخدم' })})
                           </span>
                         </span>
                       </div>
@@ -955,19 +971,19 @@ const AuditLog = () => {
                         }}>
                           {getCopiedFromModel(log) ? (
                             <>
-                              <span>📋 تم النسخ من:</span>
+                              <span>📋 {t('audit.copied_from', { defaultValue: 'تم النسخ من:' })}</span>
                               <span style={{ color: '#fff', background: 'rgba(139, 92, 246, 0.3)', padding: '0.1rem 0.5rem', borderRadius: '5px' }}>
                                 #{getCopiedFromModel(log)}
                               </span>
                               <ArrowRight size={13} color="#a78bfa" />
-                              <span>إلى الموديل الجديد:</span>
+                              <span>{t('audit.to_new_model', { defaultValue: 'إلى الموديل الجديد:' })}</span>
                               <span style={{ color: 'var(--accent-color)', background: 'rgba(212, 175, 55, 0.15)', padding: '0.1rem 0.5rem', borderRadius: '5px' }}>
                                 #{log.entity_id}
                               </span>
                             </>
                           ) : (
                             <>
-                              <span>📋 طلبية مستنسخة ومولدة برقم:</span>
+                              <span>📋 {t('audit.copied_and_generated', { defaultValue: 'طلبية مستنسخة ومولدة برقم:' })}</span>
                               <span style={{ color: 'var(--accent-color)', background: 'rgba(212, 175, 55, 0.15)', padding: '0.1rem 0.5rem', borderRadius: '5px' }}>
                                 #{log.entity_id}
                               </span>
@@ -1001,7 +1017,7 @@ const AuditLog = () => {
                           ))}
                           {log.details.changes.length > 4 && (
                             <span style={{ fontSize: '0.72rem', color: 'var(--accent-color)', fontWeight: 'bold' }}>
-                              +{log.details.changes.length - 4} تغييرات أخرى
+                              {t('audit.other_changes', { count: log.details.changes.length - 4, defaultValue: '+{{count}} تغييرات أخرى' })}
                             </span>
                           )}
                         </div>
@@ -1021,7 +1037,7 @@ const AuditLog = () => {
                           padding: '0.2rem 0.55rem',
                           marginTop: '0.3rem'
                         }}>
-                          <span>ℹ️ حفظ وتأكيد بيانات الطلبية (تحديث عام للسجل والمرفقات)</span>
+                          <span>ℹ️ {t('audit.general_save_notice', { defaultValue: 'حفظ وتأكيد بيانات الطلبية (تحديث عام للسجل والمرفقات)' })}</span>
                         </div>
                       )}
                     </div>
@@ -1104,13 +1120,13 @@ const AuditLog = () => {
               <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right', fontSize: '0.88rem' }}>
                 <thead>
                   <tr style={{ background: 'var(--surface-highlight)', borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)' }}>
-                    <th style={{ padding: '0.85rem 1rem' }}>التاريخ والوقت</th>
-                    <th style={{ padding: '0.85rem 1rem' }}>الموظف المسؤول</th>
-                    <th style={{ padding: '0.85rem 1rem' }}>الشاشة المصدر</th>
-                    <th style={{ padding: '0.85rem 1rem' }}>نوع الإجراء</th>
-                    <th style={{ padding: '0.85rem 1rem' }}>الموديل / المعرف</th>
-                    <th style={{ padding: '0.85rem 1rem' }}>تفاصيل الحركة الكاملة</th>
-                    <th style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>الإجراءات</th>
+                    <th style={{ padding: '0.85rem 1rem' }}>{t('audit.table.date_time', { defaultValue: 'التاريخ والوقت' })}</th>
+                    <th style={{ padding: '0.85rem 1rem' }}>{t('audit.table.user', { defaultValue: 'الموظف المسؤول' })}</th>
+                    <th style={{ padding: '0.85rem 1rem' }}>{t('audit.table.screen', { defaultValue: 'الشاشة المصدر' })}</th>
+                    <th style={{ padding: '0.85rem 1rem' }}>{t('audit.table.action_type', { defaultValue: 'نوع الإجراء' })}</th>
+                    <th style={{ padding: '0.85rem 1rem' }}>{t('audit.table.entity', { defaultValue: 'الموديل / المعرف' })}</th>
+                    <th style={{ padding: '0.85rem 1rem' }}>{t('audit.table.details', { defaultValue: 'تفاصيل الحركة الكاملة' })}</th>
+                    <th style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>{t('audit.table.actions', { defaultValue: 'الإجراءات' })}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1145,7 +1161,7 @@ const AuditLog = () => {
                             <User size={13} color="var(--accent-color)" />
                             {log.username}
                           </div>
-                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{log.user_role || 'مستخدم'}</div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{log.user_role || t('audit.table.default_user', { defaultValue: 'مستخدم' })}</div>
                         </td>
 
                         <td style={{ padding: '0.85rem 1rem', whiteSpace: 'nowrap' }}>
@@ -1162,7 +1178,7 @@ const AuditLog = () => {
                             gap: '0.3rem'
                           }}>
                             <span>{screen.icon || '🖥️'}</span>
-                            {screen.nameAr}
+                            {getScreenName(screen)}
                           </span>
                         </td>
 
@@ -1216,9 +1232,9 @@ const AuditLog = () => {
                               fontSize: '0.78rem',
                               fontWeight: '700'
                             }}>
-                              <span>📋 من الأصل #{getCopiedFromModel(log) || 'غير محدد'}</span>
+                              <span>📋 {t('audit.from_original', { defaultValue: 'من الأصل' })} #{getCopiedFromModel(log) || t('audit.unspecified', { defaultValue: 'غير محدد' })}</span>
                               <ArrowRight size={11} color="#a78bfa" />
-                              <span style={{ color: 'var(--accent-color)' }}>إلى #{log.entity_id}</span>
+                              <span style={{ color: 'var(--accent-color)' }}>{t('audit.to_new', { defaultValue: 'إلى' })} #{log.entity_id}</span>
                             </div>
                           )}
                         </td>
@@ -1233,7 +1249,7 @@ const AuditLog = () => {
                             style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
                           >
                             <Eye size={14} />
-                            عرض
+                            {t('audit.table.view_btn', { defaultValue: 'عرض' })}
                           </button>
                         </td>
                       </tr>
@@ -1263,11 +1279,11 @@ const AuditLog = () => {
             {/* Left/Start: Counter & Page Size Selector */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
               <span style={{ fontSize: '0.88rem', color: 'var(--text-muted)' }}>
-                عرض من <strong style={{ color: 'var(--text-main)' }}>{(startIndex + 1).toLocaleString('ar-SA')}</strong> إلى <strong style={{ color: 'var(--text-main)' }}>{endIndex.toLocaleString('ar-SA')}</strong> من إجمالي <strong style={{ color: 'var(--accent-color)' }}>{totalItems.toLocaleString('ar-SA')}</strong> حركة
+                {t('audit.pagination.showing', { start: isRtl ? (startIndex + 1).toLocaleString('ar-SA') : (startIndex + 1), end: isRtl ? endIndex.toLocaleString('ar-SA') : endIndex, total: isRtl ? totalItems.toLocaleString('ar-SA') : totalItems, defaultValue: 'عرض من {{start}} إلى {{end}} من إجمالي {{total}} حركة' })}
               </span>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', borderRight: '1px solid var(--border-color)', paddingRight: '1rem' }}>
-                <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>لكل صفحة:</span>
+                <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>{t('audit.pagination.per_page', { defaultValue: 'لكل صفحة:' })}</span>
                 <select
                   value={pageSize}
                   onChange={(e) => setPageSize(Number(e.target.value))}
@@ -1296,7 +1312,7 @@ const AuditLog = () => {
                 disabled={currentPage === 1}
                 className="btn btn-outline"
                 style={{ padding: '0.4rem 0.6rem', opacity: currentPage === 1 ? 0.4 : 1, cursor: currentPage === 1 ? 'not-allowed' : 'pointer' }}
-                title="الصفحة الأولى"
+                title={t('audit.pagination.first_page', { defaultValue: 'الصفحة الأولى' })}
               >
                 <ChevronsRight size={16} />
               </button>
@@ -1309,7 +1325,7 @@ const AuditLog = () => {
                 style={{ padding: '0.4rem 0.8rem', opacity: currentPage === 1 ? 0.4 : 1, cursor: currentPage === 1 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.85rem' }}
               >
                 <ChevronRight size={16} />
-                السابقة
+                {t('audit.pagination.prev', { defaultValue: 'السابقة' })}
               </button>
 
               {/* Numbered Page Buttons */}
@@ -1354,7 +1370,7 @@ const AuditLog = () => {
                 className="btn btn-outline"
                 style={{ padding: '0.4rem 0.8rem', opacity: currentPage === totalPages ? 0.4 : 1, cursor: currentPage === totalPages ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.85rem' }}
               >
-                التالية
+                {t('audit.pagination.next', { defaultValue: 'التالية' })}
                 <ChevronLeft size={16} />
               </button>
 
@@ -1364,7 +1380,7 @@ const AuditLog = () => {
                 disabled={currentPage === totalPages}
                 className="btn btn-outline"
                 style={{ padding: '0.4rem 0.6rem', opacity: currentPage === totalPages ? 0.4 : 1, cursor: currentPage === totalPages ? 'not-allowed' : 'pointer' }}
-                title="الصفحة الأخيرة"
+                title={t('audit.pagination.last_page', { defaultValue: 'الصفحة الأخيرة' })}
               >
                 <ChevronsLeft size={16} />
               </button>
@@ -1427,7 +1443,7 @@ const AuditLog = () => {
                     {t('audit_log.modal_title', { defaultValue: 'تفاصيل الحركة والتدقيق' })}
                   </h3>
                   <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-                    معرف الحركة: <code style={{ color: 'var(--accent-color)' }}>{selectedLog.id}</code>
+                    {t('audit.modal.activity_id', { defaultValue: 'معرف الحركة:' })} <code style={{ color: 'var(--accent-color)' }}>{selectedLog.id}</code>
                   </div>
                 </div>
               </div>
@@ -1469,11 +1485,11 @@ const AuditLog = () => {
 
               <div>
                 <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '0.2rem' }}>
-                  الشاشة المصدر
+                  {t('audit.table.screen', { defaultValue: 'الشاشة المصدر' })}
                 </div>
                 <div style={{ fontSize: '0.95rem', fontWeight: '700', color: 'var(--accent-color)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                   <span>{getScreenInfo(selectedLog).icon || '🖥️'}</span>
-                  {getScreenInfo(selectedLog).nameAr}
+                  {getScreenName(getScreenInfo(selectedLog))}
                 </div>
               </div>
 
@@ -1508,7 +1524,7 @@ const AuditLog = () => {
               lineHeight: '1.6'
             }}>
               <span style={{ color: getActionMeta(selectedLog.action_type).color, fontWeight: '800', marginLeft: '0.5rem' }}>
-                [{getActionMeta(selectedLog.action_type).label}]:
+                [{getActionLabel(getActionMeta(selectedLog.action_type))}]:
               </span>
               {formatDetailedLogSummary(selectedLog)}
             </div>
@@ -1529,7 +1545,7 @@ const AuditLog = () => {
               }}>
                 <div style={{ textAlign: 'center' }}>
                   <div style={{ fontSize: '0.82rem', color: '#a78bfa', fontWeight: '700', marginBottom: '0.35rem' }}>
-                    📋 الموديل الأصلي (المستنسخ منه)
+                    📋 {t('audit.snapshot.original_model', { defaultValue: 'الموديل الأصلي (المستنسخ منه)' })}
                   </div>
                   <div style={{
                     fontSize: '1.2rem',
@@ -1541,7 +1557,7 @@ const AuditLog = () => {
                     borderRadius: '8px',
                     letterSpacing: '0.04em'
                   }}>
-                    {getCopiedFromModel(selectedLog) ? `#${getCopiedFromModel(selectedLog)}` : 'موديل سابق (أرشيف)'}
+                    {getCopiedFromModel(selectedLog) ? `#${getCopiedFromModel(selectedLog)}` : t('audit.snapshot.previous_archive', { defaultValue: 'موديل سابق (أرشيف)' })}
                   </div>
                 </div>
 
@@ -1562,7 +1578,7 @@ const AuditLog = () => {
 
                 <div style={{ textAlign: 'center' }}>
                   <div style={{ fontSize: '0.82rem', color: '#10b981', fontWeight: '700', marginBottom: '0.35rem' }}>
-                    ✨ الموديل الجديد (المستنسخ إليه)
+                    ✨ {t('audit.snapshot.new_model', { defaultValue: 'الموديل الجديد (المستنسخ إليه)' })}
                   </div>
                   <div style={{
                     fontSize: '1.2rem',
@@ -1640,10 +1656,10 @@ const AuditLog = () => {
                 <AlertTriangle size={22} color="#f59e0b" style={{ flexShrink: 0, marginTop: '2px' }} />
                 <div>
                   <div style={{ fontWeight: '700', color: '#f59e0b', fontSize: '0.95rem', marginBottom: '0.3rem' }}>
-                    تحديث وحفظ عام لسجل الطلبية
+                    {t('audit.snapshot.general_update_title', { defaultValue: 'تحديث وحفظ عام لسجل الطلبية' })}
                   </div>
                   <div style={{ fontSize: '0.86rem', color: 'var(--text-muted)', lineHeight: '1.6' }}>
-                    تم تسجيل هذه الحركة عند قيام الموظف بتأكيد أو حفظ الطلبية. لم تطرأ اختلافات على الحقول المالية أو الكميات المحورية الأساسية (مثل السعر أو إجمالي القطع أو اسم المصنع)، وقد شمل الإجراء تعديل الملاحظات، الصور، أو إعادة تأكيد البيانات.
+                    {t('audit.snapshot.general_update_desc', { defaultValue: 'تم تسجيل هذه الحركة عند قيام الموظف بتأكيد أو حفظ الطلبية. لم تطرأ اختلافات على الحقول المالية أو الكميات المحورية الأساسية (مثل السعر أو إجمالي القطع أو اسم المصنع)، وقد شمل الإجراء تعديل الملاحظات، الصور، أو إعادة تأكيد البيانات.' })}
                   </div>
                 </div>
               </div>
@@ -1687,27 +1703,27 @@ const AuditLog = () => {
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem', fontSize: '0.85rem' }}>
                   <div>
-                    <span style={{ color: 'var(--text-muted)' }}>رقم الموديل: </span>
+                    <span style={{ color: 'var(--text-muted)' }}>{t('audit.snapshot.serial_no', { defaultValue: 'رقم الموديل:' })} </span>
                     <strong style={{ color: 'var(--accent-color)' }}>{selectedLog.details.fullSnapshot.serialNumber || selectedLog.entity_id}</strong>
                   </div>
                   <div>
-                    <span style={{ color: 'var(--text-muted)' }}>اسم المنتج: </span>
+                    <span style={{ color: 'var(--text-muted)' }}>{t('audit.snapshot.product_name', { defaultValue: 'اسم المنتج:' })} </span>
                     <strong>{selectedLog.details.fullSnapshot.productName || '-'}</strong>
                   </div>
                   <div>
-                    <span style={{ color: 'var(--text-muted)' }}>المشتري: </span>
+                    <span style={{ color: 'var(--text-muted)' }}>{t('audit.snapshot.buyer', { defaultValue: 'المشتري:' })} </span>
                     <strong>{selectedLog.details.fullSnapshot.buyerCompany || selectedLog.details.fullSnapshot.buyerId || '-'}</strong>
                   </div>
                   <div>
-                    <span style={{ color: 'var(--text-muted)' }}>المصنع: </span>
+                    <span style={{ color: 'var(--text-muted)' }}>{t('audit.snapshot.factory', { defaultValue: 'المصنع:' })} </span>
                     <strong>{selectedLog.details.fullSnapshot.factoryId || '-'}</strong>
                   </div>
                   <div>
-                    <span style={{ color: 'var(--text-muted)' }}>إجمالي الكمية: </span>
+                    <span style={{ color: 'var(--text-muted)' }}>{t('audit.snapshot.total_qty', { defaultValue: 'إجمالي الكمية:' })} </span>
                     <strong>{selectedLog.details.fullSnapshot.totalQuantity || '-'}</strong>
                   </div>
                   <div>
-                    <span style={{ color: 'var(--text-muted)' }}>سعر القطعة: </span>
+                    <span style={{ color: 'var(--text-muted)' }}>{t('audit.snapshot.product_price', { defaultValue: 'سعر القطعة:' })} </span>
                     <strong>{selectedLog.details.fullSnapshot.productPrice || '-'} {selectedLog.details.fullSnapshot.currency || ''}</strong>
                   </div>
                 </div>
@@ -1717,7 +1733,7 @@ const AuditLog = () => {
             {/* Device & Browser Info */}
             {selectedLog.user_agent && (
               <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', borderTop: '1px solid var(--border-color)', paddingTop: '0.75rem' }}>
-                بيانات المتصفح والنظام: <code>{selectedLog.user_agent}</code>
+                {t('audit.snapshot.user_agent', { defaultValue: 'بيانات المتصفح والنظام:' })} <code>{selectedLog.user_agent}</code>
               </div>
             )}
 
@@ -1728,7 +1744,7 @@ const AuditLog = () => {
                 className="btn btn-outline"
                 style={{ padding: '0.5rem 1.5rem' }}
               >
-                إغلاق
+                {t('audit.modal.close', { defaultValue: 'إغلاق' })}
               </button>
             </div>
           </div>

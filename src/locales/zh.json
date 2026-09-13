@@ -166,9 +166,11 @@
       "serial_no_manual": "款号/序列号 (手动输入)",
       "serial_placeholder": "输入编号并按回车键读取...",
       "checking": "正在核对...",
-      "used": "⚠️ 该编号已被占用！",
-      "used_in_old": "⚠️ 已存在于历史商品列表中！",
-      "available": "✅ 编号可用。",
+      "used": "⚠️ 该款号已在订单中被占用！",
+      "used_in_old": "⚠️ 该款号存在于旧系统记录中！",
+      "available": "✅ 编号可用，可以创建。",
+      "current_received": "🔒 该款号已入库（请更改款号以保存为新订单）",
+      "current_order": "ℹ️ 当前订单的款号",
       "fetch_hint": "按回车键读取产品数据",
       "generated_barcode": "生成的条形码:",
       "buyer_code": "客户代码",
@@ -197,7 +199,9 @@
       "gallery_upload": "从相册选择",
       "camera_upload": "拍照上传",
       "uploading": "正在上传图片...",
-      "no_images": "暂未添加图片 — 请点击上方按钮上传产品照片"
+      "no_images": "暂未添加图片 — 请点击上方按钮上传产品照片",
+      "locked_badge": "已锁定",
+      "editable_for_copy": "另存新版本时唯一允许修改的字段"
     },
     "dates": {
       "section_title": "日期、数量与尺码范围",
@@ -237,7 +241,14 @@
       "carton_size": "纸箱尺寸",
       "plastic_bag_size": "胶袋尺寸",
       "auto_calc_placeholder": "自动计算...",
-      "not_enough_qty": "数量不足"
+      "not_enough_qty": "数量不足",
+      "add_name_required": "请输入工厂名称",
+      "add_duplicate_name": "该工厂已存在",
+      "add_success": "工厂添加并选择成功",
+      "add_failed": "保存工厂失败，请重试",
+      "add_factory": "添加工厂",
+      "add_saving": "正在保存...",
+      "add_save": "保存工厂"
     },
     "colors": {
       "section_title": "颜色与码数配比表",
@@ -283,7 +294,21 @@
         "term_pinned": "📌 已将“{{name}}”固定为所有订单的默认要求！",
         "term_unpinned": "已取消“{{name}}”的固定要求",
         "terms_saved_fixed": "📌 已保存 ({{count}}) 条默认固定要求用于所有未来订单！"
-      }
+      },
+      "fixed_terms_title": "固定条款",
+      "extra_terms_title": "已选附加条款",
+      "empty_condition": "请输入条款内容",
+      "edit_success": "修改成功",
+      "add_success": "添加成功",
+      "confirm_delete": "您确定要从基础条款列表中删除该项吗？",
+      "delete_success": "删除成功",
+      "edit_conditions_list": "管理基础条款列表",
+      "new_condition_placeholder": "输入新条款内容...",
+      "btn_edit": "修改",
+      "btn_add": "添加",
+      "btn_cancel": "取消",
+      "btn_delete": "删除",
+      "no_conditions_yet": "暂无添加的条款。"
     },
     "measurements": {
       "section_title": "产品详细尺寸规格",
@@ -369,7 +394,16 @@
       "load_error": "加载图片以进行编辑失败",
       "confirm_delete_image": "您确定要删除这张图片吗？",
       "delete_success_image": "图片删除成功",
-      "received_already": "该产品已被仓库接收，无法编辑"
+      "received_already": "该产品已被仓库接收，无法编辑",
+      "product_received_no_edit": "⚠️ 该产品已在仓库入库，无法修改原数据！仅可更改款号以另存为新订单。",
+      "product_received_badge": "提示：该产品已被仓库接收",
+      "insufficient_quantity": "总数量不足一箱",
+      "upload_in_progress": "正在上传图片，请等待上传完成！",
+      "enter_serial": "请输入款号",
+      "checking_serial": "正在检查款号...",
+      "serial_available": "款号可用",
+      "serial_taken": "该款号已被占用！",
+      "delete_error": "删除时发生错误"
     },
     "units": {
       "carton": "箱",
@@ -450,6 +484,18 @@
       "preparing_pdf": "正在准备 PDF 下载...",
       "download_success": "PDF 下载成功！",
       "download_error": "下载 PDF 时发生错误"
+    },
+    "export_modal": {
+      "pdf_title": "导出与合同文档下载选项 (PDF)",
+      "print_title": "导出与合同文档打印选项",
+      "subtitle": "选择文档中价格与财务数据的展示方式",
+      "prompt_question": "是否在文档中包含单价与总金额？",
+      "with_prices_title": "含价格文档 (显示单价与总金额)",
+      "with_prices_badge": "含价格",
+      "with_prices_desc": "显示产品单价 (¥) 及全部总金额。适用于管理层、财务部及核算。",
+      "no_prices_title": "无价格文档 (隐藏金额)",
+      "no_prices_badge": "工厂/车间版",
+      "no_prices_desc": "完全隐藏单价与总金额两列，以便在向工厂或车间发送合同时对价格保密，同时保持表格排版工整美观。"
     }
   },
   "receiving": {
@@ -532,6 +578,9 @@
       "received_status_required": "请先将状态更改为“已收到”",
       "qty_mismatch_warning": "注意：接收数量 ({{received}}) 与原始数量 ({{expected}}) 不匹配",
       "colors_mismatch_warning": "注意：颜色数量 ({{colors}}) 与总件数 ({{total}}) 不匹配"
+    },
+    "table": {
+      "auto": "自动"
     }
   },
   "owner": {
@@ -607,7 +656,8 @@
       "generate_btn": "生成表格",
       "loading": "正在获取...",
       "setup_btn": "页面设置",
-      "print_btn": "继续打印"
+      "print_btn": "继续打印",
+      "title": "款号列表"
     },
     "stats": {
       "total_pcs": "总件数",
@@ -723,7 +773,9 @@
         "review_order": "查看/编辑",
         "review_tooltip": "在录入向导中查看并编辑此订单",
         "actions": "操作"
-      }
+      },
+      "total_sum": "总计 (Total 合计)",
+      "items_count": "{{count}} 项目 (Items)"
     },
     "detailed_terms": "发票所需条件要求",
     "no_terms_available": "目前没有附加条款。您可以在设置中添加。",
@@ -754,7 +806,10 @@
       "pdf_error": "下载 PDF 时出错",
       "term_pinned": "📌 已将“{{name}}”设为默认固定条件！",
       "term_unpinned": "已取消“{{name}}”的固定条件",
-      "terms_saved_fixed": "📌 已保存 ({{count}}) 条默认固定条件用于所有未来发票！"
+      "terms_saved_fixed": "📌 已保存 ({{count}}) 条默认固定条件用于所有未来发票！",
+      "excel_success": "Excel 文件导出成功 (含价格)",
+      "excel_success_no_prices": "Excel 文件导出成功 (无价格)",
+      "pdf_success_no_prices": "合同 PDF 导出成功 (无价格)"
     },
     "excel_headers": {
       "serial": "款号 (Serial)",
@@ -771,7 +826,11 @@
       "remarks": "备注",
       "order_date": "下单日期",
       "delivery_date": "交货日期",
-      "system_date": "系统添加日期"
+      "system_date": "系统添加日期",
+      "barcode": "条形码",
+      "colors_count": "颜色数量",
+      "sizes_count": "尺码数量",
+      "sheet_name": "订单报告"
     },
     "selected_terms_count": "已选 {{count}} 项条件",
     "select_terms_placeholder": "选择所需条件要求...",
@@ -793,7 +852,21 @@
     "unpin_for_this_invoice": "仅对本发票取消选择",
     "remove_extra_term": "删除附加条件",
     "fixed_status_count": "({{count}} 项始终默认)",
-    "no_conditions_selected": "未选择条件"
+    "no_conditions_selected": "未选择条件",
+    "edit_master_list": "修改系统基础条款列表",
+    "edit_list_btn": "管理基础条款",
+    "export_modal": {
+      "pdf_title": "订单合同下载选项 (PDF)",
+      "excel_title": "报告导出选项 (Excel)",
+      "subtitle": "选择文件中价格与财务数据的展示方式",
+      "prompt_question": "是否在文档中包含单价、币种及总金额列？",
+      "with_prices_title": "含价格合同 (显示单价与币种)",
+      "with_prices_badge": "完整版本",
+      "with_prices_desc": "显示币种、单价及总金额列。适用于财务与管理层核算。",
+      "no_prices_title": "无价格合同 (隐藏财务金额)",
+      "no_prices_badge": "工厂/车间版",
+      "no_prices_desc": "隐藏币种、单价及总金额列，以便向工厂或工场发送合同时对价格严格保密。"
+    }
   },
   "shipping": {
     "title": "装运发票和综合报告",
@@ -849,7 +922,8 @@
       "invoice_total": "发票总计",
       "say_total": "总金额为",
       "container_no": "集装箱号：",
-      "seal_no": "封条号："
+      "seal_no": "封条号：",
+      "ctn": "箱 CTN"
     },
     "fetch_dialog": {
       "title": "获取产品数据",
@@ -1048,7 +1122,19 @@
       "account_suspended": "此账户已被停用，请联系管理员",
       "wrong_password": "密码错误",
       "account_deleted_suspended": "此账户已被删除或停用！",
-      "login_error": "尝试登录时发生错误"
+      "login_error": "尝试登录时发生错误",
+      "mfa_setup_failed": "初始化双重身份验证失败",
+      "copied_success": "密钥已复制！",
+      "invalid_totp_format": "验证码必须为6位数字",
+      "mfa_enabled_success": "双重身份验证已成功启用！",
+      "wrong_totp_code": "输入的验证码错误或已过期",
+      "confirm_disable_mfa": "您确定要停用双重身份验证吗？这将降低您的账户安全性。",
+      "mfa_disabled_success": "双重身份验证已成功停用。",
+      "mfa_disable_failed": "停用双重身份验证失败",
+      "fill_all_digits": "请完整输入6位验证码",
+      "no_mfa_factors": "未启用任何双重验证方式",
+      "mfa_verified_success": "验证成功！",
+      "unauthorized": "您无权查看该工厂的订单"
     },
     "login_desc": "请输入您的凭据以访问系统",
     "logout": "退出登录",
@@ -1093,7 +1179,13 @@
     "user_saved": "用户信息保存成功！",
     "user_deleted": "用户删除成功！",
     "confirm_delete": "您确定要永久删除此用户吗？",
-    "delete_error": "删除用户时出错"
+    "delete_error": "删除用户时出错",
+    "activating": "正在激活...",
+    "mfa_title": "双重身份验证 (2FA)",
+    "mfa_subtitle": "请输入身份验证器应用中生成的6位验证码。",
+    "verifying": "正在验证...",
+    "verify_btn": "确认验证码",
+    "logout_btn": "退出登录并返回"
   },
   "admin": {
     "title": "战略仪表板",
@@ -1159,7 +1251,9 @@
       "packagingConditionsList": "所需条件",
       "buyerCodes": "买家代码",
       "oldItems": "历史商品列表",
-      "system_users": "用户管理"
+      "system_users": "用户管理",
+      "backup": "数据备份",
+      "security": "账户安全"
     },
     "messages": {
       "valid_name_required": "请输入有效的名称或值",
@@ -1175,7 +1269,10 @@
       "edit_saved": "编辑已保存 ✏️",
       "add_success": "添加成功 ✅",
       "reorder_success": "项目重新排序成功 ✨",
-      "edit_mode_active": "编辑模式已激活..."
+      "edit_mode_active": "编辑模式已激活...",
+      "upload_failed": "上传文件失败",
+      "db_error": "从云端获取数据时出错",
+      "item_deleted": "项目已删除 🗑️"
     },
     "fields": {
       "name": "名称",
@@ -1193,7 +1290,47 @@
       "delete": "删除",
       "assign_parts": "分配组件部分"
     },
-    "select_color_title": "选择显示颜色"
+    "select_color_title": "选择显示颜色",
+    "old_items": {
+      "empty_file": "Excel 文件为空，不包含任何数据行！",
+      "no_valid_rows": "未找到有效数据行（每行至少需要包含款号或条形码）",
+      "parse_success": "文件解析成功！准备上传 {{count}} 个款号。",
+      "parse_error": "读取 Excel 文件时出错，请检查文件格式是否正确。",
+      "uploading_toast": "正在开始上传款号数据...",
+      "upload_progress": "正在上传数据：已完成 {{uploaded}} / {{total}} ({{percent}}%)",
+      "upload_complete": "恭喜！已极速成功上传 {{total}} 个款号。",
+      "upload_fail": "上传操作失败。",
+      "confirm_delete_single": "您确定要删除该款号 ({{code}}) 吗？",
+      "delete_single_success": "款号删除成功。",
+      "delete_fail": "删除操作出错",
+      "confirm_clear_all": "⚠️ 高危警告：\n\n您确定要彻底清空数据库中的所有旧款号（共 {{count}} 个）吗？\n此操作不可撤销，数据表将被清空以便重新导入。",
+      "clearing": "正在彻底清空数据...",
+      "clear_success": "旧款号数据表已成功全部清空！",
+      "clear_fail": "清空数据失败！",
+      "upload_title": "从旧系统导入款号及条形码",
+      "upload_desc": "上传包含两列的 Excel 文件：款号与条形码。系统将在录入新订单时对比此列表以彻底杜绝重复。",
+      "change_file": "更换文件",
+      "select_file": "选择 Excel 文件",
+      "rows_count": "行",
+      "uploading_active": "正在高速自动上传...",
+      "confirm_upload": "开始快速上传整个文件",
+      "search_placeholder": "🔍 按款号或旧条形码搜索...",
+      "total_recorded": "已记录款号总数：",
+      "clear_all_btn": "清空整个数据表",
+      "loading": "正在获取旧款号列表...",
+      "no_results": "没有找到符合搜索条件的结果！",
+      "no_records": "旧款号列表为空！",
+      "try_other_search": "请确认输入的款号或条形码是否正确。",
+      "upload_to_start": "请选择并上传 Excel 文件以填充此表格。",
+      "item_code_col": "款号 (Model No.)",
+      "barcode_col": "旧条形码",
+      "date_col": "上传日期",
+      "page_indicator": "第 {{page}} 页，共 {{total}} 页 (显示 {{shown}} 个款号)",
+      "prev_btn": "上一页",
+      "next_btn": "下一页"
+    },
+    "actions_header": "操作",
+    "reorder_success": "项目重新排序成功 ✨"
   },
   "user_mgmt": {
     "title": "系统权限管理",
@@ -1243,8 +1380,13 @@
       "username_required": "用户名是必填项",
       "password_required": "新用户必须填写密码",
       "save_error": "保存用户时出错",
-      "permissions_copied": "权限复制成功！"
-    }
+      "permissions_copied": "权限复制成功！",
+      "loading_users_error": "加载用户列表失败"
+    },
+    "allowed_factories": "允许访问的工厂",
+    "allowed_factories_desc": "若未指定工厂，用户将能查看所有工厂。若指定了特定工厂，则用户只能访问这些工厂。",
+    "allowed_companies": "允许访问的公司",
+    "allowed_companies_desc": "若未指定公司，用户将能查看所有公司。"
   },
   "image_editor": {
     "title": "图片编辑器",
@@ -1359,5 +1501,108 @@
     "sql_copied": "SQL 代码已成功复制到剪贴板！",
     "cloud_connected": "云端已连接 (Supabase)",
     "local_resilient": "本地韧性安全存储"
+  },
+  "common": {
+    "loading": "正在加载...",
+    "cancel": "取消"
+  },
+  "security": {
+    "mfa_status_active": "双重身份验证已启用并激活",
+    "mfa_status_active_desc": "您的账户受到额外安全级别的保护。",
+    "mfa_info_active": "下次登录时，系统将要求您输入身份验证器应用中的6位验证码。",
+    "disable_mfa_btn": "停用双重身份验证",
+    "mfa_status_inactive": "双重身份验证未启用",
+    "mfa_status_inactive_desc": "您的账户当前仅受密码保护。",
+    "mfa_info_inactive": "强烈建议启用双重身份验证 (MFA)，以保护管理后台和业务数据免遭未经授权的访问。",
+    "enable_mfa_btn": "开始设置双重身份验证",
+    "setup_title": "设置双重身份验证",
+    "setup_step_1": "使用身份验证器应用（如 Google Authenticator 或 Authy）扫描下方二维码：",
+    "setup_secret_label": "如果无法扫描二维码，请在应用中手动输入此密钥：",
+    "setup_step_2": "输入应用中生成的6位验证码以确认启用：",
+    "activate_btn": "确认并启用"
+  },
+  "backup": {
+    "exporting": "正在生成数据备份...",
+    "export_success": "备份文件下载成功！",
+    "export_failed": "导出数据失败",
+    "confirm_import": "警告：恢复备份将更新并合并服务器上的现有数据。您确定要继续吗？",
+    "importing": "正在导入数据并更新数据库...",
+    "import_success": "数据恢复与数据库更新成功！",
+    "title": "数据备份与恢复",
+    "description": "您可以将所有系统表格、订单及设置生成完整备份并保存至本地，随时恢复以保护业务数据。",
+    "export_title": "下载数据备份",
+    "export_desc": "将下载一个包含订单、设置、用户及收货记录的 JSON 备份文件。",
+    "export_btn": "下载备份文件",
+    "import_title": "恢复数据备份",
+    "import_desc": "上传有效的 JSON 备份文件，将表格和数据恢复至备份时的状态。",
+    "import_btn": "上传并恢复备份",
+    "warning_title": "重要安全警告",
+    "warning_desc": "恢复备份文件将更新并合并数据库中的记录。在开始恢复之前，请确保上传的文件真实有效，以防数据损坏。"
+  },
+  "units": {
+    "carton": "箱",
+    "piece": "件"
+  },
+  "pcs": "数量 (件)",
+  "audit": {
+    "title": "系统操作与审计日志",
+    "subtitle": "全面跟踪、监控并记录系统中的所有操作与业务活动，支持快速恢复已删除的订单",
+    "search_placeholder": "按款号、员工、操作界面或操作说明搜索...",
+    "all_screens": "所有界面与模块",
+    "loading": "正在加载与同步审计日志...",
+    "reset_filters": "重置所有筛选",
+    "refresh_success": "日志刷新成功 (已记录 {{count}} 条活动)",
+    "load_error": "加载审计日志时出错",
+    "restore_fail": "恢复订单失败",
+    "restore_error": "恢复过程中发生意外错误",
+    "total_indexed": "已索引活动总计：",
+    "no_results_desc": "您可以尝试更改搜索或筛选选项以查看其他活动记录。",
+    "from_screen": "来源界面：",
+    "by_user": "操作员工：",
+    "copied_from": "复制自原款号：",
+    "to_new_model": "至新款号：",
+    "copied_and_generated": "已生成克隆订单，款号：",
+    "other_changes": "+{{count}} 项其他变更",
+    "general_save_notice": "保存并确认订单数据 (常规更新与附件)",
+    "table": {
+      "date_time": "日期与时间",
+      "user": "责任员工",
+      "screen": "来源界面",
+      "action_type": "操作类型",
+      "entity": "款号 / 标识符",
+      "details": "完整活动详情",
+      "actions": "操作",
+      "default_user": "用户",
+      "view_btn": "查看"
+    },
+    "pagination": {
+      "showing": "显示第 {{start}} 至 {{end}} 条，共 {{total}} 条活动",
+      "per_page": "每页：",
+      "first_page": "第一页",
+      "prev": "上一页",
+      "next": "下一页",
+      "last_page": "最后一页"
+    },
+    "modal": {
+      "activity_id": "活动编号：",
+      "close": "关闭"
+    },
+    "snapshot": {
+      "original_model": "原款号 (复制来源)",
+      "new_model": "新款号 (克隆目标)",
+      "previous_archive": "历史款号 (存档)",
+      "general_update_title": "订单记录常规更新与保存",
+      "general_update_desc": "此操作记录于员工保存或确认订单时生成。核心财务字段或关键数量未发生变动，可能涉及修改备注、更新图片或重新核对数据。",
+      "serial_no": "款号：",
+      "product_name": "产品名称：",
+      "buyer": "买家：",
+      "factory": "工厂：",
+      "total_qty": "总数量：",
+      "product_price": "单价：",
+      "user_agent": "浏览器与系统信息："
+    },
+    "from_original": "从原款号",
+    "to_new": "至",
+    "unspecified": "未指定"
   }
 }

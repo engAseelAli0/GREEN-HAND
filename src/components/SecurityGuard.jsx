@@ -26,6 +26,12 @@ const SecurityGuard = ({ children }) => {
   const [shieldClickCount, setShieldClickCount] = useState(0);
 
   const isRtl = i18n.language === 'ar';
+  const isZh = i18n.language === 'zh';
+  const getLang = (arStr, enStr, zhStr) => {
+    if (isRtl) return arStr;
+    if (isZh) return zhStr || enStr;
+    return enStr;
+  };
 
   useEffect(() => {
     isBlockedRef.current = isBlocked;
@@ -46,9 +52,11 @@ const SecurityGuard = ({ children }) => {
       isBlockedRef.current = false;
       setTimeout(() => {
         toast.success(
-          isRtl
-            ? '🔓 تم إيقاف حماية المطور مؤقتاً — يمكنك الآن استخدام F12 والفحص بحرية (Shift+F12 أو Ctrl+Shift+X للإعادة)'
-            : '🔓 DevTools protection disabled — You can now use F12 & Inspect (Shift+F12 to re-enable)',
+          getLang(
+            '🔓 تم إيقاف حماية المطور مؤقتاً — يمكنك الآن استخدام F12 والفحص بحرية (Shift+F12 أو Ctrl+Shift+X للإعادة)',
+            '🔓 DevTools protection disabled — You can now use F12 & Inspect (Shift+F12 to re-enable)',
+            '🔓 开发者保护已临时停用 — 您现在可以自由使用 F12 与检查元素 (按 Shift+F12 重新启用)'
+          ),
           { duration: 5000, id: 'sec-guard-toggle' }
         );
       }, 0);
@@ -56,9 +64,11 @@ const SecurityGuard = ({ children }) => {
       localStorage.removeItem('security_guard_disabled');
       setTimeout(() => {
         toast.success(
-          isRtl
-            ? '🔒 تم تفعيل حماية وأمان المطور بنجاح'
-            : '🔒 DevTools protection re-enabled successfully',
+          getLang(
+            '🔒 تم تفعيل حماية وأمان المطور بنجاح',
+            '🔒 DevTools protection re-enabled successfully',
+            '🔒 开发者安全保护已成功重新启用'
+          ),
           { duration: 3500, id: 'sec-guard-toggle' }
         );
       }, 0);
@@ -319,7 +329,7 @@ const SecurityGuard = ({ children }) => {
           {/* Pulsing Lock / Shield Icon - 3 clicks to unlock */}
           <div 
             onClick={handleShieldSecretClick}
-            title={isRtl ? 'انقر 3 مرات للفتح السريع لوضع المطور' : 'Click 3 times to unlock dev mode'}
+            title={getLang('انقر 3 مرات للفتح السريع لوضع المطور', 'Click 3 times to unlock dev mode', '快速点击3次以解锁开发者模式')}
             style={{
               width: '90px',
               height: '90px',
@@ -348,7 +358,7 @@ const SecurityGuard = ({ children }) => {
             color: 'var(--accent-color, #d4af37)',
             fontFamily: 'Tajawal, sans-serif'
           }}>
-            {isRtl ? 'تم كشف أدوات المطور (DevTools)' : 'Developer Tools Detected'}
+            {getLang('تم كشف أدوات المطور (DevTools)', 'Developer Tools Detected', '检测到开发者工具 (DevTools)')}
           </h2>
           
           <p style={{ 
@@ -358,9 +368,11 @@ const SecurityGuard = ({ children }) => {
             marginBottom: '2rem',
             fontFamily: 'Tajawal, sans-serif'
           }}>
-            {isRtl 
-              ? 'لحماية أمان النظام وخصوصية البيانات من أي محاولة فحص أو تعديل غير مصرح بها، تم حظر الوصول مؤقتاً. يرجى إغلاق أدوات المطور للمتابعة.'
-              : 'To safeguard system integrity and maintain strict data confidentiality, access has been temporarily restricted. Please close Developer Tools to proceed.'}
+            {getLang(
+              'لحماية أمان النظام وخصوصية البيانات من أي محاولة فحص أو تعديل غير مصرح بها، تم حظر الوصول مؤقتاً. يرجى إغلاق أدوات المطور للمتابعة.',
+              'To safeguard system integrity and maintain strict data confidentiality, access has been temporarily restricted. Please close Developer Tools to proceed.',
+              '为保障系统安全与数据机密性，防止未经授权的检查或修改，访问已暂时受限。请关闭开发者工具以继续。'
+            )}
           </p>
 
           <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -393,7 +405,7 @@ const SecurityGuard = ({ children }) => {
               }}
             >
               <RefreshCw size={18} />
-              <span>{isRtl ? 'إعادة الفحص والتشغيل' : 'Recheck & Access'}</span>
+              <span>{getLang('إعادة الفحص والتشغيل', 'Recheck & Access', '重新检查并进入')}</span>
             </button>
 
             <button 
@@ -422,12 +434,16 @@ const SecurityGuard = ({ children }) => {
               }}
             >
               <Unlock size={18} />
-              <span>{isRtl ? 'السماح بأدوات المطور (F12)' : 'Allow DevTools'}</span>
+              <span>{getLang('السماح بأدوات المطور (F12)', 'Allow DevTools', '允许开发者工具 (F12)')}</span>
             </button>
           </div>
 
           <div style={{ marginTop: '1.5rem', fontSize: '0.82rem', color: '#8b949e' }}>
-            {isRtl ? 'اختصارات لوحة المفاتيح البديلة: Shift + F12 أو Ctrl + Shift + X' : 'Toggle shortcuts: Shift + F12 or Ctrl + Shift + X'}
+            {getLang(
+              'اختصارات لوحة المفاتيح البديلة: Shift + F12 أو Ctrl + Shift + X',
+              'Toggle shortcuts: Shift + F12 or Ctrl + Shift + X',
+              '快捷键切换：Shift + F12 或 Ctrl + Shift + X'
+            )}
           </div>
         </div>
       </div>
@@ -461,10 +477,10 @@ const SecurityGuard = ({ children }) => {
           }}
         >
           <Unlock size={14} color="#34d399" />
-          <span>{isRtl ? 'وضع الفحص نشط (F12 متاح)' : 'Dev Mode Active (F12 Allowed)'}</span>
+          <span>{getLang('وضع الفحص نشط (F12 متاح)', 'Dev Mode Active (F12 Allowed)', '开发者模式已激活 (允许 F12)')}</span>
           <button
             onClick={() => toggleSecurity(false)}
-            title={isRtl ? 'إعادة قفل وتفعيل الحماية' : 'Re-enable protection'}
+            title={getLang('إعادة قفل وتفعيل الحماية', 'Re-enable protection', '重新启用安全保护')}
             style={{
               background: 'rgba(239, 68, 68, 0.2)',
               border: '1px solid rgba(239, 68, 68, 0.4)',

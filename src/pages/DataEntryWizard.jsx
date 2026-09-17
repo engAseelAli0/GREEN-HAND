@@ -155,6 +155,23 @@ const DataEntryWizard = () => {
      }
      return [];
   });
+  const [originalProductImages, setOriginalProductImages] = useState(() => {
+     if (currentOrder?.productImages?.length > 0) {
+         return currentOrder.productImages.map(img => ({ ...img, preview: img.preview || img.url }));
+     }
+     return [];
+  });
+
+  const isSameImage = (img1, img2) => {
+    if (!img1 || !img2) return false;
+    const cleanUrl1 = (img1.url || img1.preview || '').split('?')[0];
+    const cleanUrl2 = (img2.url || img2.preview || '').split('?')[0];
+    if (img1.path && img2.path && img1.path === img2.path) return true;
+    if (cleanUrl1 && cleanUrl2 && cleanUrl1 === cleanUrl2) return true;
+    if (img1.name && img2.name && img1.name === img2.name) return true;
+    return false;
+  };
+
   const [uploadingImage, setUploadingImage] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [originalSerial, setOriginalSerial] = useState('');
@@ -168,7 +185,7 @@ const DataEntryWizard = () => {
   const [packagingSearchQuery, setPackagingSearchQuery] = useState('');
   const [showAddFactoryForm, setShowAddFactoryForm] = useState(false);
   const [isAddingFactory, setIsAddingFactory] = useState(false);
-  const [newFactory, setNewFactory] = useState({ name: '', code: '', mobile: '', address: '' });
+  const [newFactory, setNewFactory] = useState({ name: '', code: '', mobile: '', address: '', company: '' });
   const [fixedPackagingTerms, setFixedPackagingTerms] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem('gh_fixed_entry_terms') || localStorage.getItem('gh_fixed_order_terms') || '[]');
@@ -195,7 +212,7 @@ const DataEntryWizard = () => {
   };
 
   const resetNewFactoryForm = () => {
-    setNewFactory({ name: '', code: '', mobile: '', address: '' });
+    setNewFactory({ name: '', code: '', mobile: '', address: '', company: '' });
     setShowAddFactoryForm(false);
   };
 
@@ -208,6 +225,7 @@ const DataEntryWizard = () => {
     const code = newFactory.code.trim();
     const mobile = newFactory.mobile.trim();
     const address = newFactory.address.trim();
+    const company = (newFactory.company || '').trim();
     const currentFactories = Array.isArray(lookups.factories) ? [...lookups.factories] : [];
 
     if (!name) {
@@ -217,6 +235,11 @@ const DataEntryWizard = () => {
 
     if (!mobile || !address) {
       toast.error(t('admin.messages.factory_info_required', { defaultValue: 'الرجاء تعبئة عنوان وجوال المصنع بوضوح' }));
+      return;
+    }
+
+    if (user && user.role !== 'admin' && !company) {
+      toast.error(t('admin.messages.company_required_for_factory', { defaultValue: 'يرجى تحديد الشركة التابع لها المصنع' }));
       return;
     }
 
@@ -231,12 +254,15 @@ const DataEntryWizard = () => {
       return;
     }
 
-    const createdFactory = { name, mobile, address, code };
+    const createdFactory = { name, mobile, address, code, company };
     setIsAddingFactory(true);
     try {
       const { error } = await updateLookup('factories', [...currentFactories, createdFactory]);
       if (error) throw error;
       updateOrder('factoryId', name);
+      if (company && !currentOrder.buyerCompany) {
+        updateOrder('buyerCompany', company);
+      }
       resetNewFactoryForm();
       toast.success(t('entry.factory.add_success', { defaultValue: 'تم إضافة المصنع واختياره بنجاح' }));
     } catch (err) {
@@ -270,6 +296,22 @@ const DataEntryWizard = () => {
       }
     }
   }, [isEditMode]);
+
+  // Auto-fill buyerCompany if non-admin user has access to exactly one company
+  useEffect(() => {
+    if (!isEditMode && !currentOrder?.buyerCompany && user && user.role !== 'admin') {
+      const allowedComps = user.permissions?.allowed_companies || [];
+      if (allowedComps.length === 1 && allowedComps[0]) {
+        updateOrder('buyerCompany', allowedComps[0]);
+      } else if (filteredLookups.companies?.length === 1) {
+        const comp = filteredLookups.companies[0];
+        const singleCompName = typeof comp === 'object' ? comp.name : comp;
+        if (singleCompName) {
+          updateOrder('buyerCompany', singleCompName);
+        }
+      }
+    }
+  }, [isEditMode, currentOrder?.buyerCompany, user, filteredLookups.companies, updateOrder]);
   const serialSearchRef = useRef(null);
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
@@ -702,8 +744,14 @@ const DataEntryWizard = () => {
       if (editingExistingImageIndex !== null) {
         const idx = editingExistingImageIndex;
         const oldImg = productImages[idx];
-        const fileName = oldImg.name;
-        const filePath = oldImg.path || `product-images/${fileName}`;
+        const isOriginal = originalProductImages.some(orig => isSameImage(orig, oldImg));
+        const ext = file.name.split('.').pop() || 'jpg';
+        const modelNum = sanitizeItemCode(currentOrder.serialNumber || 'model');
+        const safeModelNum = modelNum.replace(/[/\\?%*:|"<>]/g, '-');
+        const fileName = (isOriginal || (originalSerial && currentOrder.serialNumber !== originalSerial))
+          ? `${safeModelNum}_${idx}_edited_${Date.now()}.${ext}`
+          : (oldImg.name || `${safeModelNum}_${idx}.${ext}`);
+        const filePath = `product-images/${fileName}`;
         
         const { error } = await supabase.storage.from('product_images').upload(filePath, file, { upsert: true });
 
@@ -786,13 +834,19 @@ const DataEntryWizard = () => {
     updatedOrderImages.splice(index, 1);
     updateOrder('productImages', updatedOrderImages);
 
-    if (imgToRemove.path) {
+    // If this image belongs to the original fetched order, DO NOT delete it from storage!
+    // This preserves the previous order's photo when an employee is preparing to save a copy.
+    const isOriginalImage = originalProductImages.some(orig => isSameImage(orig, imgToRemove));
+
+    if (!isOriginalImage && imgToRemove?.path) {
       try {
         await supabase.storage.from('product_images').remove([imgToRemove.path]);
         toast.success(t('entry.messages.delete_success_image'));
       } catch (err) {
         console.error('Error removing image:', err);
       }
+    } else {
+      toast.success(t('entry.messages.delete_success_image'));
     }
   };
 
@@ -1214,6 +1268,41 @@ const DataEntryWizard = () => {
         return;
      }
 
+     const cleanOriginal = sanitizeItemCode(originalSerial || '');
+     if (cleanOriginal && newSerial.toLowerCase() === cleanOriginal.toLowerCase()) {
+        toast.error(t('entry.messages.serial_same_as_original', { defaultValue: '⚠️ رقم الموديل مطابق للموديل الأصلي! يرجى تغيير رقم الموديل لحفظه كنسخة جديدة.' }));
+        return;
+     }
+
+     // Image verification: Check if the original product had images and if the employee changed them
+     if (originalProductImages.length > 0) {
+       const stillHasOriginalImage = productImages.some(currImg =>
+         originalProductImages.some(origImg => isSameImage(currImg, origImg))
+       );
+
+       if (stillHasOriginalImage) {
+         toast.error(
+           t('entry.messages.must_change_image_for_copy', {
+             defaultValue: '⚠️ يجب تغيير أو استبدال صورة المنتج السابق بصورة الموديل الجديد قبل الحفظ كنسخة!'
+           }),
+           { duration: 6500, id: 'copy-image-validation' }
+         );
+         setActiveTab('basic');
+         return;
+       }
+
+       if (productImages.length === 0) {
+         toast.error(
+           t('entry.messages.must_upload_new_image_for_copy', {
+             defaultValue: '⚠️ يرجى رفع صورة المنتج الجديد الخاص بهذا الموديل قبل الحفظ كنسخة!'
+           }),
+           { duration: 6500, id: 'copy-image-validation' }
+         );
+         setActiveTab('basic');
+         return;
+       }
+     }
+
      setIsSaving(true);
      const toastId = toast.loading(t('entry.messages.saving'));
      try {
@@ -1243,11 +1332,16 @@ const DataEntryWizard = () => {
        }
 
        const baseOrder = getCleanOrder();
+       const currentImgs = productImages.length > 0 ? productImages : (baseOrder.productImages || []);
        const updatedOrderState = {
          ...baseOrder,
          serialNumber: newSerial,
          orderNumber: null,
-         productImages: [] // لا يتم نسخ الصور للموديل المستنسخ الجديد
+         productImages: currentImgs.map(img => ({
+           name: img.name,
+           path: img.path,
+           url: img.url
+         }))
        };
 
        const sourceSerial = (originalSerial && originalSerial !== newSerial) ? originalSerial : 'موديل سابق';
@@ -1422,7 +1516,9 @@ const DataEntryWizard = () => {
       setCurrentOrder(finalOrder);
       setAutoFocusLastSize(false);
       setSelectedColorsArr(Object.keys(finalOrder.colorDistribution || {}));
-      setProductImages(finalOrder.productImages?.map(img => ({ ...img, preview: normalizeImageUrl(img) })) || []);
+      const fetchedImages = finalOrder.productImages?.map(img => ({ ...img, preview: normalizeImageUrl(img) })) || [];
+      setProductImages(fetchedImages);
+      setOriginalProductImages(fetchedImages);
       setIsEditMode(true);
       setOriginalSerial(finalOrder.serialNumber);
       checkSerialStatus(finalOrder.serialNumber, {
@@ -1473,6 +1569,7 @@ const DataEntryWizard = () => {
       }
     }
     setProductImages([]);
+    setOriginalProductImages([]);
     setSelectedColorsArr([]);
     setIsEditMode(false);
     setOriginalSerial('');
@@ -1493,7 +1590,19 @@ const DataEntryWizard = () => {
     } catch {
       // ignore
     }
-    setCurrentOrder({ ...defaultOrderState, packagingConditions: initConditions, serialNumber: nextSerial, orderNumber: nextOrder });
+    const singleAllowedCompany = (user && user.role !== 'admin')
+      ? (user.permissions?.allowed_companies?.length === 1
+          ? user.permissions.allowed_companies[0]
+          : (filteredLookups.companies?.length === 1 ? (typeof filteredLookups.companies[0] === 'object' ? filteredLookups.companies[0].name : filteredLookups.companies[0]) : ''))
+      : '';
+
+    setCurrentOrder({ 
+      ...defaultOrderState, 
+      buyerCompany: singleAllowedCompany || '',
+      packagingConditions: initConditions, 
+      serialNumber: nextSerial, 
+      orderNumber: nextOrder 
+    });
     setAutoFocusLastSize(false);
     checkSerialStatus(nextSerial, {
       immediate: true,
@@ -1686,7 +1795,20 @@ const DataEntryWizard = () => {
     const fixedSelected = selectedConditions.filter(c => fixedPackagingTerms.includes(c));
     const extraSelected = selectedConditions.filter(c => !fixedPackagingTerms.includes(c));
     const factorySelectOptions = (() => {
-      const options = Array.isArray(filteredLookups.factories) ? [...filteredLookups.factories] : [];
+      let options = Array.isArray(filteredLookups.factories) ? [...filteredLookups.factories] : [];
+      const selectedCompany = currentOrder.buyerCompany ? String(currentOrder.buyerCompany).trim().toLowerCase() : '';
+
+      // If a buyer company is selected in the order, show factories belonging to this company
+      if (selectedCompany) {
+        const companySpecific = options.filter(f => {
+          const fComp = typeof f === 'object' && f.company ? String(f.company).trim().toLowerCase() : '';
+          return fComp === selectedCompany;
+        });
+        if (companySpecific.length > 0) {
+          options = companySpecific;
+        }
+      }
+
       const selectedFactory = Array.isArray(lookups.factories)
         ? lookups.factories.find(f => (f.name === currentOrder.factoryId || f === currentOrder.factoryId))
         : null;
@@ -1711,11 +1833,24 @@ const DataEntryWizard = () => {
             
             <div className="form-group">
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
-                <label className="form-label" style={{ margin: 0 }}>{t('entry.factory.factory_select')}</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <label className="form-label" style={{ margin: 0 }}>{t('entry.factory.factory_select')}</label>
+                  {currentOrder.buyerCompany && (
+                    <span style={{ fontSize: '0.78rem', color: 'var(--accent-color)', fontWeight: 'bold' }}>
+                      ({t('entry.factory.showing_for_company', { company: currentOrder.buyerCompany, defaultValue: `مصانع ${currentOrder.buyerCompany}` })})
+                    </span>
+                  )}
+                </div>
                 <button
                   type="button"
                   className="btn btn-outline"
-                  onClick={() => setShowAddFactoryForm(prev => !prev)}
+                  onClick={() => {
+                    if (!showAddFactoryForm) {
+                      const defaultComp = currentOrder.buyerCompany || (filteredLookups.companies?.length === 1 ? (typeof filteredLookups.companies[0] === 'object' ? filteredLookups.companies[0].name : filteredLookups.companies[0]) : '');
+                      setNewFactory(prev => ({ ...prev, company: prev.company || defaultComp || '' }));
+                    }
+                    setShowAddFactoryForm(prev => !prev);
+                  }}
                   style={{ padding: '0.45rem 0.75rem', fontSize: '0.85rem', borderColor: 'rgba(212, 175, 55, 0.35)', color: 'var(--accent-color)' }}
                   title={t('entry.factory.add_factory', { defaultValue: 'إضافة مصنع' })}
                 >
@@ -1723,7 +1858,23 @@ const DataEntryWizard = () => {
                   <span>{showAddFactoryForm ? t('entry.actions.cancel_edit', { defaultValue: 'إلغاء' }) : t('entry.factory.add_factory', { defaultValue: 'إضافة مصنع' })}</span>
                 </button>
               </div>
-              <ClearableSelect className="form-control" value={currentOrder.factoryId || ''} onChange={(e) => updateOrder('factoryId', e.target.value)} clearTitle={t('entry.actions.clear_btn')}>
+              <ClearableSelect 
+                className="form-control" 
+                value={currentOrder.factoryId || ''} 
+                onChange={(e) => {
+                  const selectedVal = e.target.value;
+                  updateOrder('factoryId', selectedVal);
+                  if (selectedVal) {
+                    const fObj = Array.isArray(lookups.factories) 
+                      ? lookups.factories.find(f => (typeof f === 'object' ? f.name : f) === selectedVal) 
+                      : null;
+                    if (fObj && typeof fObj === 'object' && fObj.company && !currentOrder.buyerCompany) {
+                      updateOrder('buyerCompany', fObj.company);
+                    }
+                  }
+                }} 
+                clearTitle={t('entry.actions.clear_btn')}
+              >
                 <option value="">{t('entry.factory.factory_placeholder')}</option>
                 {factorySelectOptions.map((f, i) => <option key={`${f.name || f}-${i}`} value={f.name || f}>{f.name || f}</option>)}
               </ClearableSelect>
@@ -1749,6 +1900,20 @@ const DataEntryWizard = () => {
                     onChange={(e) => setNewFactory(prev => ({ ...prev, name: e.target.value }))}
                     placeholder={t('admin.factory_name', { defaultValue: 'اسم المصنع' })}
                   />
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">{t('admin.company_name_header', { defaultValue: 'الشركة التابع لها' })}</label>
+                  <select
+                    className="form-control"
+                    value={newFactory.company || ''}
+                    onChange={(e) => setNewFactory(prev => ({ ...prev, company: e.target.value }))}
+                  >
+                    <option value="">{t('entry.actions.select_company_placeholder', { defaultValue: 'اختر الشركة...' })}</option>
+                    {filteredLookups.companies?.map((c, i) => {
+                      const cName = typeof c === 'object' ? c.name : c;
+                      return <option key={i} value={cName}>{cName}</option>;
+                    })}
+                  </select>
                 </div>
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">{t('entry.factory.factory_code')}</label>

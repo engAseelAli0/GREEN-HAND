@@ -10,11 +10,13 @@ import OldItemsManagement from '../components/OldItemsManagement';
 import { compressImage } from '../utils/imageUtils';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
+import { useFilteredLookups } from '../hooks/useFilteredLookups';
 
 const AdminDashboard = () => {
   const { t } = useTranslation();
   const { user, hasPermission } = useAuth();
   const { lookups, updateLookup } = useAppData();
+  const filteredLookups = useFilteredLookups();
   
   const allowedAdminTabs = user?.permissions?.allowed_admin_tabs || [];
 
@@ -70,6 +72,8 @@ const AdminDashboard = () => {
   const [newValueFax, setNewValueFax] = useState('');
   const [newValueAddress, setNewValueAddress] = useState('');
   const [newValueFactoryCode, setNewValueFactoryCode] = useState('');
+  const [newValueCompany, setNewValueCompany] = useState('');
+  const [factoryCompanyFilter, setFactoryCompanyFilter] = useState('');
   const [newValueAbbr, setNewValueAbbr] = useState('');
   const [editIndex, setEditIndex] = useState(null);
   const [tradeMarkImage, setTradeMarkImage] = useState(null);
@@ -85,13 +89,21 @@ const AdminDashboard = () => {
   const tmImageRef = useRef(null);
   const formCardRef = useRef(null);
 
+  // Auto-select single company for non-admin users in factories tab
+  useEffect(() => {
+    if (activeTab === 'factories' && user && user.role !== 'admin' && filteredLookups.companies?.length === 1 && !newValueCompany && editIndex === null) {
+      const comp = typeof filteredLookups.companies[0] === 'object' ? filteredLookups.companies[0].name : filteredLookups.companies[0];
+      if (comp) setNewValueCompany(comp);
+    }
+  }, [activeTab, user, filteredLookups.companies, editIndex, newValueCompany]);
+
   const [assignModalOpen, setAssignModalOpen] = useState(false);
   const [assignMeasurementIndex, setAssignMeasurementIndex] = useState(null);
   const [assignSelectedParts, setAssignSelectedParts] = useState([]);
 
   const allParts = (lookups.componentParts || []).map(p => typeof p === 'object' ? p.name : p).filter(Boolean);
 
-  const handleAddOrEdit = () => {
+  const handleAddOrEdit = async () => {
     const isEditingMode = editIndex !== null;
     const requiredAction = isEditingMode ? 'edit' : 'add';
     if (!hasPermission('admin', requiredAction)) {
@@ -134,11 +146,16 @@ const AdminDashboard = () => {
         toast.error(t('admin.messages.duplicate_factory_code'));
         return;
       }
+      if (user && user.role !== 'admin' && !newValueCompany.trim()) {
+        toast.error(t('admin.messages.company_required_for_factory', { defaultValue: 'يرجى تحديد الشركة التابع لها المصنع' }));
+        return;
+      }
       newItem = { 
         name: newValue.trim(), 
         mobile: newValueMobile.trim(), 
         address: newValueAddress.trim(),
-        code
+        code,
+        company: newValueCompany.trim()
       };
     } else if (activeTab === 'companies') {
       if (!newValueMobile.trim() || !newValueFax.trim()) {
@@ -161,12 +178,20 @@ const AdminDashboard = () => {
     if (editIndex !== null) {
       // Edit mode
       currentList[editIndex] = newItem;
-      updateLookup(activeTab, currentList);
+      const res = await updateLookup(activeTab, currentList);
+      if (res?.error) {
+        toast.error(t('admin.messages.edit_failed', { defaultValue: 'فشل حفظ التعديل، يرجى المحاولة مجدداً' }));
+        return;
+      }
       toast.success(t('admin.messages.edit_saved'));
       setEditIndex(null);
     } else {
       // Add mode
-      updateLookup(activeTab, [...currentList, newItem]);
+      const res = await updateLookup(activeTab, [...currentList, newItem]);
+      if (res?.error) {
+        toast.error(t('admin.messages.add_failed', { defaultValue: 'فشل إضافة العنصر، يرجى المحاولة مجدداً' }));
+        return;
+      }
       toast.success(t('admin.messages.add_success'));
     }
     setNewValue('');
@@ -177,6 +202,10 @@ const AdminDashboard = () => {
     setNewValueFax('');
     setNewValueAddress('');
     setNewValueFactoryCode('');
+    const defaultCompForUser = (user && user.role !== 'admin' && filteredLookups.companies?.length === 1)
+      ? (typeof filteredLookups.companies[0] === 'object' ? filteredLookups.companies[0].name : filteredLookups.companies[0])
+      : '';
+    setNewValueCompany(defaultCompForUser || '');
     setNewValueAbbr('');
     setTradeMarkImage(null);
     setTradeMarkImageUrl('');
@@ -205,6 +234,12 @@ const AdminDashboard = () => {
       setNewValueMobile(item.mobile || '');
       setNewValueAddress(item.address || '');
       setNewValueFactoryCode(item.code || '');
+      let comp = typeof item === 'object' ? (item.company || '') : '';
+      if (!comp && user && user.role !== 'admin' && filteredLookups.companies?.length === 1) {
+        const onlyComp = filteredLookups.companies[0];
+        comp = typeof onlyComp === 'object' ? onlyComp.name : onlyComp;
+      }
+      setNewValueCompany(comp || '');
     } else if (activeTab === 'companies') {
       setNewValue(item.name || item);
       setNewValueFax(item.fax || '');
@@ -233,6 +268,10 @@ const AdminDashboard = () => {
     setNewValueFax('');
     setNewValueAddress('');
     setNewValueFactoryCode('');
+    const defaultCompForUser = (user && user.role !== 'admin' && filteredLookups.companies?.length === 1)
+      ? (typeof filteredLookups.companies[0] === 'object' ? filteredLookups.companies[0].name : filteredLookups.companies[0])
+      : '';
+    setNewValueCompany(defaultCompForUser || '');
     setNewValueAbbr('');
     setTradeMarkImage(null);
     setTradeMarkImageUrl('');
@@ -354,12 +393,46 @@ const AdminDashboard = () => {
   };
 
   const currentItems = lookups[activeTab] || [];
-  const filteredItems = searchQuery.trim()
-    ? currentItems.filter(item => {
-        const name = typeof item === 'object' ? item.name : item;
-        return name?.toLowerCase().includes(searchQuery.toLowerCase());
-      })
-    : currentItems;
+  const filteredItems = currentItems.filter(item => {
+    // Permission scope check for non-admin users
+    if (user && user.role !== 'admin') {
+      if (activeTab === 'factories') {
+        const isAllowed = (filteredLookups.factories || []).some(f => {
+          const fName = typeof f === 'object' ? f.name : f;
+          const iName = typeof item === 'object' ? item.name : item;
+          return fName === iName;
+        });
+        if (!isAllowed) return false;
+      } else if (activeTab === 'companies') {
+        const isAllowed = (filteredLookups.companies || []).some(c => {
+          const cName = typeof c === 'object' ? c.name : c;
+          const iName = typeof item === 'object' ? item.name : item;
+          return cName === iName;
+        });
+        if (!isAllowed) return false;
+      }
+    }
+
+    if (searchQuery.trim()) {
+      const name = typeof item === 'object' ? (item.name || '') : String(item || '');
+      const code = typeof item === 'object' ? (item.code || '') : '';
+      const comp = typeof item === 'object' ? (item.company || '') : '';
+      const q = searchQuery.toLowerCase();
+      const match = (name && name.toLowerCase().includes(q)) ||
+                    (code && code.toLowerCase().includes(q)) ||
+                    (comp && comp.toLowerCase().includes(q));
+      if (!match) return false;
+    }
+    if (activeTab === 'factories' && factoryCompanyFilter) {
+      const comp = typeof item === 'object' ? (item.company || '') : '';
+      if (factoryCompanyFilter === '__unassigned__') {
+        if (comp) return false;
+      } else {
+        if (comp.trim().toLowerCase() !== factoryCompanyFilter.trim().toLowerCase()) return false;
+      }
+    }
+    return true;
+  });
 
   const activeTabInfo = filteredTabs.find(t => t.id === activeTab);
   const ActiveIcon = activeTabInfo?.icon || Edit;
@@ -752,7 +825,7 @@ const AdminDashboard = () => {
             return (
               <button
                 key={tab.id}
-                onClick={() => { setActiveTab(tab.id); cancelEdit(); setSearchQuery(''); setShowPartsDropdown(false); setShowProductsDropdown(false); }}
+                onClick={() => { setActiveTab(tab.id); cancelEdit(); setSearchQuery(''); setFactoryCompanyFilter(''); setShowPartsDropdown(false); setShowProductsDropdown(false); }}
                 style={styles.tabBtn(isActive)}
                 onMouseEnter={e => {
                   if (!isActive) {
@@ -1075,6 +1148,25 @@ const AdminDashboard = () => {
               {activeTab === 'factories' && (
                 <>
                   <div style={styles.formField}>
+                    <label style={styles.formLabel}>{t('admin.company_name_header', { defaultValue: 'الشركة التابع لها' })}</label>
+                    <select
+                      className="form-control"
+                      value={newValueCompany}
+                      onChange={(e) => setNewValueCompany(e.target.value)}
+                      style={{ backgroundColor: 'var(--bg-color)' }}
+                    >
+                      {(!user || user.role === 'admin') ? (
+                        <option value="">{t('admin.no_company_assigned', { defaultValue: 'بدون شركة (عام / غير مقيد)' })}</option>
+                      ) : (
+                        <option value="">{t('admin.select_company_prompt', { defaultValue: '— اختر الشركة —' })}</option>
+                      )}
+                      {(filteredLookups.companies || []).map((comp, idx) => {
+                        const compName = typeof comp === 'object' ? comp.name : comp;
+                        return <option key={idx} value={compName}>{compName}</option>;
+                      })}
+                    </select>
+                  </div>
+                  <div style={styles.formField}>
                     <label style={styles.formLabel}>{t('admin.factory_code')}</label>
                     <input
                       type="text"
@@ -1195,27 +1287,49 @@ const AdminDashboard = () => {
           </div>
               )}
 
-          {/* ─── Search Bar ─── */}
-          {currentItems.length > 4 && (
-            <div style={styles.searchBar}>
-              <Search size={16} style={styles.searchIcon} />
-              <input
-                type="text"
-                placeholder={t('admin.quick_search')}
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                style={styles.searchInput}
-                onFocus={e => {
-                  e.target.style.borderColor = 'var(--accent-color)';
-                  e.target.style.boxShadow = '0 0 0 3px rgba(212, 175, 55, 0.15)';
-                }}
-                onBlur={e => {
-                  e.target.style.borderColor = 'var(--border-color)';
-                  e.target.style.boxShadow = 'none';
-                }}
-              />
-            </div>
-          )}
+          {/* ─── Search & Filter Bar ─── */}
+          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
+            {currentItems.length > 4 && (
+              <div style={{ ...styles.searchBar, flex: 1, minWidth: '220px', marginBottom: 0 }}>
+                <Search size={16} style={styles.searchIcon} />
+                <input
+                  type="text"
+                  placeholder={t('admin.quick_search')}
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  style={styles.searchInput}
+                  onFocus={e => {
+                    e.target.style.borderColor = 'var(--accent-color)';
+                    e.target.style.boxShadow = '0 0 0 3px rgba(212, 175, 55, 0.15)';
+                  }}
+                  onBlur={e => {
+                    e.target.style.borderColor = 'var(--border-color)';
+                    e.target.style.boxShadow = 'none';
+                  }}
+                />
+              </div>
+            )}
+            {activeTab === 'factories' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginLeft: 'auto' }}>
+                <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>🏢 {t('admin.filter_by_company', { defaultValue: 'تصفية بالشركة:' })}</span>
+                <select
+                  className="form-control"
+                  value={factoryCompanyFilter}
+                  onChange={e => setFactoryCompanyFilter(e.target.value)}
+                  style={{ minWidth: '180px', maxWidth: '240px', fontSize: '0.85rem', padding: '0.45rem 0.75rem', backgroundColor: 'var(--bg-card)', borderColor: factoryCompanyFilter ? 'var(--accent-color)' : 'var(--border-color)' }}
+                >
+                  <option value="">{t('admin.all_companies', { defaultValue: 'جميع الشركات (الكل)' })}</option>
+                  {(!user || user.role === 'admin') && (
+                    <option value="__unassigned__">{t('admin.unassigned_factories', { defaultValue: 'مصانع بدون شركة (عام)' })}</option>
+                  )}
+                  {(filteredLookups.companies || []).map((c, idx) => {
+                    const cName = typeof c === 'object' ? c.name : c;
+                    return <option key={idx} value={cName}>{cName}</option>;
+                  })}
+                </select>
+              </div>
+            )}
+          </div>
 
           {/* ─── Items List ─── */}
           <div style={styles.itemsGrid}>
@@ -1329,7 +1443,17 @@ const AdminDashboard = () => {
                       </div>
 
                       {activeTab === 'factories' && (
-                        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.1rem', display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
+                        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.1rem', display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                          {item.company ? (
+                            <span style={{ color: 'var(--accent-color)', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                              <span>🏢 {t('admin.company_name_header', { defaultValue: 'الشركة' })}:</span>
+                              <span>{item.company}</span>
+                            </span>
+                          ) : (
+                            <span style={{ color: 'var(--text-muted)', opacity: 0.6, fontStyle: 'italic' }}>
+                              🏢 {t('admin.no_company_assigned', { defaultValue: 'بدون شركة (عام)' })}
+                            </span>
+                          )}
                           {item.mobile && <span>{item.mobile} • {item.address}</span>}
                           {item.code && <span style={{ color: 'var(--accent-color)' }}>{t('admin.fields.factory_code')}: {item.code}</span>}
                         </div>

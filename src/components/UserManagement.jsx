@@ -832,18 +832,22 @@ const UserManagement = () => {
                           <h4 style={{ margin: 0, color: 'var(--text-strong)', fontSize: '1.1rem' }}>{t('user_mgmt.allowed_factories', { defaultValue: 'المصانع المسموح بها' })}</h4>
                         </div>
                         <p style={{ margin: '0 0 1rem 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                          {t('user_mgmt.allowed_factories_desc', { defaultValue: 'إذا لم يتم تحديد أي مصنع، فسيتمكن المستخدم من رؤية جميع المصانع. أما إذا تم تحديد مصانع معينة، فلن تظهر له إلا هذه المصانع.' })}
+                          {t('user_mgmt.allowed_factories_desc', { defaultValue: 'المصانع التابعة للشركات المحددة أدناه ستتاح للمستخدم تلقائياً. يمكنك استخدام هذا القسم لمنح صلاحيات إضافية لمصانع محددة.' })}
                         </p>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
                           {lookups.factories?.map((f, i) => {
                             const val = typeof f === 'object' ? f.name : f;
+                            const comp = typeof f === 'object' ? f.company : null;
                             const isSelected = (formData.permissions.allowed_factories || []).includes(val);
                             return (
                               <div key={i} onClick={() => toggleArrayPermission('allowed_factories', val)} style={{ padding: '0.5rem 1rem', borderRadius: '8px', border: isSelected ? '1px solid var(--accent-color)' : '1px solid rgba(255,255,255,0.1)', background: isSelected ? 'rgba(212,175,55,0.1)' : 'rgba(255,255,255,0.02)', cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                 <div style={{ width: '16px', height: '16px', borderRadius: '4px', border: '1px solid ' + (isSelected ? 'var(--accent-color)' : 'rgba(255,255,255,0.2)'), display: 'flex', alignItems: 'center', justifyContent: 'center', background: isSelected ? 'var(--accent-color)' : 'transparent' }}>
                                   {isSelected && <CheckCircle size={12} color="#000" />}
                                 </div>
-                                <span style={{ fontSize: '0.9rem', color: isSelected ? 'var(--accent-color)' : 'var(--text-main)', fontWeight: isSelected ? 'bold' : 'normal' }}>{val}</span>
+                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                  <span style={{ fontSize: '0.9rem', color: isSelected ? 'var(--accent-color)' : 'var(--text-main)', fontWeight: isSelected ? 'bold' : 'normal' }}>{val}</span>
+                                  {comp && <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', opacity: 0.8 }}>🏢 {comp}</span>}
+                                </div>
                               </div>
                             );
                           })}

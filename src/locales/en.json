@@ -248,7 +248,8 @@
       "add_failed": "Failed to save factory, please try again",
       "add_factory": "Add Factory",
       "add_saving": "Saving...",
-      "add_save": "Save Factory"
+      "add_save": "Save Factory",
+      "showing_for_company": "Factories of {{company}}"
     },
     "colors": {
       "section_title": "Color & Size Distribution",
@@ -407,7 +408,10 @@
       "all_colors_selected": "All colors selected ({{count}})",
       "delivery_date_reset": "Delivery date cleared because it became earlier than the new request date",
       "insufficient_quantity": "Total quantity is insufficient for one carton",
-      "upload_in_progress": "Images are currently uploading, please wait for completion!"
+      "upload_in_progress": "Images are currently uploading, please wait for completion!",
+      "must_change_image_for_copy": "⚠️ You must change or replace the previous product's image with the new model's photo before saving as a copy!",
+      "must_upload_new_image_for_copy": "⚠️ Please upload the new product's photo for this model before saving as a copy!",
+      "serial_same_as_original": "⚠️ Model number matches the original! Please change the model number to save as a new copy."
     },
     "units": {
       "carton": "Carton",
@@ -1235,6 +1239,11 @@
     "edit_and_save": "Edit & Save",
     "cancel_edit": "Cancel Edit",
     "quick_search": "Quick Search...",
+    "select_company_prompt": "— Select Company —",
+    "no_company_assigned": "No company (General / Unassigned)",
+    "filter_by_company": "Filter by Company:",
+    "all_companies": "All Companies",
+    "unassigned_factories": "Unassigned Factories (General)",
     "no_match": "No matching results",
     "start_adding": "Start by adding the first item in this section",
     "tabs": {
@@ -1266,12 +1275,15 @@
       "duplicate_factory_code": "Another factory is already registered with this code!",
       "color_abbr_limit": "Please enter a color abbreviation of no more than 7 characters (e.g. WHT)",
       "factory_info_required": "Please fill in the factory address and mobile clearly",
+      "company_required_for_factory": "Please select the company this factory belongs to",
       "company_info_required": "Please fill in the company fax and mobile number",
       "trademark_name_required": "Please enter the trademark name first",
       "upload_success": "Trademark image uploaded successfully!",
       "upload_error": "Error uploading image!",
       "edit_saved": "Edit saved ✏️",
+      "edit_failed": "Failed to save edit, please try again",
       "add_success": "Added successfully ✅",
+      "add_failed": "Failed to add item, please try again",
       "item_deleted": "Item deleted 🗑️",
       "reorder_success": "Item reordered successfully ✨",
       "edit_mode_active": "Edit mode is active...",

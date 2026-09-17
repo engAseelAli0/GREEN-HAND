@@ -11,9 +11,12 @@
  * @param {Array<Object|string>} factoriesLookup - Global factories list from lookups
  * @returns {boolean}
  */
-export const isFactoryAllowed = (factoryIdentifier, allowedFactories = [], factoriesLookup = []) => {
-  // If user has no factory restrictions, allow access to all
-  if (!allowedFactories || allowedFactories.length === 0) return true;
+export const isFactoryAllowed = (factoryIdentifier, allowedFactories = [], factoriesLookup = [], allowedCompanies = []) => {
+  const hasAllowedFactories = Array.isArray(allowedFactories) && allowedFactories.length > 0;
+  const hasAllowedCompanies = Array.isArray(allowedCompanies) && allowedCompanies.length > 0;
+
+  // If user has no factory restrictions and no company restrictions, allow access to all
+  if (!hasAllowedFactories && !hasAllowedCompanies) return true;
   
   // If user is restricted but order has no factory, deny
   if (!factoryIdentifier) return false;
@@ -21,14 +24,16 @@ export const isFactoryAllowed = (factoryIdentifier, allowedFactories = [], facto
   const target = String(factoryIdentifier).trim().toLowerCase();
 
   // 1. Direct match with allowedFactories array
-  const directMatch = allowedFactories.some(af => {
-    if (!af) return false;
-    const afStr = String(af).trim().toLowerCase();
-    return afStr === target;
-  });
-  if (directMatch) return true;
+  if (hasAllowedFactories) {
+    const directMatch = allowedFactories.some(af => {
+      if (!af) return false;
+      const afStr = String(af).trim().toLowerCase();
+      return afStr === target;
+    });
+    if (directMatch) return true;
+  }
 
-  // 2. Lookup-based matching (handles matching factory code <-> factory name)
+  // 2. Lookup-based matching (handles matching factory code <-> factory name, and company inheritance)
   if (Array.isArray(factoriesLookup) && factoriesLookup.length > 0) {
     // Find the factory object in lookups that corresponds to target
     const factoryObj = factoriesLookup.find(f => {
@@ -39,34 +44,45 @@ export const isFactoryAllowed = (factoryIdentifier, allowedFactories = [], facto
       return fName === target || fCode === target || fId === target;
     });
 
-    if (factoryObj) {
-      const objName = String(typeof factoryObj === 'object' ? (factoryObj.name || '') : factoryObj).trim().toLowerCase();
-      const objCode = String(typeof factoryObj === 'object' ? (factoryObj.code || '') : '').trim().toLowerCase();
+    if (factoryObj && typeof factoryObj === 'object') {
+      const objName = String(factoryObj.name || '').trim().toLowerCase();
+      const objCode = String(factoryObj.code || '').trim().toLowerCase();
+      const objCompany = String(factoryObj.company || '').trim().toLowerCase();
+
+      // Check inheritance from allowedCompanies
+      if (hasAllowedCompanies && objCompany) {
+        const companyMatch = allowedCompanies.some(ac => ac && String(ac).trim().toLowerCase() === objCompany);
+        if (companyMatch) return true;
+      }
 
       // Check if any allowedFactory matches the lookup factory's name or code
-      const lookupMatch = allowedFactories.some(af => {
-        if (!af) return false;
-        const afStr = String(af).trim().toLowerCase();
-        return (objName && afStr === objName) || (objCode && afStr === objCode);
-      });
-      if (lookupMatch) return true;
+      if (hasAllowedFactories) {
+        const lookupMatch = allowedFactories.some(af => {
+          if (!af) return false;
+          const afStr = String(af).trim().toLowerCase();
+          return (objName && afStr === objName) || (objCode && afStr === objCode);
+        });
+        if (lookupMatch) return true;
+      }
     }
 
     // Reverse check: find lookup entries for allowed factories and compare
-    for (const af of allowedFactories) {
-      if (!af) continue;
-      const afStr = String(af).trim().toLowerCase();
-      const afObj = factoriesLookup.find(f => {
-        if (!f) return false;
-        const fName = String(typeof f === 'object' ? (f.name || '') : f).trim().toLowerCase();
-        const fCode = String(typeof f === 'object' ? (f.code || '') : '').trim().toLowerCase();
-        return fName === afStr || fCode === afStr;
-      });
-      if (afObj) {
-        const afObjName = String(typeof afObj === 'object' ? (afObj.name || '') : afObj).trim().toLowerCase();
-        const afObjCode = String(typeof afObj === 'object' ? (afObj.code || '') : '').trim().toLowerCase();
-        if (target === afObjName || (afObjCode && target === afObjCode)) {
-          return true;
+    if (hasAllowedFactories) {
+      for (const af of allowedFactories) {
+        if (!af) continue;
+        const afStr = String(af).trim().toLowerCase();
+        const afObj = factoriesLookup.find(f => {
+          if (!f) return false;
+          const fName = String(typeof f === 'object' ? (f.name || '') : f).trim().toLowerCase();
+          const fCode = String(typeof f === 'object' ? (f.code || '') : '').trim().toLowerCase();
+          return fName === afStr || fCode === afStr;
+        });
+        if (afObj) {
+          const afObjName = String(typeof afObj === 'object' ? (afObj.name || '') : afObj).trim().toLowerCase();
+          const afObjCode = String(typeof afObj === 'object' ? (afObj.code || '') : '').trim().toLowerCase();
+          if (target === afObjName || (afObjCode && target === afObjCode)) {
+            return true;
+          }
         }
       }
     }
@@ -119,7 +135,7 @@ export const isOrderAllowedForUser = (order, user, factoriesLookup = []) => {
   const orderCompany = orderData.buyerCompany || orderData.company;
 
   if (allowedFactories.length > 0) {
-    if (!isFactoryAllowed(orderFactory, allowedFactories, factoriesLookup)) {
+    if (!isFactoryAllowed(orderFactory, allowedFactories, factoriesLookup, allowedCompanies)) {
       return false;
     }
   }

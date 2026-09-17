@@ -139,7 +139,13 @@ const FitOneLine = ({ children, maxFontSize = 15, minFontSize = 7, align = 'cent
   }, [children, maxFontSize, minFontSize]);
 
   return (
-    <span ref={outerRef} className="fit-one-line" style={{ display: 'block', width: '100%', overflow: 'hidden', textAlign: align, ...style }}>
+    <span
+      ref={outerRef}
+      className="fit-one-line"
+      data-max-font-size={maxFontSize}
+      data-min-font-size={minFontSize}
+      style={{ display: 'block', width: '100%', overflow: 'hidden', textAlign: align, ...style }}
+    >
       <span
         ref={textRef}
         className="fit-one-line-text"
@@ -148,6 +154,7 @@ const FitOneLine = ({ children, maxFontSize = 15, minFontSize = 7, align = 'cent
           whiteSpace: 'nowrap',
           fontSize: `${fit.fontSize}px`,
           lineHeight: 1.15,
+          color: 'inherit',
           transform: `scaleX(${fit.scale})`,
           transformOrigin: align === 'left' ? 'left center' : align === 'right' ? 'right center' : 'center',
         }}
@@ -161,23 +168,49 @@ const FitOneLine = ({ children, maxFontSize = 15, minFontSize = 7, align = 'cent
 const prepareExportCloneForCapture = async (clonedElement) => {
   await document.fonts?.ready;
 
+  // إجبار التوافق اللوني الكامل (Light Mode) لمنع أي تداخل من الوضع الليلي أو المتصفحات مثل Edge
+  clonedElement.setAttribute('data-theme', 'light');
+  clonedElement.style.colorScheme = 'light';
+  clonedElement.style.color = '#000000';
+  clonedElement.style.backgroundColor = '#ffffff';
+
   clonedElement.querySelectorAll('.fit-one-line').forEach((outer) => {
     const text = outer.querySelector('.fit-one-line-text');
     if (!text) return;
 
-    text.style.fontSize = text.style.fontSize || '12px';
+    const baseMax = parseFloat(outer.dataset.maxFontSize) || 14;
+    const baseMin = parseFloat(outer.dataset.minFontSize) || 8;
+
+    text.style.fontSize = `${baseMax}px`;
     text.style.transform = 'scaleX(1)';
+    text.style.color = text.style.color || '#000000';
 
     const availableWidth = Math.max(1, outer.clientWidth - 2);
     const naturalWidth = text.scrollWidth || 1;
     if (naturalWidth > availableWidth) {
-      const currentSize = parseFloat(text.style.fontSize) || 12;
-      const nextSize = Math.max(5, currentSize * (availableWidth / naturalWidth));
+      const nextSize = Math.max(baseMin, baseMax * (availableWidth / naturalWidth));
       text.style.fontSize = `${nextSize}px`;
-      const adjustedWidth = naturalWidth * (nextSize / currentSize);
+      const adjustedWidth = naturalWidth * (nextSize / baseMax);
       if (adjustedWidth > availableWidth) {
-        text.style.transform = `scaleX(${Math.max(0.55, availableWidth / adjustedWidth)})`;
+        text.style.transform = `scaleX(${Math.max(0.65, availableWidth / adjustedWidth)})`;
       }
+    }
+  });
+
+  // التأكد من أن جميع الخلايا والنصوص غير ملونة بـ #c9d1d9 أو ألوان باهتة
+  clonedElement.querySelectorAll('th, td, div, span, p').forEach((el) => {
+    const isWhiteText = el.classList.contains('hdr-blue') || el.classList.contains('title-cell') || el.closest('.hdr-blue') || el.closest('.title-cell');
+    const isRedText = el.style.color === 'rgb(192, 57, 43)' || el.style.color === '#c0392b' || el.style.color === '#b02a1d';
+    const isGreenText = el.style.color === 'rgb(56, 118, 29)' || el.style.color === '#38761d';
+
+    if (isWhiteText) {
+      el.style.color = '#ffffff';
+    } else if (isRedText) {
+      el.style.color = '#c0392b';
+    } else if (isGreenText) {
+      el.style.color = '#38761d';
+    } else if (!el.style.color || el.style.color === 'inherit' || el.style.color === 'rgb(201, 209, 217)' || el.style.color === '#c9d1d9') {
+      el.style.color = '#000000';
     }
   });
 
@@ -205,21 +238,31 @@ export const downloadOrderPDF = async ({ order, elementId = 'export-doc', t }) =
     // Clone element to isolate in memory and render desktop-width canvas
     const clonedElement = element.cloneNode(true);
     clonedElement.style.cssText = `
-      position: fixed;
-      left: -9999px;
-      top: 0;
-      width: 1350px;
-      max-width: none !important;
-      min-height: 820px;
-      display: flex;
-      flex-direction: column;
+      position: fixed !important;
+      left: 0 !important;
+      top: 0 !important;
+      z-index: -9999 !important;
+      pointer-events: none !important;
+      opacity: 1 !important;
+      visibility: visible !important;
+      width: 1200px !important;
+      max-width: 1200px !important;
+      min-width: 1200px !important;
+      min-height: 838px !important;
+      display: flex !important;
+      flex-direction: column !important;
       background: #ffffff !important;
+      color: #000000 !important;
+      color-scheme: light !important;
       box-shadow: none !important;
       padding: 15px !important;
       margin: 0 !important;
     `;
     const sigFooter = clonedElement.querySelector('.export-signatures-footer');
-    if (sigFooter) sigFooter.style.marginTop = 'auto';
+    if (sigFooter) {
+      sigFooter.style.marginTop = 'auto';
+      sigFooter.style.color = '#000000';
+    }
     clonedElement.dataset.exportPdfClone = 'true';
 
     document.body.appendChild(clonedElement);
@@ -234,16 +277,16 @@ export const downloadOrderPDF = async ({ order, elementId = 'export-doc', t }) =
 
     document.body.removeChild(clonedElement);
 
-    const imgData = canvas.toDataURL('image/jpeg', 1.0);
+    const imgData = canvas.toDataURL('image/png');
     const imgWidthPx = canvas.width;
     const imgHeightPx = canvas.height;
 
     // حساب الأبعاد والنسب لضمان أن ملف الـ PDF ورقة A4 أفقية قياسية واحدة تماماً (Single Page A4)
     const pdfWidthMM = 297;
     const pdfHeightMM = 210;
-    const margin = 5;
-    const maxContentWidthMM = pdfWidthMM - margin * 2; // 287mm
-    const maxContentHeightMM = pdfHeightMM - margin * 2; // 200mm
+    const margin = 4;
+    const maxContentWidthMM = pdfWidthMM - margin * 2; // 289mm
+    const maxContentHeightMM = pdfHeightMM - margin * 2; // 202mm
 
     const scaleRatio = Math.min(
       maxContentWidthMM / imgWidthPx,
@@ -264,7 +307,7 @@ export const downloadOrderPDF = async ({ order, elementId = 'export-doc', t }) =
       compress: true,
     });
 
-    pdf.addImage(imgData, 'JPEG', posX, posY, renderWidthMM, renderHeightMM, undefined, 'FAST');
+    pdf.addImage(imgData, 'PNG', posX, posY, renderWidthMM, renderHeightMM, undefined, 'FAST');
 
     const pdfBlob = pdf.output('blob');
     const blobUrl = URL.createObjectURL(new Blob([pdfBlob], { type: 'application/pdf' }));
@@ -411,9 +454,25 @@ const ExportOrderDocument = ({ order, lookups = {}, t, id = "export-doc", classN
         }
 
         .print-doc {
+          background: #fff !important; 
+          color: #000 !important; 
+          color-scheme: light !important;
+          padding: 10px; 
+          border-radius: 8px;
+          max-width: 1400px; 
+          margin: 0 auto; 
+          box-shadow: 0 8px 30px rgba(0,0,0,0.45);
+          font-family: 'Inter','Tajawal',sans-serif;
           display: flex;
           flex-direction: column;
           min-height: 800px;
+        }
+
+        [data-export-pdf-clone="true"],
+        [data-export-pdf-clone="true"] * {
+          color-scheme: light !important;
+          -webkit-print-color-adjust: exact !important; 
+          print-color-adjust: exact !important; 
         }
 
         .inv-table-new {
@@ -421,15 +480,17 @@ const ExportOrderDocument = ({ order, lookups = {}, t, id = "export-doc", classN
           border-collapse: collapse;
           border: 3px solid #000;
           table-layout: fixed;
-          background: #fff;
+          background: #fff !important;
+          color: #000 !important;
         }
         .inv-table-new th, .inv-table-new td {
           border: 1px solid #000;
           padding: 6px 4px;
           word-wrap: break-word;
           white-space: normal;
-          line-height: 1.3;
+          line-height: 1.35;
           overflow: hidden;
+          color: #000;
         }
         .hdr-blue {
           background-color: #1a5276 !important;
@@ -462,21 +523,31 @@ const ExportOrderDocument = ({ order, lookups = {}, t, id = "export-doc", classN
           text-align: center;
           font-size: 15px;
           vertical-align: middle;
+          color: #000 !important;
         }
         .val-left {
           text-align: left;
           font-size: 15px;
           vertical-align: middle;
+          color: #000 !important;
         }
         .val-bold {
           font-weight: 800;
-          color: #000;
+          color: #000 !important;
         }
         .bg-cyan {
           background-color: #dcf4f5 !important;
         }
         .bg-light-blue {
           background-color: #eaf2f8 !important;
+        }
+        .order-remarks-cell {
+          color: #000000 !important;
+          font-weight: 800 !important;
+          font-size: 14px !important;
+          line-height: 1.45 !important;
+          white-space: pre-wrap !important;
+          word-break: break-word !important;
         }
       `}</style>
 
@@ -494,15 +565,14 @@ const ExportOrderDocument = ({ order, lookups = {}, t, id = "export-doc", classN
           <col style={{ width: '6%' }} />
           <col style={{ width: '16%' }} />
         </colgroup>
-        <tbody>
-          {/* ═══ ROW 1: HEADER ═══ */}
+        <tbody>          {/* ═══ ROW 1: HEADER ═══ */}
           <tr>
-            <th colSpan={1} className="hdr-blue"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.order_no', 'ORDER NO.')}</FitOneLine></th>
-            <td colSpan={2} className="val-center val-bold"><FitOneLine maxFontSize={13} minFontSize={7}>{order.orderNumber || '-'}</FitOneLine></td>
-            <th colSpan={2} className="hdr-blue"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.request_date', 'Order Date')}</FitOneLine></th>
-            <td colSpan={2} className="val-center val-bold"><FitOneLine maxFontSize={13} minFontSize={7}>{formatDate(order.requestDate)}</FitOneLine></td>
-            <th colSpan={2} className="hdr-blue"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.delivery_date', 'Delivery Date')}</FitOneLine></th>
-            <td colSpan={2} className="val-center val-bold"><FitOneLine maxFontSize={13} minFontSize={7}>{formatDate(order.deliveryDate)}</FitOneLine></td>
+            <th colSpan={1} className="hdr-blue"><FitOneLine maxFontSize={14} minFontSize={8}>{t('export.doc.order_no', 'ORDER NO.')}</FitOneLine></th>
+            <td colSpan={2} className="val-center val-bold"><FitOneLine maxFontSize={15} minFontSize={8}>{order.orderNumber || '-'}</FitOneLine></td>
+            <th colSpan={2} className="hdr-blue"><FitOneLine maxFontSize={15} minFontSize={8}>{t('export.doc.request_date', 'Order Date')}</FitOneLine></th>
+            <td colSpan={2} className="val-center val-bold"><FitOneLine maxFontSize={16} minFontSize={8}>{formatDate(order.requestDate)}</FitOneLine></td>
+            <th colSpan={2} className="hdr-blue"><FitOneLine maxFontSize={15} minFontSize={8}>{t('export.doc.delivery_date', 'Delivery Date')}</FitOneLine></th>
+            <td colSpan={2} className="val-center val-bold"><FitOneLine maxFontSize={18} minFontSize={8}>{formatDate(order.deliveryDate)}</FitOneLine></td>
           </tr>
 
           {/* ═══ ROW 2-4: BUYER & FACTORY INFO ═══ */}
@@ -524,57 +594,57 @@ const ExportOrderDocument = ({ order, lookups = {}, t, id = "export-doc", classN
                 </div>
               )}
             </th>
-            <th colSpan={2} className="hdr-light" style={{ whiteSpace: 'nowrap', padding: '6px 8px' }}><FitOneLine maxFontSize={11} minFontSize={6}>{t('export.doc.buyer_name', 'Buyer')}</FitOneLine></th>
-            <td colSpan={3} className="val-center val-bold" style={{ padding: '6px 8px' }}><FitOneLine maxFontSize={12} minFontSize={6}>{order.buyerCompany || '-'}</FitOneLine></td>
-            <th colSpan={2} className="hdr-light" style={{ whiteSpace: 'nowrap', padding: '6px 8px' }}><FitOneLine maxFontSize={11} minFontSize={6}>{t('export.doc.factory_name', 'Factory')}</FitOneLine></th>
-            <td colSpan={3} className="val-center val-bold" style={{ padding: '6px 8px' }}><FitOneLine maxFontSize={12} minFontSize={6}>{factoryInfo.name || '-'}</FitOneLine></td>
+            <th colSpan={2} className="hdr-light" style={{ whiteSpace: 'nowrap', padding: '6px 8px' }}><FitOneLine maxFontSize={13} minFontSize={8}>{t('export.doc.buyer_name', 'Buyer')}</FitOneLine></th>
+            <td colSpan={3} className="val-center val-bold" style={{ padding: '6px 8px' }}><FitOneLine maxFontSize={14} minFontSize={8}>{order.buyerCompany || '-'}</FitOneLine></td>
+            <th colSpan={2} className="hdr-light" style={{ whiteSpace: 'nowrap', padding: '6px 8px' }}><FitOneLine maxFontSize={13} minFontSize={8}>{t('export.doc.factory_name', 'Factory')}</FitOneLine></th>
+            <td colSpan={3} className="val-center val-bold" style={{ padding: '6px 8px' }}><FitOneLine maxFontSize={14} minFontSize={8}>{factoryInfo.name || '-'}</FitOneLine></td>
           </tr>
           <tr>
-            <th colSpan={2} className="hdr-light" style={{ whiteSpace: 'nowrap', padding: '6px 8px' }}><FitOneLine maxFontSize={11} minFontSize={6}>{t('export.doc.buyer_mobile', 'Buyer Mobile')}</FitOneLine></th>
-            <td colSpan={3} className="val-center val-bold" style={{ padding: '6px 8px' }}><FitOneLine maxFontSize={12} minFontSize={6}>{order.buyerNumber || '-'}</FitOneLine></td>
-            <th colSpan={2} className="hdr-light" style={{ whiteSpace: 'nowrap', padding: '6px 8px' }}><FitOneLine maxFontSize={11} minFontSize={6}>{t('export.doc.factory_mobile', 'Factory Mobile')}</FitOneLine></th>
-            <td colSpan={3} className="val-center val-bold" style={{ padding: '6px 8px' }}><FitOneLine maxFontSize={12} minFontSize={6}>{factoryInfo.mobile || '-'}</FitOneLine></td>
+            <th colSpan={2} className="hdr-light" style={{ whiteSpace: 'nowrap', padding: '6px 8px' }}><FitOneLine maxFontSize={13} minFontSize={8}>{t('export.doc.buyer_mobile', 'Buyer Mobile')}</FitOneLine></th>
+            <td colSpan={3} className="val-center val-bold" style={{ padding: '6px 8px' }}><FitOneLine maxFontSize={14} minFontSize={8}>{order.buyerNumber || '-'}</FitOneLine></td>
+            <th colSpan={2} className="hdr-light" style={{ whiteSpace: 'nowrap', padding: '6px 8px' }}><FitOneLine maxFontSize={13} minFontSize={8}>{t('export.doc.factory_mobile', 'Factory Mobile')}</FitOneLine></th>
+            <td colSpan={3} className="val-center val-bold" style={{ padding: '6px 8px' }}><FitOneLine maxFontSize={14} minFontSize={8}>{factoryInfo.mobile || '-'}</FitOneLine></td>
           </tr>
           <tr>
-            <th colSpan={2} className="hdr-light" style={{ whiteSpace: 'nowrap', padding: '6px 8px' }}><FitOneLine maxFontSize={11} minFontSize={6}>{t('export.doc.customer_id', 'Customer ID')}</FitOneLine></th>
-            <td colSpan={3} className="val-center val-bold" style={{ padding: '6px 8px' }}><FitOneLine maxFontSize={12} minFontSize={6}>{order.buyerMobile || '-'}</FitOneLine></td>
-            <th colSpan={2} className="hdr-light" style={{ whiteSpace: 'nowrap', padding: '6px 8px' }}><FitOneLine maxFontSize={11} minFontSize={6}>{t('export.doc.factory_address', 'Factory Address')}</FitOneLine></th>
-            <td colSpan={3} className="val-center val-bold" style={{ padding: '6px 8px' }}><FitOneLine maxFontSize={12} minFontSize={6}>{factoryInfo.address || '-'}</FitOneLine></td>
+            <th colSpan={2} className="hdr-light" style={{ whiteSpace: 'nowrap', padding: '6px 8px' }}><FitOneLine maxFontSize={13} minFontSize={8}>{t('export.doc.customer_id', 'Customer ID')}</FitOneLine></th>
+            <td colSpan={3} className="val-center val-bold" style={{ padding: '6px 8px' }}><FitOneLine maxFontSize={14} minFontSize={8}>{order.buyerMobile || '-'}</FitOneLine></td>
+            <th colSpan={2} className="hdr-light" style={{ whiteSpace: 'nowrap', padding: '6px 8px' }}><FitOneLine maxFontSize={13} minFontSize={8}>{t('export.doc.factory_address', 'Factory Address')}</FitOneLine></th>
+            <td colSpan={3} className="val-center val-bold" style={{ padding: '6px 8px' }}><FitOneLine maxFontSize={14} minFontSize={8}>{factoryInfo.address || '-'}</FitOneLine></td>
           </tr>
 
           {/* ═══ ROW 5: PRODUCT COLUMNS ═══ */}
           <tr>
-            <th className="hdr-blue" style={{ whiteSpace: 'nowrap', padding: '6px 8px' }}><FitOneLine maxFontSize={13} minFontSize={7}>{t('export.doc.product_name', 'Product')}</FitOneLine></th>
-            <th className="hdr-blue"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.model_no', 'Model NO.')}</FitOneLine></th>
-            <th className="hdr-blue"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.barcode', 'Barcode')}</FitOneLine></th>
-            <th className="hdr-blue"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.qty', 'Quantity')}</FitOneLine></th>
-            <th className="hdr-blue"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.price', 'Price')}</FitOneLine></th>
-            <th className="hdr-blue"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.total_price', 'Total Price')}</FitOneLine></th>
-            <th className="hdr-blue"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.size_qty', 'Sizes Qty')}</FitOneLine></th>
-            <th className="hdr-blue"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.size_range', 'Size Range')}</FitOneLine></th>
-            <th className="hdr-blue"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.carton_size', 'Carton Size')}</FitOneLine></th>
-            <th className="hdr-blue"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.plastic_bag', 'Plastic Bag')}</FitOneLine></th>
-            <th className="hdr-blue"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.ctn_packaging', 'CTN Packaging')}</FitOneLine></th>
+            <th className="hdr-blue" style={{ whiteSpace: 'nowrap', padding: '6px 8px' }}><FitOneLine maxFontSize={14} minFontSize={8}>{t('export.doc.product_name', 'Product')}</FitOneLine></th>
+            <th className="hdr-blue"><FitOneLine maxFontSize={13} minFontSize={8}>{t('export.doc.model_no', 'Model NO.')}</FitOneLine></th>
+            <th className="hdr-blue"><FitOneLine maxFontSize={13} minFontSize={8}>{t('export.doc.barcode', 'Barcode')}</FitOneLine></th>
+            <th className="hdr-blue"><FitOneLine maxFontSize={13} minFontSize={8}>{t('export.doc.qty', 'Quantity')}</FitOneLine></th>
+            <th className="hdr-blue"><FitOneLine maxFontSize={13} minFontSize={8}>{t('export.doc.price', 'Price')}</FitOneLine></th>
+            <th className="hdr-blue"><FitOneLine maxFontSize={13} minFontSize={8}>{t('export.doc.total_price', 'Total Price')}</FitOneLine></th>
+            <th className="hdr-blue"><FitOneLine maxFontSize={13} minFontSize={8}>{t('export.doc.size_qty', 'Sizes Qty')}</FitOneLine></th>
+            <th className="hdr-blue"><FitOneLine maxFontSize={13} minFontSize={8}>{t('export.doc.size_range', 'Size Range')}</FitOneLine></th>
+            <th className="hdr-blue"><FitOneLine maxFontSize={13} minFontSize={8}>{t('export.doc.carton_size', 'Carton Size')}</FitOneLine></th>
+            <th className="hdr-blue"><FitOneLine maxFontSize={13} minFontSize={8}>{t('export.doc.plastic_bag', 'Plastic Bag')}</FitOneLine></th>
+            <th className="hdr-blue"><FitOneLine maxFontSize={13} minFontSize={8}>{t('export.doc.ctn_packaging', 'CTN Packaging')}</FitOneLine></th>
           </tr>
 
           {/* ═══ ROW 6: PRODUCT VALUES ═══ */}
           <tr>
             <td className="val-center val-bold hdr-grey" style={{ whiteSpace: 'nowrap', padding: '6px 8px' }}>
-              <FitOneLine maxFontSize={13} minFontSize={6}>
+              <FitOneLine maxFontSize={14} minFontSize={8}>
                 {[
                   englishOnly(order.productName),
                   chineseOnly(order.productName)
                 ].filter(Boolean).join(' - ') || '-'}
               </FitOneLine>
             </td>
-            <td className="val-center val-bold bg-cyan"><FitOneLine maxFontSize={12} minFontSize={6}>{order.serialNumber || order.serial_number || '-'}</FitOneLine></td>
-            <td className="val-center val-bold"><FitOneLine maxFontSize={12} minFontSize={6}>{order.barcode ? `${order.barcode}` : '-'}</FitOneLine></td>
-            <td className="val-center val-bold"><FitOneLine maxFontSize={12} minFontSize={6}>{order.totalQuantity || '-'}</FitOneLine></td>
-            <td className="val-center val-bold"><FitOneLine maxFontSize={12} minFontSize={6}>¥ {order.productPrice || '-'}</FitOneLine></td>
-            <td className="val-center val-bold bg-light-blue"><FitOneLine maxFontSize={12} minFontSize={6}>¥ {order.productPrice && order.totalQuantity ? (parseFloat(order.productPrice) * parseFloat(order.totalQuantity)).toFixed(2) : '-'}</FitOneLine></td>
-            <td className="val-center val-bold"><FitOneLine maxFontSize={12} minFontSize={6}>{sizesToRender.length || '-'}</FitOneLine></td>
+            <td className="val-center val-bold bg-cyan"><FitOneLine maxFontSize={14} minFontSize={8}>{order.serialNumber || order.serial_number || '-'}</FitOneLine></td>
+            <td className="val-center val-bold"><FitOneLine maxFontSize={13} minFontSize={8}>{order.barcode ? `${order.barcode}` : '-'}</FitOneLine></td>
+            <td className="val-center val-bold"><FitOneLine maxFontSize={14} minFontSize={8}>{order.totalQuantity || '-'}</FitOneLine></td>
+            <td className="val-center val-bold"><FitOneLine maxFontSize={14} minFontSize={8}>¥ {order.productPrice || '-'}</FitOneLine></td>
+            <td className="val-center val-bold bg-light-blue"><FitOneLine maxFontSize={14} minFontSize={8}>¥ {order.productPrice && order.totalQuantity ? (parseFloat(order.productPrice) * parseFloat(order.totalQuantity)).toFixed(2) : '-'}</FitOneLine></td>
+            <td className="val-center val-bold"><FitOneLine maxFontSize={14} minFontSize={8}>{sizesToRender.length || '-'}</FitOneLine></td>
             <td className="val-center val-bold">
-              <FitOneLine maxFontSize={11} minFontSize={6}>{(() => {
+              <FitOneLine maxFontSize={13} minFontSize={8}>{(() => {
                 const range = getSizeRange(order);
                 if (range && range !== '-') {
                   const parts = range.split(' - ');
@@ -584,10 +654,10 @@ const ExportOrderDocument = ({ order, lookups = {}, t, id = "export-doc", classN
                 return '-';
               })()}</FitOneLine>
             </td>
-            <td className="val-center val-bold"><FitOneLine maxFontSize={12} minFontSize={6}>{order.cartonSize || '-'}</FitOneLine></td>
-            <td className="val-center val-bold"><FitOneLine maxFontSize={12} minFontSize={6}>{order.plasticBagSize || '-'}</FitOneLine></td>
+            <td className="val-center val-bold"><FitOneLine maxFontSize={13} minFontSize={8}>{order.cartonSize || '-'}</FitOneLine></td>
+            <td className="val-center val-bold"><FitOneLine maxFontSize={13} minFontSize={8}>{order.plasticBagSize || '-'}</FitOneLine></td>
             <td className="val-center val-bold">
-              <FitOneLine maxFontSize={11} minFontSize={6}>{(() => {
+              <FitOneLine maxFontSize={13} minFontSize={8}>{(() => {
                 const getFirstNum = (str) => {
                   if (!str) return null;
                   const match = String(str).match(/\d+(\.\d+)?/);
@@ -638,11 +708,11 @@ const ExportOrderDocument = ({ order, lookups = {}, t, id = "export-doc", classN
 
               rows.push(
                 <tr key="empty-hdr">
-                  <th className="hdr-grey"><FitOneLine maxFontSize={13} minFontSize={6}>{t('export.doc.size_header', 'Size')}</FitOneLine></th>
+                  <th className="hdr-grey"><FitOneLine maxFontSize={14} minFontSize={8}>{t('export.doc.size_header', 'Size')}</FitOneLine></th>
                   {displaySizes.length > 0 ? (
                     displaySizes.map((s, i) => (
                       <th key={i} className="hdr-grey" style={{ height: '28px' }}>
-                        <FitOneLine maxFontSize={13} minFontSize={6}>{s}</FitOneLine>
+                        <FitOneLine maxFontSize={14} minFontSize={8}>{s}</FitOneLine>
                       </th>
                     ))
                   ) : (
@@ -706,8 +776,8 @@ const ExportOrderDocument = ({ order, lookups = {}, t, id = "export-doc", classN
             parts.forEach(part => {
               rows.push(
                 <tr key={`part-hdr-${part}`}>
-                  <th className="hdr-grey"><FitOneLine maxFontSize={13} minFontSize={6}>{t('export.doc.part_size_header', { part, defaultValue: `${part} Size` })}</FitOneLine></th>
-                  {partSizes.map(s => <th key={s} className="hdr-grey"><FitOneLine maxFontSize={13} minFontSize={6}>{s}</FitOneLine></th>)}
+                  <th className="hdr-grey"><FitOneLine maxFontSize={14} minFontSize={8}>{t('export.doc.part_size_header', { part, defaultValue: `${part} Size` })}</FitOneLine></th>
+                  {partSizes.map(s => <th key={s} className="hdr-grey"><FitOneLine maxFontSize={14} minFontSize={8}>{s}</FitOneLine></th>)}
                   {partSizes.length < maxSizeCols && (
                     <td colSpan={maxSizeCols - partSizes.length} style={{ border: 'none', background: '#fff' }}></td>
                   )}
@@ -770,15 +840,15 @@ const ExportOrderDocument = ({ order, lookups = {}, t, id = "export-doc", classN
                 </tr>
 
                 <tr>
-                  <td colSpan={fabricColSpan} className="val-center val-bold bg-light-blue" style={{ fontSize: '14px' }}>
+                  <td colSpan={fabricColSpan} className="val-center val-bold bg-light-blue" style={{ fontSize: '15px' }}>
                     {order.productFabric || t('export.doc.default_fabric', 'Standard')}
                   </td>
-                  <td colSpan={conditionsColSpan} rowSpan={3} style={{ verticalAlign: 'top', padding: '8px', fontSize: '12px', color: '#c0392b', fontWeight: 800 }}>
+                  <td colSpan={conditionsColSpan} rowSpan={3} style={{ verticalAlign: 'top', padding: '10px 8px', fontSize: '13px', color: '#c0392b', fontWeight: 800, lineHeight: 1.45 }}>
                     {order.packagingConditions?.cond1 && <div style={{ marginBottom: '4px' }}>* {t('export.doc.cond1_text', { val1: order.packagingConditions.cond1_val1 || '-', val2: order.packagingConditions.cond1_val2 || '-', defaultValue: 'Condition 1' })}</div>}
                     {order.packagingConditions?.cond2 && <div style={{ marginBottom: '4px' }}>* {t('export.doc.cond2_text', { val1: order.packagingConditions.cond2_val1 || '-', val2: order.packagingConditions.cond2_val2 || '-', defaultValue: 'Condition 2' })}</div>}
                     {lookups.packagingConditionsList?.filter(c => order.packagingConditions?.[c]).map((c, i) => <div key={i} style={{ marginBottom: '4px' }}>* {c}</div>)}
                   </td>
-                  <td colSpan={2} rowSpan={3} style={{ verticalAlign: 'top', padding: '8px', fontSize: '12px', fontWeight: 800 }}>
+                  <td colSpan={2} rowSpan={3} className="val-bold order-remarks-cell" style={{ verticalAlign: 'top', padding: '10px 8px', fontSize: '14px', fontWeight: 800, color: '#000000', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.45 }}>
                     {order.remarks || ''}
                   </td>
                 </tr>
@@ -842,7 +912,7 @@ const ExportOrderDocument = ({ order, lookups = {}, t, id = "export-doc", classN
               return (
                 <React.Fragment key={`color-chunk-${chunkIndex}`}>
                   <tr>
-                    <th colSpan={1} className="hdr-light" style={{ borderTop: chunkIndex > 0 ? '3px solid #000' : '1px solid #000' }}><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.colors_zh', '颜色 / Colors')}</FitOneLine></th>
+                    <th colSpan={1} className="hdr-light" style={{ borderTop: chunkIndex > 0 ? '3px solid #000' : '1px solid #000' }}><FitOneLine maxFontSize={13} minFontSize={8}>{t('export.doc.colors_zh', '颜色 / Colors')}</FitOneLine></th>
                     {chunk.map((c, i) => {
                       let hex = '';
                       if (c) {
@@ -854,7 +924,7 @@ const ExportOrderDocument = ({ order, lookups = {}, t, id = "export-doc", classN
                           {c ? (
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', width: '100%', overflow: 'hidden' }}>
                               {hex && <div style={{ width: '14px', height: '14px', borderRadius: '50%', backgroundColor: hex, border: '1px solid #000', flexShrink: 0 }} />}
-                              <FitOneLine maxFontSize={11} minFontSize={5}>{c}</FitOneLine>
+                              <FitOneLine maxFontSize={13} minFontSize={8}>{c}</FitOneLine>
                             </div>
                           ) : ''}
                         </td>
@@ -862,21 +932,21 @@ const ExportOrderDocument = ({ order, lookups = {}, t, id = "export-doc", classN
                     })}
                   </tr>
                   <tr>
-                    <th colSpan={1} className="hdr-light"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.qty_zh', '数量 / Qty')}</FitOneLine></th>
+                    <th colSpan={1} className="hdr-light"><FitOneLine maxFontSize={13} minFontSize={8}>{t('export.doc.qty_zh', '数量 / Qty')}</FitOneLine></th>
                     {chunk.map((c, i) => {
                       if (!c) return <td key={`q-${i}`} colSpan={spans[i]}></td>;
                       const qty = sizesToRender.reduce((sum, s) => sum + (parseInt(order.colorDistribution[c]?.[s]) || 0), 0);
-                      return <td key={`q-${i}`} colSpan={spans[i]} className="val-center val-bold bg-light-blue"><FitOneLine maxFontSize={12} minFontSize={6}>{qty}</FitOneLine></td>;
+                      return <td key={`q-${i}`} colSpan={spans[i]} className="val-center val-bold bg-light-blue"><FitOneLine maxFontSize={14} minFontSize={8}>{qty}</FitOneLine></td>;
                     })}
                   </tr>
                   <tr>
-                    <th colSpan={1} className="hdr-light"><FitOneLine maxFontSize={12} minFontSize={6}>{t('export.doc.color_barcodes', 'Color Barcodes')}</FitOneLine></th>
+                    <th colSpan={1} className="hdr-light"><FitOneLine maxFontSize={13} minFontSize={8}>{t('export.doc.color_barcodes', 'Color Barcodes')}</FitOneLine></th>
                     {chunk.map((c, i) => {
                       if (!c) return <td key={`b-${i}`} colSpan={spans[i]}></td>;
                       const cInfo = lookups.colors?.find(color => typeof color === 'object' ? color.name === c : color === c);
                       const code = (cInfo && typeof cInfo === 'object') ? (cInfo.abbr || cInfo.code || '') : '';
                       return <td key={`b-${i}`} colSpan={spans[i]} className="val-center val-bold" style={{ whiteSpace: 'nowrap' }}>
-                        <FitOneLine maxFontSize={11} minFontSize={5}>{order.barcode ? `${order.barcode}${code ? '-' + code : ''}` : '-'}</FitOneLine>
+                        <FitOneLine maxFontSize={13} minFontSize={8}>{order.barcode ? `${order.barcode}${code ? '-' + code : ''}` : '-'}</FitOneLine>
                       </td>;
                     })}
                   </tr>
@@ -897,29 +967,29 @@ const ExportOrderDocument = ({ order, lookups = {}, t, id = "export-doc", classN
       <div className="export-signatures-footer" style={{ 
         marginTop: 'auto', 
         paddingTop: '15px', 
-        paddingBottom: '5px',
+        paddingBottom: '5px', 
         paddingLeft: '25px', 
-        paddingRight: '25px',
+        paddingRight: '25px', 
         backgroundColor: '#ffffff'
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
           <div>
-            <div style={{ marginBottom: '20px', fontSize: '13px', fontWeight: 800 }}>
+            <div style={{ marginBottom: '20px', fontSize: '14px', fontWeight: 800, color: '#000000' }}>
               {t ? t('export.doc.name_zh', '客户名称') : '客户名称'} <span style={{ color: '#c0392b', marginLeft: '35px' }}>{t ? t('export.doc.buyer_sign', 'Buyer Sign') : 'Buyer Sign'}</span>
             </div>
-            <div style={{ fontSize: '13px', fontWeight: 800, display: 'flex', alignItems: 'flex-end' }}>
+            <div style={{ fontSize: '14px', fontWeight: 800, color: '#000000', display: 'flex', alignItems: 'flex-end' }}>
               {t ? t('export.doc.signature_zh', '客户签字') : '客户签字'} 
               <div style={{ display: 'inline-block', width: '180px', borderBottom: '2px solid #000', marginLeft: '12px' }}></div>
             </div>
           </div>
           
           <div style={{ textAlign: 'center' }}>
-            <div style={{ color: '#c0392b', fontWeight: 800, fontSize: '13px', marginBottom: '20px' }}>{t ? t('export.doc.coordinator_sign', 'Coordinator Sign') : 'Coordinator Sign'}</div>
+            <div style={{ color: '#c0392b', fontWeight: 800, fontSize: '14px', marginBottom: '20px' }}>{t ? t('export.doc.coordinator_sign', 'Coordinator Sign') : 'Coordinator Sign'}</div>
             <div style={{ display: 'inline-block', width: '210px', borderBottom: '2px solid #000' }}></div>
           </div>
           
           <div style={{ textAlign: 'center' }}>
-            <div style={{ color: '#c0392b', fontWeight: 800, fontSize: '13px', marginBottom: '20px' }}>{t ? t('export.doc.factory_sign', 'Factory Sign') : 'Factory Sign'}</div>
+            <div style={{ color: '#c0392b', fontWeight: 800, fontSize: '14px', marginBottom: '20px' }}>{t ? t('export.doc.factory_sign', 'Factory Sign') : 'Factory Sign'}</div>
             <div style={{ display: 'inline-block', width: '210px', borderBottom: '2px solid #000' }}></div>
           </div>
         </div>

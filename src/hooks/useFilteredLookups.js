@@ -13,19 +13,49 @@ export const useFilteredLookups = () => {
   const allowedFactories = user.permissions?.allowed_factories || [];
   const allowedCompanies = user.permissions?.allowed_companies || [];
 
-  const filterList = (list, allowedList) => {
-    // If no specific restrictions, return all
-    if (!allowedList || allowedList.length === 0) return list;
-    
-    return list.filter(item => {
-      const name = typeof item === 'object' ? item.name : item;
-      return allowedList.includes(name);
+  const filterCompanies = (list, allowedList) => {
+    if (!allowedList || allowedList.length === 0) return list || [];
+    const normAllowed = allowedList.map(c => String(c).trim().toLowerCase());
+    return (list || []).filter(item => {
+      const name = typeof item === 'object' ? (item.name || '') : String(item || '');
+      return normAllowed.includes(name.trim().toLowerCase());
+    });
+  };
+
+  const filterFactories = (list, allowedFact, allowedComp) => {
+    const hasAllowedFactories = Array.isArray(allowedFact) && allowedFact.length > 0;
+    const hasAllowedCompanies = Array.isArray(allowedComp) && allowedComp.length > 0;
+
+    // If no restrictions, return all
+    if (!hasAllowedFactories && !hasAllowedCompanies) return list || [];
+
+    const normAllowedFactories = hasAllowedFactories ? allowedFact.map(f => String(f).trim().toLowerCase()) : [];
+    const normAllowedCompanies = hasAllowedCompanies ? allowedComp.map(c => String(c).trim().toLowerCase()) : [];
+
+    return (list || []).filter(item => {
+      const name = typeof item === 'object' ? (item.name || '') : String(item || '');
+      const normName = name.trim().toLowerCase();
+      const company = typeof item === 'object' ? (item.company || '') : '';
+      const normCompany = company.trim().toLowerCase();
+
+      // 1. Explicitly allowed in user's allowed_factories
+      if (hasAllowedFactories && normAllowedFactories.includes(normName)) {
+        return true;
+      }
+
+      // 2. Inherited automatically from user's allowed_companies
+      if (hasAllowedCompanies && normCompany && normAllowedCompanies.includes(normCompany)) {
+        return true;
+      }
+
+      return false;
     });
   };
 
   return {
     ...lookups,
-    factories: filterList(lookups.factories || [], allowedFactories),
-    companies: filterList(lookups.companies || [], allowedCompanies),
+    factories: filterFactories(lookups.factories || [], allowedFactories, allowedCompanies),
+    companies: filterCompanies(lookups.companies || [], allowedCompanies),
   };
 };
+

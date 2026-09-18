@@ -684,10 +684,12 @@ const DataEntryWizard = () => {
       const newImagesToAdd = [];
 
       const safeModelNum = modelNum.replace(/[/\\?%*:|"<>]/g, '-');
+      const uploadTimestamp = Date.now();
       for (let i = 0; i < originalFiles.length; i++) {
         const file = await compressImage(originalFiles[i], 1200, 0.75);
         const ext = file.name.split('.').pop() || 'jpg';
-        const fileName = currentCount === 0 ? `${safeModelNum}.${ext}` : `${safeModelNum}_${currentCount}.${ext}`;
+        const fileIdx = currentCount + i;
+        const fileName = `${safeModelNum}_${uploadTimestamp}_${fileIdx}.${ext}`;
         const filePath = `product-images/${fileName}`;
 
         const { error } = await supabase.storage
@@ -705,17 +707,21 @@ const DataEntryWizard = () => {
           const newImage = {
             name: fileName,
             path: filePath,
-            url: urlData.publicUrl,
+            url: `${urlData.publicUrl}?t=${uploadTimestamp}`,
             preview: URL.createObjectURL(file)
           };
           newImagesToAdd.push(newImage);
-          currentCount++;
         }
       }
 
       if (newImagesToAdd.length > 0) {
-        setProductImages(prev => [...prev, ...newImagesToAdd]);
-        const updatedImages = [...(currentOrder.productImages || []), ...newImagesToAdd.map(img => ({ name: img.name, path: img.path, url: img.url }))];
+        const nextProductImages = [...productImages, ...newImagesToAdd];
+        setProductImages(nextProductImages);
+        const updatedImages = nextProductImages.map(img => ({
+          name: img.name,
+          path: img.path,
+          url: img.url
+        }));
         updateOrder('productImages', updatedImages);
         toast.success(t('entry.messages.upload_success'), { id: toastId });
       } else {
@@ -743,14 +749,11 @@ const DataEntryWizard = () => {
       
       if (editingExistingImageIndex !== null) {
         const idx = editingExistingImageIndex;
-        const oldImg = productImages[idx];
-        const isOriginal = originalProductImages.some(orig => isSameImage(orig, oldImg));
         const ext = file.name.split('.').pop() || 'jpg';
         const modelNum = sanitizeItemCode(currentOrder.serialNumber || 'model');
         const safeModelNum = modelNum.replace(/[/\\?%*:|"<>]/g, '-');
-        const fileName = (isOriginal || (originalSerial && currentOrder.serialNumber !== originalSerial))
-          ? `${safeModelNum}_${idx}_edited_${Date.now()}.${ext}`
-          : (oldImg.name || `${safeModelNum}_${idx}.${ext}`);
+        const editTimestamp = Date.now();
+        const fileName = `${safeModelNum}_${idx}_edited_${editTimestamp}.${ext}`;
         const filePath = `product-images/${fileName}`;
         
         const { error } = await supabase.storage.from('product_images').upload(filePath, file, { upsert: true });
@@ -763,8 +766,7 @@ const DataEntryWizard = () => {
           const newImage = {
             name: fileName,
             path: filePath,
-            // Append timestamp to URL to bypass browser cache
-            url: urlData.publicUrl + '?t=' + Date.now(),
+            url: `${urlData.publicUrl}?t=${editTimestamp}`,
             preview: URL.createObjectURL(file)
           };
 
@@ -772,8 +774,11 @@ const DataEntryWizard = () => {
           newProductImages[idx] = newImage;
           setProductImages(newProductImages);
           
-          const updatedImages = [...(currentOrder.productImages || [])];
-          updatedImages[idx] = { name: newImage.name, path: newImage.path, url: newImage.url };
+          const updatedImages = newProductImages.map(img => ({
+            name: img.name,
+            path: img.path,
+            url: img.url
+          }));
           updateOrder('productImages', updatedImages);
           
           toast.success(t('entry.messages.upload_success'), { id: toastId });
@@ -830,12 +835,15 @@ const DataEntryWizard = () => {
     newImages.splice(index, 1);
     setProductImages(newImages);
     
-    const updatedOrderImages = [...(currentOrder.productImages || [])];
-    updatedOrderImages.splice(index, 1);
+    const updatedOrderImages = newImages.map(img => ({
+      name: img.name,
+      path: img.path,
+      url: img.url
+    }));
     updateOrder('productImages', updatedOrderImages);
 
-    // If this image belongs to the original fetched order, DO NOT delete it from storage!
-    // This preserves the previous order's photo when an employee is preparing to save a copy.
+    // If this image belongs to the original fetched order, DO NOT delete it from storage immediately!
+    // This preserves the previous order's photo when an employee is preparing to save a copy or might cancel.
     const isOriginalImage = originalProductImages.some(orig => isSameImage(orig, imgToRemove));
 
     if (!isOriginalImage && imgToRemove?.path) {
@@ -979,6 +987,11 @@ const DataEntryWizard = () => {
 
     const cleanOrder = { 
       ...currentOrder,
+      productImages: productImages.map(img => ({
+        name: img.name,
+        path: img.path,
+        url: img.url || normalizeImageUrl(img)
+      })),
       manualSizes: hasManual ? activeSizes : [],
       sizeFrom: hasManual ? '' : currentOrder.sizeFrom,
       sizeTo: hasManual ? '' : currentOrder.sizeTo
@@ -1227,6 +1240,23 @@ const DataEntryWizard = () => {
       };
       const { error } = await supabase.from('orders').update(payload).eq('serial_number', cleanOriginal);
       if (error) throw error;
+
+      // Clean up any original images that were deleted and replaced in this update session
+      const imagesToDeleteFromStorage = originalProductImages.filter(orig =>
+        !productImages.some(curr => isSameImage(curr, orig))
+      );
+      if (imagesToDeleteFromStorage.length > 0) {
+        const pathsToDelete = imagesToDeleteFromStorage
+          .map(img => img.path)
+          .filter(Boolean);
+        if (pathsToDelete.length > 0) {
+          try {
+            await supabase.storage.from('product_images').remove(pathsToDelete);
+          } catch (storageErr) {
+            console.error('Failed to cleanup replaced images from storage:', storageErr);
+          }
+        }
+      }
 
       const changesList = summarizeOrderChanges(previous?.order_data, baseOrder) || [];
       const changesSummary = changesList.map(c => `${c.label || c.field}: (${c.from || '-'} ➔ ${c.to || '-'})	`).join('، ');
@@ -1511,7 +1541,12 @@ const DataEntryWizard = () => {
 
       const finalOrder = { ...defaultOrderState, ...fetchedOrder, serialNumber: data.serial_number || fetchedOrder.serialNumber };
       if (finalOrder.productImages) {
-        finalOrder.productImages = finalOrder.productImages.map(img => ({ ...img, url: normalizeImageUrl(img) }));
+        finalOrder.productImages = finalOrder.productImages.map(img => {
+          const norm = normalizeImageUrl(img);
+          const hasQuery = norm.includes('?');
+          const finalUrl = hasQuery ? norm : `${norm}?t=${Date.now()}`;
+          return { ...img, url: finalUrl };
+        });
       }
       setCurrentOrder(finalOrder);
       setAutoFocusLastSize(false);

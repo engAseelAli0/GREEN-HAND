@@ -87,6 +87,8 @@ export const normalizeImageUrl = (img) => {
 
   // Determine path from imgPath or rawUrl
   let path = imgPath || rawUrl;
+  const [pathBase, pathQuery] = path.split('?');
+  path = pathBase;
 
   // Clean leading slashes
   if (path.startsWith('/')) path = path.slice(1);
@@ -100,5 +102,5 @@ export const normalizeImageUrl = (img) => {
   const safePath = path.replace(/#/g, '%23');
 
   const publicUrl = supabase.storage.from('product_images').getPublicUrl(safePath).data.publicUrl;
-  return publicUrl;
+  return pathQuery ? `${publicUrl}?${pathQuery}` : publicUrl;
 };

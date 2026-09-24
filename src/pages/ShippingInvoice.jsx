@@ -9,6 +9,7 @@ import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
 import { CustomDateInput } from '../components/CustomDateInput';
 import { useFilteredLookups } from '../hooks/useFilteredLookups';
+import { isOrderAllowedForUser } from '../utils/permissionUtils';
 
 const toEnglishNumbers = (str) => {
   if (str === null || str === undefined) return '';
@@ -295,13 +296,8 @@ const ShippingInvoice = () => {
                     const matchedSerial = data.serial_number || r.serial.trim();
                     
                     if (user && user.role !== 'admin') {
-                       const allowedFactories = user.permissions?.allowed_factories || [];
-                       const allowedCompanies = user.permissions?.allowed_companies || [];
-                       if (allowedFactories.length > 0 && !allowedFactories.includes(d.factoryId)) {
-                          throw new Error("Unauthorized factory");
-                       }
-                       if (allowedCompanies.length > 0 && !allowedCompanies.includes(d.buyerCompany)) {
-                          throw new Error("Unauthorized company");
+                       if (!isOrderAllowedForUser(d, user, factories)) {
+                           throw new Error("Unauthorized factory or company");
                        }
                     }
 

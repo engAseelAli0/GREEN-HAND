@@ -9,6 +9,7 @@ import { buildOperationalIntelligence, analyzeOrder } from '../utils/orderIntell
 import { formatActivityTime, getActivityActionLabel, getActivityNote } from '../utils/activityLog';
 import { englishOnly } from '../utils/textUtils';
 import toast from 'react-hot-toast';
+import { filterOrdersForUser } from '../utils/permissionUtils';
 
 const calculateTotalPiecesCount = (orderData) => {
   if (!orderData) return 0;
@@ -150,17 +151,7 @@ const AnalyticsDashboard = () => {
         ]);
         let validOrders = oData || [];
         
-        if (user && user.role !== 'admin') {
-          const allowedFactories = user.permissions?.allowed_factories || [];
-          const allowedCompanies = user.permissions?.allowed_companies || [];
-          
-          if (allowedFactories.length > 0) {
-            validOrders = validOrders.filter(o => allowedFactories.includes(o.order_data?.factoryId));
-          }
-          if (allowedCompanies.length > 0) {
-            validOrders = validOrders.filter(o => allowedCompanies.includes(o.order_data?.buyerCompany));
-          }
-        }
+        validOrders = filterOrdersForUser(validOrders, user, lookups?.factories);
         
         const validOrderSerials = new Set(validOrders.map(o => o.serial_number));
         const validReceivings = (rData || []).filter(r => validOrderSerials.has(r.serial_number));

@@ -259,6 +259,18 @@ const DataEntryWizard = () => {
     try {
       const { error } = await updateLookup('factories', [...currentFactories, createdFactory]);
       if (error) throw error;
+
+      // Automatically grant the creator permission to this factory if they have factory restrictions
+      if (user && user.role !== 'admin' && user.permissions?.allowed_factories?.length > 0) {
+        const currentAllowed = user.permissions.allowed_factories;
+        if (!currentAllowed.includes(name)) {
+          const updatedPermissions = { ...user.permissions, allowed_factories: [...currentAllowed, name] };
+          await supabase.from('users').update({ permissions: updatedPermissions }).eq('id', user.id);
+          // Update local user object state if possible, though it'll refresh on reload
+          user.permissions.allowed_factories.push(name);
+        }
+      }
+
       updateOrder('factoryId', name);
       if (company && !currentOrder.buyerCompany) {
         updateOrder('buyerCompany', company);

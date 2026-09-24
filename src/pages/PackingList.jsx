@@ -9,6 +9,7 @@ import { normalizeImageUrl } from '../utils/imageUtils';
 import toast from 'react-hot-toast';
 import { CustomDateInput } from '../components/CustomDateInput';
 import { useFilteredLookups } from '../hooks/useFilteredLookups';
+import { isOrderAllowedForUser } from '../utils/permissionUtils';
 const toEnglishNumbers = (str) => {
   if (str === null || str === undefined) return '';
   return str.toString().replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d));
@@ -288,13 +289,8 @@ const PackingList = () => {
                 
                 // Data-level authorization check
                 if (user && user.role !== 'admin') {
-                   const allowedFactories = user.permissions?.allowed_factories || [];
-                   const allowedCompanies = user.permissions?.allowed_companies || [];
-                   if (allowedFactories.length > 0 && !allowedFactories.includes(d.factoryId)) {
-                      throw new Error("Unauthorized factory");
-                   }
-                   if (allowedCompanies.length > 0 && !allowedCompanies.includes(d.buyerCompany)) {
-                      throw new Error("Unauthorized company");
+                   if (!isOrderAllowedForUser(d, user, factories)) {
+                       throw new Error("Unauthorized factory or company");
                    }
                 }
 

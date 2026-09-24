@@ -15,7 +15,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { analyzeOrder } from '../utils/orderIntelligence';
 import { activitySummary, formatActivityTime, getActivityActionLabel, getActivityNote } from '../utils/activityLog';
-import { fetchAllowedSerials } from '../utils/permissionUtils';
+import { fetchAllowedSerials, filterOrdersForUser } from '../utils/permissionUtils';
 
 const calculateTotalPiecesCount = (orderData) => {
   if (!orderData) return 0;
@@ -167,17 +167,7 @@ const ReportsPortal = () => {
       }
       
       let validData = data || [];
-      if (user && user.role !== 'admin') {
-        const allowedFactories = user.permissions?.allowed_factories || [];
-        const allowedCompanies = user.permissions?.allowed_companies || [];
-        
-        if (allowedFactories.length > 0) {
-          validData = validData.filter(o => allowedFactories.includes(o.order_data?.factoryId));
-        }
-        if (allowedCompanies.length > 0) {
-          validData = validData.filter(o => allowedCompanies.includes(o.order_data?.buyerCompany));
-        }
-      }
+      validData = filterOrdersForUser(validData, user, lookups?.factories);
 
       sortedData = validData.sort((a, b) => {
          return (parseInt(b.serial_number) || 0) - (parseInt(a.serial_number) || 0);

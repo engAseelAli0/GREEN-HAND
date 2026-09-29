@@ -1,15 +1,57 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
-import { useAppData } from '../context/AppDataContext';
 import { useAuth } from '../context/AuthContext';
 import { englishOnly } from '../utils/textUtils';
 import { normalizeImageUrl } from '../utils/imageUtils';
-import { Printer, Plus, Trash2, Search, FileText, Settings, LayoutGrid, AlertCircle, X, FileSpreadsheet } from 'lucide-react';
+import { Printer, Plus, Trash2, Search, FileText, AlertCircle, X, FileSpreadsheet, Save, History, Copy, RefreshCw, ExternalLink } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
 import { CustomDateInput } from '../components/CustomDateInput';
 import { useFilteredLookups } from '../hooks/useFilteredLookups';
 import { isOrderAllowedForUser } from '../utils/permissionUtils';
+import { logAuditEvent } from '../utils/auditLogger';
+
+const createRowId = () => (
+  typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+);
+
+const createEmptyInvoiceRow = () => ({
+  id: createRowId(),
+  serial: '',
+  desc: '',
+  arabicName: '',
+  qty: '',
+  currency: '¥ RMB',
+  unitPrice: '',
+  totalAmount: 0,
+  details: '',
+  image: '',
+  factoryCode: ''
+});
+
+const createEmptyFooterInfo = () => ({
+  commissionPercent: '',
+  containerFee: '',
+  insurance: '',
+  internalShipping: '',
+  containerNo: '',
+  sealNo: ''
+});
+
+const withCalculatedRowTotal = (row) => {
+  const quantity = parseFloat(row.qty) || 0;
+  const unitPrice = parseFloat(row.unitPrice) || 0;
+  return { ...row, totalAmount: quantity * unitPrice };
+};
+
+const invoiceStateSignature = (header, invoiceRows, footer, includeImages) => JSON.stringify({
+  headerInfo: header,
+  rows: invoiceRows,
+  footerInfo: footer,
+  showImageColumn: includeImages
+});
 
 const toEnglishNumbers = (str) => {
   if (str === null || str === undefined) return '';
@@ -28,13 +70,12 @@ const ShippingInvoice = () => {
     fax: 'FAX:(8620)-83265204',
     address: '',
     invoiceNo: '',
-    branch: '',
+    customerName: '',
     date: localDate
   });
 
-  const { lookups } = useAppData();
   const filteredLookups = useFilteredLookups();
-  const companies = filteredLookups?.companies || [];
+  const companies = useMemo(() => filteredLookups?.companies || [], [filteredLookups?.companies]);
   const factories = filteredLookups?.factories || [];
   const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
 
@@ -43,32 +84,23 @@ const ShippingInvoice = () => {
       const currentAllowed = companies.some(c => (c.name || c) === headerInfo.companyName);
       if (!currentAllowed) {
         const comp = companies[0];
+        // This effect synchronizes the selected company with the user's allowed scope.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setHeaderInfo(prev => ({
           ...prev,
           companyName: comp.name || '',
           fax: comp.fax ? `FAX:${comp.fax} ` : '',
           tel: comp.mobile ? `Tel:${comp.mobile} ` : '',
-          address: comp.address || '',
-          branch: comp.address || ''
+          address: comp.address || ''
         }));
       }
     }
-  }, [companies, user]);
+  }, [companies, user, headerInfo.companyName]);
+  const [rows, setRows] = useState([createEmptyInvoiceRow()]);
 
-  const [rows, setRows] = useState([
-    { id: Date.now(), serial: '', desc: '', arabicName: '', qty: '', currency: '¥ RMB', unitPrice: '', totalAmount: 0, details: '', image: '', factoryCode: '' }
-  ]);
+  const [footerInfo, setFooterInfo] = useState(createEmptyFooterInfo);
 
-  const [footerInfo, setFooterInfo] = useState({
-    commissionPercent: '',
-    containerFee: '',
-    insurance: '',
-    internalShipping: '',
-    containerNo: '',
-    sealNo: ''
-  });
-
-  const [isExporting, setIsExporting] = useState(false);
+  const isExporting = false;
   const [showFetchDialog, setShowFetchDialog] = useState(false);
   const [showImageColumn, setShowImageColumn] = useState(false);
 
@@ -90,33 +122,45 @@ const ShippingInvoice = () => {
   // Clear Confirm State
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
+  // Saved invoices state
+  const [currentInvoice, setCurrentInvoice] = useState(null);
+  const [savedFormSignature, setSavedFormSignature] = useState(null);
+  const [isSavingInvoice, setIsSavingInvoice] = useState(false);
+  const [showInvoiceBrowser, setShowInvoiceBrowser] = useState(false);
+  const [savedInvoices, setSavedInvoices] = useState([]);
+  const [invoiceSearch, setInvoiceSearch] = useState('');
+  const [isLoadingInvoices, setIsLoadingInvoices] = useState(false);
+
+  const hasMeaningfulData = Boolean(
+    headerInfo.invoiceNo?.trim()
+    || rows.some(row => row.serial?.trim() || row.desc?.trim() || row.qty || row.unitPrice)
+    || Object.values(footerInfo).some(value => String(value || '').trim())
+  );
+  const currentFormSignature = invoiceStateSignature(headerInfo, rows, footerInfo, showImageColumn);
+  const hasUnsavedChanges = savedFormSignature === null
+    ? hasMeaningfulData
+    : currentFormSignature !== savedFormSignature;
+
   const clearAllData = () => {
-    setRows([{ id: Date.now(), serial: '', desc: '', arabicName: '', qty: '', currency: '¥ RMB', unitPrice: '', totalAmount: 0, details: '', image: '', factoryCode: '' }]);
-    setHeaderInfo(prev => ({ ...prev, invoiceNo: '', branch: '' }));
+    const nextHeader = { ...headerInfo, invoiceNo: '', customerName: '', date: localDate };
+    const nextRows = [createEmptyInvoiceRow()];
+    const nextFooter = createEmptyFooterInfo();
+    setRows(nextRows);
+    setHeaderInfo(nextHeader);
+    setFooterInfo(nextFooter);
+    setShowImageColumn(false);
+    setCurrentInvoice(null);
+    setSavedFormSignature(invoiceStateSignature(nextHeader, nextRows, nextFooter, false));
     setShowClearConfirm(false);
     toast.success(t('shipping.messages.clear_success'));
   };
-
-  useEffect(() => {
-    const updatedRows = rows.map(r => {
-      const q = parseFloat(r.qty) || 0;
-      const p = parseFloat(r.unitPrice) || 0;
-      return { ...r, totalAmount: q * p };
-    });
-    
-    const hasChanges = updatedRows.some((r, i) => r.totalAmount !== rows[i].totalAmount);
-    if (hasChanges) {
-      setRows(updatedRows);
-    }
-  }, [rows]);
-
   const addRow = () => {
-    setRows([...rows, { id: Date.now(), serial: '', desc: '', arabicName: '', qty: '', currency: '¥ RMB', unitPrice: '', totalAmount: 0, details: '', image: '', factoryCode: '' }]);
+    setRows(prev => [...prev, createEmptyInvoiceRow()]);
   };
 
   const removeRow = (id) => {
     if (rows.length === 1) return;
-    setRows(rows.filter(r => r.id !== id));
+    setRows(prev => prev.filter(r => r.id !== id));
   };
 
   const fetchRowData = async (_id, serial) => {
@@ -132,7 +176,11 @@ const ShippingInvoice = () => {
     if (['qty', 'unitPrice', 'serial'].includes(field)) {
         finalValue = toEnglishNumbers(value);
     }
-    setRows(rows.map(r => r.id === id ? { ...r, [field]: finalValue } : r));
+    setRows(prev => prev.map(row => (
+      row.id === id
+        ? withCalculatedRowTotal({ ...row, [field]: finalValue })
+        : row
+    )));
   };
 
   const calculateTotalPiecesCount = (orderData) => {
@@ -268,6 +316,7 @@ const ShippingInvoice = () => {
     setShowImageColumn(withImage);
     const toastId = toast.loading(t('shipping.messages.fetching_data'));
     let successCount = 0;
+    let fetchedCustomerName = '';
     
     let updatedRows = [...rows];
     if (removeBadRows) {
@@ -279,7 +328,7 @@ const ShippingInvoice = () => {
     }
 
     if (updatedRows.length === 0) {
-        updatedRows = [{ id: Date.now(), serial: '', desc: '', arabicName: '', qty: '', currency: '¥ RMB', unitPrice: '', totalAmount: 0, details: '', image: '', factoryCode: '' }];
+        updatedRows = [createEmptyInvoiceRow()];
     }
     for (let i = 0; i < updatedRows.length; i++) {
         let r = updatedRows[i];
@@ -313,7 +362,10 @@ const ShippingInvoice = () => {
                     const factoryObj = factories.find(f => (f.name || f) === factName);
                     const factoryCode = typeof factoryObj === 'object' ? factoryObj.code : (d.factoryCode || '');
 
-                    updatedRows[i] = {
+                    if (!fetchedCustomerName && d.buyerMobile) {
+                        fetchedCustomerName = d.buyerMobile;
+                    }
+                    updatedRows[i] = withCalculatedRowTotal({
                         ...r,
                         serial: matchedSerial,
                         desc: englishOnly(d.productName) || '',
@@ -323,7 +375,7 @@ const ShippingInvoice = () => {
                         unitPrice: d.productPrice || '',
                         image: imageUrl,
                         factoryCode: factoryCode || ''
-                    };
+                    });
                     successCount++;
                 }
             } catch {
@@ -331,8 +383,9 @@ const ShippingInvoice = () => {
             }
         }
     }
-    
+
     setRows(updatedRows);
+    setHeaderInfo(prev => ({ ...prev, customerName: fetchedCustomerName }));
 
     if (successCount > 0) {
         toast.success(t('shipping.messages.fetch_success', { count: successCount }), { id: toastId });
@@ -354,6 +407,312 @@ const ShippingInvoice = () => {
 
   const invoiceTotal = subTotalAmount + commissionAmount + contFee + ins + intShip;
   const primaryCurrency = rows[0]?.currency || 'RMB ¥';
+
+  const isInvoiceTableMissing = (error) => (
+    error?.code === 'PGRST205'
+    || error?.message?.includes("shipping_invoices") && error?.message?.includes('schema cache')
+  );
+
+  const showInvoiceStorageError = (error, toastId) => {
+    if (isInvoiceTableMissing(error)) {
+      toast.error(t('shipping.saved.table_missing'), { id: toastId, duration: 7000 });
+      return;
+    }
+    if (error?.code === '42501') {
+      toast.error(t('shipping.saved.permission_error'), { id: toastId });
+      return;
+    }
+    toast.error(error?.message || t('shipping.saved.generic_error'), { id: toastId });
+  };
+
+  const buildInvoicePayload = () => ({
+    invoice_no: headerInfo.invoiceNo.trim(),
+    invoice_date: headerInfo.date,
+    company_name: headerInfo.companyName || '',
+    invoice_data: {
+      schemaVersion: 1,
+      headerInfo,
+      rows,
+      footerInfo,
+      showImageColumn
+    },
+    total_amount: Number(invoiceTotal.toFixed(2)),
+    total_pieces: Math.max(0, Math.round(totalPcs)),
+    updated_by_username: user?.username || null
+  });
+
+  const saveInvoice = async () => {
+    const invoiceNumber = headerInfo.invoiceNo.trim();
+    const validRows = rows.filter(row => row.serial?.trim());
+
+    if (!invoiceNumber) {
+      toast.error(t('shipping.saved.invoice_no_required'));
+      return;
+    }
+    if (!headerInfo.date) {
+      toast.error(t('shipping.saved.date_required'));
+      return;
+    }
+    if (validRows.length === 0) {
+      toast.error(t('shipping.saved.items_required'));
+      return;
+    }
+
+    const isUpdating = Boolean(currentInvoice?.id);
+    if (isUpdating && !hasPermission('shipping-invoice', 'edit')) {
+      toast.error(t('shipping.saved.permission_error'));
+      return;
+    }
+    if (!isUpdating && !hasPermission('shipping-invoice', 'add')) {
+      toast.error(t('shipping.saved.permission_error'));
+      return;
+    }
+
+    setIsSavingInvoice(true);
+    const toastId = toast.loading(isUpdating ? t('shipping.saved.updating') : t('shipping.saved.saving'));
+
+    try {
+      const payload = buildInvoicePayload();
+      let savedRecord;
+
+      if (isUpdating) {
+        const { data, error } = await supabase
+          .from('shipping_invoices')
+          .update(payload)
+          .eq('id', currentInvoice.id)
+          .eq('updated_at', currentInvoice.updated_at)
+          .select('*')
+          .maybeSingle();
+
+        if (error) throw error;
+        if (!data) {
+          const conflictError = new Error(t('shipping.saved.conflict_error'));
+          conflictError.code = 'INVOICE_CONFLICT';
+          throw conflictError;
+        }
+        savedRecord = data;
+      } else {
+        const { data, error } = await supabase
+          .from('shipping_invoices')
+          .insert([{
+            ...payload,
+            created_by: user?.id || null,
+            created_by_username: user?.username || null
+          }])
+          .select('*')
+          .single();
+
+        if (error) throw error;
+        savedRecord = data;
+      }
+
+      setCurrentInvoice({
+        id: savedRecord.id,
+        updated_at: savedRecord.updated_at,
+        created_at: savedRecord.created_at,
+        created_by_username: savedRecord.created_by_username
+      });
+      setSavedFormSignature(invoiceStateSignature(headerInfo, rows, footerInfo, showImageColumn));
+
+      await logAuditEvent({
+        action: isUpdating ? 'UPDATE_SHIPPING_INVOICE' : 'CREATE_SHIPPING_INVOICE',
+        actionType: isUpdating ? 'UPDATE' : 'CREATE',
+        entityType: 'shipping-invoice',
+        entityId: savedRecord.id,
+        user,
+        screenKey: 'shipping-invoice',
+        screenName: 'فاتورة الشحن',
+        summary: `${isUpdating ? 'تعديل' : 'إنشاء'} فاتورة الشحن رقم ${invoiceNumber}`,
+        details: {
+          invoiceNumber,
+          companyName: headerInfo.companyName,
+          totalAmount: Number(invoiceTotal.toFixed(2)),
+          totalPieces: Math.round(totalPcs),
+          itemCount: validRows.length
+        }
+      });
+
+      toast.success(isUpdating ? t('shipping.saved.update_success') : t('shipping.saved.save_success'), { id: toastId });
+    } catch (error) {
+      console.error('Error saving shipping invoice:', error);
+      if (error?.code === '23505') {
+        toast.error(t('shipping.saved.duplicate_invoice_no'), { id: toastId });
+      } else if (error?.code === 'INVOICE_CONFLICT') {
+        toast.error(t('shipping.saved.conflict_error'), { id: toastId, duration: 7000 });
+      } else {
+        showInvoiceStorageError(error, toastId);
+      }
+    } finally {
+      setIsSavingInvoice(false);
+    }
+  };
+
+  const loadSavedInvoices = async () => {
+    setIsLoadingInvoices(true);
+    try {
+      const { data, error } = await supabase
+        .from('shipping_invoices')
+        .select('*')
+        .order('invoice_date', { ascending: false })
+        .order('updated_at', { ascending: false })
+        .limit(500);
+
+      if (error) throw error;
+      setSavedInvoices(data || []);
+    } catch (error) {
+      console.error('Error loading shipping invoices:', error);
+      setSavedInvoices([]);
+      showInvoiceStorageError(error);
+    } finally {
+      setIsLoadingInvoices(false);
+    }
+  };
+
+  const openInvoiceBrowser = () => {
+    setInvoiceSearch('');
+    setShowInvoiceBrowser(true);
+    loadSavedInvoices();
+  };
+
+  const normalizeSavedInvoice = (record, { asCopy = false } = {}) => {
+    const stored = record?.invoice_data && typeof record.invoice_data === 'object'
+      ? record.invoice_data
+      : {};
+    const loadedHeader = {
+      ...headerInfo,
+      ...(stored.headerInfo || {}),
+      invoiceNo: asCopy ? '' : (stored.headerInfo?.invoiceNo || record.invoice_no || ''),
+      customerName: stored.headerInfo?.customerName || '',
+      date: asCopy ? localDate : (stored.headerInfo?.date || record.invoice_date || localDate)
+    };
+    const loadedRows = Array.isArray(stored.rows) && stored.rows.length > 0
+      ? stored.rows.map(row => withCalculatedRowTotal({ ...createEmptyInvoiceRow(), ...row, id: row.id || createRowId() }))
+      : [createEmptyInvoiceRow()];
+    const loadedFooter = { ...createEmptyFooterInfo(), ...(stored.footerInfo || {}) };
+    const loadedShowImages = Boolean(stored.showImageColumn);
+
+    return { loadedHeader, loadedRows, loadedFooter, loadedShowImages };
+  };
+
+  const openSavedInvoice = async (record) => {
+    if (hasUnsavedChanges && !window.confirm(t('shipping.saved.discard_changes_confirm'))) return;
+
+    const { loadedHeader, loadedRows, loadedFooter, loadedShowImages } = normalizeSavedInvoice(record);
+    setHeaderInfo(loadedHeader);
+    setRows(loadedRows);
+    setFooterInfo(loadedFooter);
+    setShowImageColumn(loadedShowImages);
+    setCurrentInvoice({
+      id: record.id,
+      updated_at: record.updated_at,
+      created_at: record.created_at,
+      created_by_username: record.created_by_username
+    });
+    setSavedFormSignature(invoiceStateSignature(loadedHeader, loadedRows, loadedFooter, loadedShowImages));
+    setShowInvoiceBrowser(false);
+
+    logAuditEvent({
+      action: 'VIEW_SHIPPING_INVOICE',
+      actionType: 'VIEW',
+      entityType: 'shipping-invoice',
+      entityId: record.id,
+      user,
+      screenKey: 'shipping-invoice',
+      screenName: 'فاتورة الشحن',
+      summary: `فتح فاتورة الشحن رقم ${record.invoice_no}`,
+      details: { invoiceNumber: record.invoice_no }
+    }).catch(() => {});
+  };
+
+  const copySavedInvoice = (record) => {
+    if (hasUnsavedChanges && !window.confirm(t('shipping.saved.discard_changes_confirm'))) return;
+
+    const { loadedHeader, loadedRows, loadedFooter, loadedShowImages } = normalizeSavedInvoice(record, { asCopy: true });
+    setHeaderInfo(loadedHeader);
+    setRows(loadedRows);
+    setFooterInfo(loadedFooter);
+    setShowImageColumn(loadedShowImages);
+    setCurrentInvoice(null);
+    setSavedFormSignature(null);
+    setShowInvoiceBrowser(false);
+    toast.success(t('shipping.saved.copy_ready'));
+  };
+
+  const startNewInvoice = () => {
+    if (hasUnsavedChanges && !window.confirm(t('shipping.saved.discard_changes_confirm'))) return;
+
+    const nextHeader = { ...headerInfo, invoiceNo: '', customerName: '', date: localDate };
+    const nextRows = [createEmptyInvoiceRow()];
+    const nextFooter = createEmptyFooterInfo();
+    setHeaderInfo(nextHeader);
+    setRows(nextRows);
+    setFooterInfo(nextFooter);
+    setShowImageColumn(false);
+    setCurrentInvoice(null);
+    setSavedFormSignature(invoiceStateSignature(nextHeader, nextRows, nextFooter, false));
+    toast.success(t('shipping.saved.new_ready'));
+  };
+
+  const deleteSavedInvoice = async (record) => {
+    if (!hasPermission('shipping-invoice', 'delete')) return;
+    if (!window.confirm(t('shipping.saved.delete_confirm', { invoice: record.invoice_no }))) return;
+
+    const toastId = toast.loading(t('shipping.saved.deleting'));
+    try {
+      const { data, error } = await supabase
+        .from('shipping_invoices')
+        .delete()
+        .eq('id', record.id)
+        .select('id')
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) throw new Error(t('shipping.saved.permission_error'));
+
+      setSavedInvoices(prev => prev.filter(invoice => invoice.id !== record.id));
+      if (currentInvoice?.id === record.id) {
+        const nextHeader = { ...headerInfo, invoiceNo: '', customerName: '', date: localDate };
+        const nextRows = [createEmptyInvoiceRow()];
+        const nextFooter = createEmptyFooterInfo();
+        setHeaderInfo(nextHeader);
+        setRows(nextRows);
+        setFooterInfo(nextFooter);
+        setShowImageColumn(false);
+        setCurrentInvoice(null);
+        setSavedFormSignature(invoiceStateSignature(nextHeader, nextRows, nextFooter, false));
+      }
+
+      await logAuditEvent({
+        action: 'DELETE_SHIPPING_INVOICE',
+        actionType: 'DELETE',
+        entityType: 'shipping-invoice',
+        entityId: record.id,
+        user,
+        screenKey: 'shipping-invoice',
+        screenName: 'فاتورة الشحن',
+        summary: `حذف فاتورة الشحن رقم ${record.invoice_no}`,
+        details: { invoiceNumber: record.invoice_no, fullSnapshot: record.invoice_data }
+      });
+      toast.success(t('shipping.saved.delete_success'), { id: toastId });
+    } catch (error) {
+      console.error('Error deleting shipping invoice:', error);
+      showInvoiceStorageError(error, toastId);
+    }
+  };
+
+  const normalizedInvoiceSearch = invoiceSearch.trim().toLowerCase();
+  const filteredSavedInvoices = savedInvoices.filter(record => {
+    if (!normalizedInvoiceSearch) return true;
+    const serials = Array.isArray(record.invoice_data?.rows)
+      ? record.invoice_data.rows.map(row => row.serial || '').join(' ')
+      : '';
+    return [
+      record.invoice_no,
+      record.invoice_date,
+      record.company_name,
+      record.created_by_username,
+      serials
+    ].some(value => String(value || '').toLowerCase().includes(normalizedInvoiceSearch));
+  });
 
   // ─── الدالة المعدلة والمطورة لتصدير PDF الاحترافي ───
   const exportToPDF = async () => {
@@ -419,8 +778,8 @@ const ShippingInvoice = () => {
           <tr>
             <td style="${bl}width:16%;font-weight:bold;color:#1a5276;">${t('shipping.header.invoice_no')}：</td>
             <td style="${tc}width:17%;font-weight:bold;">${headerInfo.invoiceNo || '-'}</td>
-            <td style="${bl}width:16%;font-weight:bold;color:#1a5276;">${t('shipping.header.branch')}：</td>
-            <td style="${tc}width:17%; font-weight:bold;">${headerInfo.branch || '-'}</td>
+            <td style="${bl}width:16%;font-weight:bold;color:#1a5276;">${t('shipping.header.customer_name')}：</td>
+            <td style="${tc}width:17%; font-weight:bold;">${headerInfo.customerName || '-'}</td>
             <td style="${bl}width:16%;font-weight:bold;color:#1a5276;">${t('shipping.header.date')}：</td>
             <td style="${tc}width:18%;font-weight:bold;">${fD(headerInfo.date)}</td>
           </tr>
@@ -723,8 +1082,8 @@ const ShippingInvoice = () => {
     <tr>
       <td class="inv-meta-label" width="15%">${t('shipping.header.invoice_no')}:</td>
       <td width="18%">${headerInfo.invoiceNo || ''}</td>
-      <td class="inv-meta-label" width="15%">${t('shipping.header.branch')}:</td>
-      <td width="18%">${headerInfo.branch || ''}</td>
+      <td class="inv-meta-label" width="15%">${t('shipping.header.customer_name')}:</td>
+      <td width="18%">${headerInfo.customerName || ''}</td>
       <td class="inv-meta-label" width="15%">${t('shipping.header.date')}:</td>
       <td width="19%">${headerInfo.date || ''}</td>
     </tr>
@@ -885,8 +1244,53 @@ ${imgInfo.base64Data}
           <p style={{ color: 'var(--text-muted)', margin: '0.5rem 0 0' }}>
             {t('shipping.subtitle')}
           </p>
+          <div className="no-print" style={{ marginTop: '0.65rem', display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.3rem 0.7rem',
+              borderRadius: '999px', fontSize: '0.8rem', fontWeight: 'bold',
+              color: currentInvoice ? '#22c55e' : 'var(--text-muted)',
+              background: currentInvoice ? 'rgba(34,197,94,0.1)' : 'rgba(148,163,184,0.1)',
+              border: `1px solid ${currentInvoice ? 'rgba(34,197,94,0.35)' : 'rgba(148,163,184,0.25)'}`
+            }}>
+              {currentInvoice ? t('shipping.saved.saved_status') : t('shipping.saved.new_status')}
+            </span>
+            {hasUnsavedChanges && (
+              <span style={{ color: '#f59e0b', fontSize: '0.8rem', fontWeight: 'bold' }}>
+                {t('shipping.saved.unsaved_changes')}
+              </span>
+            )}
+            {currentInvoice?.updated_at && (
+              <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>
+                {t('shipping.saved.last_saved')}: {new Date(currentInvoice.updated_at).toLocaleString()}
+              </span>
+            )}
+          </div>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          {hasPermission('shipping-invoice', 'add') && (
+            <button className="btn btn-outline no-print" onClick={startNewInvoice} style={{ padding: '12px 18px', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Plus size={20} /> {t('shipping.saved.new_invoice')}
+            </button>
+          )}
+          <button className="btn btn-outline no-print" onClick={openInvoiceBrowser} style={{ padding: '12px 18px', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#60a5fa', borderColor: '#60a5fa' }}>
+            <History size={20} /> {t('shipping.saved.previous_invoices')}
+          </button>
+          {((currentInvoice && hasPermission('shipping-invoice', 'edit')) || (!currentInvoice && hasPermission('shipping-invoice', 'add'))) && (
+            <button
+              className="btn no-print"
+              onClick={saveInvoice}
+              disabled={isSavingInvoice || !hasUnsavedChanges}
+              style={{
+                padding: '12px 22px', display: 'flex', alignItems: 'center', gap: '0.5rem', border: 'none',
+                background: hasUnsavedChanges ? 'linear-gradient(135deg, #2563eb, #1d4ed8)' : 'rgba(100,116,139,0.35)',
+                color: 'white', cursor: isSavingInvoice || !hasUnsavedChanges ? 'not-allowed' : 'pointer',
+                opacity: isSavingInvoice || !hasUnsavedChanges ? 0.65 : 1
+              }}
+            >
+              {isSavingInvoice ? <RefreshCw size={20} className="spin" /> : <Save size={20} />}
+              {currentInvoice ? t('shipping.saved.save_changes') : t('shipping.saved.save_invoice')}
+            </button>
+          )}
           {hasPermission('shipping-invoice', 'export') && (
             <>
               <button className="btn no-print" onClick={exportToExcel} disabled={isExporting} style={{ padding: '12px 24px', fontSize: '1.1rem', backgroundColor: '#10b981', color: 'white', border: 'none', display: 'flex', alignItems: 'center', gap: '0.5rem', boxShadow: '0 4px 15px rgba(16, 185, 129, 0.3)' }}>
@@ -953,8 +1357,7 @@ ${imgInfo.base64Data}
                          companyName: comp.name || '',
                          fax: comp.fax ? `FAX:${comp.fax} ` : '',
                          tel: comp.mobile ? `Tel:${comp.mobile} ` : '',
-                         address: comp.address || '',
-                         branch: comp.address || ''
+                         address: comp.address || ''
                        });
                        setShowCompanyDropdown(false);
                      }}
@@ -986,8 +1389,8 @@ ${imgInfo.base64Data}
                  <input type="text" className="form-control" value={headerInfo.invoiceNo} onChange={e => setHeaderInfo({...headerInfo, invoiceNo: toEnglishNumbers(e.target.value)})} style={{ background: 'var(--bg-color)' }} />
               </div>
               <div>
-                 <label style={{ fontSize: '0.85rem', color: 'var(--accent-color)', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>{t('shipping.header.branch')}</label>
-                 <input type="text" className="form-control" value={headerInfo.branch} onChange={e => setHeaderInfo({...headerInfo, branch: e.target.value})} style={{ background: 'var(--bg-color)' }} />
+                 <label style={{ fontSize: '0.85rem', color: 'var(--accent-color)', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>{t('shipping.header.customer_name')}</label>
+                 <input type="text" className="form-control" value={headerInfo.customerName} readOnly style={{ background: 'var(--bg-color)', opacity: 0.85 }} />
               </div>
                  <div style={{ position: 'relative' }}>
                     <label style={{ fontSize: '0.85rem', color: 'var(--accent-color)', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>{t('shipping.header.date')}</label>
@@ -1296,6 +1699,131 @@ ${imgInfo.base64Data}
 
         </div>
       </div>
+
+      {showInvoiceBrowser && (
+        <div className="no-print" style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.82)', zIndex: 10000,
+          display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '1.5rem',
+          backdropFilter: 'blur(6px)'
+        }}>
+          <div className="card fade-in" style={{
+            width: 'min(1100px, 96vw)', maxHeight: '90vh', overflow: 'hidden', padding: 0,
+            border: '2px solid var(--accent-color)', boxShadow: '0 18px 60px rgba(0,0,0,0.55)',
+            display: 'flex', flexDirection: 'column'
+          }}>
+            <div style={{
+              padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border-color)',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem',
+              background: 'var(--surface-highlight)'
+            }}>
+              <div>
+                <h2 style={{ margin: 0, color: 'var(--text-strong)', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                  <History size={25} color="var(--accent-color)" />
+                  {t('shipping.saved.previous_invoices')}
+                </h2>
+                <p style={{ margin: '0.35rem 0 0', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                  {t('shipping.saved.browser_desc')}
+                </p>
+              </div>
+              <button onClick={() => setShowInvoiceBrowser(false)} aria-label={t('shipping.fetch_dialog.cancel')} style={{
+                background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
+                color: '#ef4444', width: '38px', height: '38px', borderRadius: '9px', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center'
+              }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{ padding: '1rem 1.5rem', display: 'flex', gap: '0.75rem', borderBottom: '1px solid var(--border-color)' }}>
+              <div style={{ position: 'relative', flex: 1 }}>
+                <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                <input
+                  type="text"
+                  className="form-control"
+                  value={invoiceSearch}
+                  onChange={event => setInvoiceSearch(event.target.value)}
+                  placeholder={t('shipping.saved.search_placeholder')}
+                  style={{ paddingLeft: '40px', width: '100%' }}
+                  autoFocus
+                />
+              </div>
+              <button className="btn btn-outline" onClick={loadSavedInvoices} disabled={isLoadingInvoices} style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                <RefreshCw size={18} className={isLoadingInvoices ? 'spin' : ''} />
+                {t('shipping.saved.refresh')}
+              </button>
+            </div>
+
+            <div style={{ overflow: 'auto', padding: '1rem 1.5rem 1.5rem' }}>
+              {isLoadingInvoices ? (
+                <div style={{ padding: '4rem 1rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  <RefreshCw size={30} className="spin" style={{ marginBottom: '0.75rem' }} />
+                  <div>{t('shipping.saved.loading')}</div>
+                </div>
+              ) : filteredSavedInvoices.length === 0 ? (
+                <div style={{ padding: '4rem 1rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  <FileText size={42} style={{ opacity: 0.45, marginBottom: '0.75rem' }} />
+                  <div>{invoiceSearch ? t('shipping.saved.no_search_results') : t('shipping.saved.no_invoices')}</div>
+                </div>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '850px' }}>
+                  <thead>
+                    <tr style={{ background: 'rgba(var(--accent-rgb),0.08)', color: 'var(--accent-color)' }}>
+                      <th style={{ padding: '0.8rem', textAlign: 'start', borderBottom: '1px solid var(--border-color)' }}>{t('shipping.saved.invoice_number')}</th>
+                      <th style={{ padding: '0.8rem', textAlign: 'start', borderBottom: '1px solid var(--border-color)' }}>{t('shipping.saved.invoice_date')}</th>
+                      <th style={{ padding: '0.8rem', textAlign: 'start', borderBottom: '1px solid var(--border-color)' }}>{t('shipping.saved.company')}</th>
+                      <th style={{ padding: '0.8rem', textAlign: 'center', borderBottom: '1px solid var(--border-color)' }}>{t('shipping.saved.pieces')}</th>
+                      <th style={{ padding: '0.8rem', textAlign: 'end', borderBottom: '1px solid var(--border-color)' }}>{t('shipping.saved.amount')}</th>
+                      <th style={{ padding: '0.8rem', textAlign: 'start', borderBottom: '1px solid var(--border-color)' }}>{t('shipping.saved.last_update')}</th>
+                      <th style={{ padding: '0.8rem', textAlign: 'center', borderBottom: '1px solid var(--border-color)' }}>{t('shipping.saved.actions')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredSavedInvoices.map(record => {
+                      const currency = record.invoice_data?.rows?.[0]?.currency || '';
+                      const isCurrent = currentInvoice?.id === record.id;
+                      return (
+                        <tr key={record.id} style={{ background: isCurrent ? 'rgba(34,197,94,0.07)' : 'transparent' }}>
+                          <td style={{ padding: '0.85rem', borderBottom: '1px solid var(--border-color)', fontWeight: 'bold' }}>
+                            {record.invoice_no}
+                            {isCurrent && <span style={{ marginInlineStart: '0.5rem', fontSize: '0.7rem', color: '#22c55e' }}>{t('shipping.saved.current')}</span>}
+                          </td>
+                          <td style={{ padding: '0.85rem', borderBottom: '1px solid var(--border-color)' }}>{record.invoice_date || '-'}</td>
+                          <td style={{ padding: '0.85rem', borderBottom: '1px solid var(--border-color)', maxWidth: '220px' }}>{record.company_name || '-'}</td>
+                          <td style={{ padding: '0.85rem', borderBottom: '1px solid var(--border-color)', textAlign: 'center' }}>{record.total_pieces ?? 0}</td>
+                          <td style={{ padding: '0.85rem', borderBottom: '1px solid var(--border-color)', textAlign: 'end', fontWeight: 'bold' }}>
+                            {Number(record.total_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })} {currency}
+                          </td>
+                          <td style={{ padding: '0.85rem', borderBottom: '1px solid var(--border-color)', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                            <div>{record.updated_at ? new Date(record.updated_at).toLocaleString() : '-'}</div>
+                            <div>{record.updated_by_username || record.created_by_username || '-'}</div>
+                          </td>
+                          <td style={{ padding: '0.7rem', borderBottom: '1px solid var(--border-color)' }}>
+                            <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center' }}>
+                              <button onClick={() => openSavedInvoice(record)} title={t('shipping.saved.open')} style={{ background: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.3)', color: '#60a5fa', borderRadius: '7px', padding: '0.45rem', cursor: 'pointer', display: 'flex' }}>
+                                <ExternalLink size={16} />
+                              </button>
+                              {hasPermission('shipping-invoice', 'add') && (
+                                <button onClick={() => copySavedInvoice(record)} title={t('shipping.saved.copy_as_new')} style={{ background: 'rgba(168,85,247,0.12)', border: '1px solid rgba(168,85,247,0.3)', color: '#c084fc', borderRadius: '7px', padding: '0.45rem', cursor: 'pointer', display: 'flex' }}>
+                                  <Copy size={16} />
+                                </button>
+                              )}
+                              {hasPermission('shipping-invoice', 'delete') && (
+                                <button onClick={() => deleteSavedInvoice(record)} title={t('shipping.saved.delete')} style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)', color: '#ef4444', borderRadius: '7px', padding: '0.45rem', cursor: 'pointer', display: 'flex' }}>
+                                  <Trash2 size={16} />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {showFetchDialog && (
          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', zIndex: 9999, display: 'flex', justifyContent: 'center', alignItems: 'center', backdropFilter: 'blur(5px)' }}>

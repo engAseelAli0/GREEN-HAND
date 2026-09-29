@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useAppData } from '../context/AppDataContext';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../supabaseClient';
-import { Search, Save, PackageCheck, AlertCircle, Info, Box, Palette, Calculator, CheckCircle2, XCircle, Download, Printer, X, Factory } from 'lucide-react';
+import { Search, Save, PackageCheck, AlertCircle, Info, Box, Palette, Calculator, CheckCircle2, XCircle, Download, Printer, X, Factory, Plus, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 import { useTranslation } from 'react-i18next';
@@ -10,6 +10,57 @@ import { extractColorCSS } from '../utils/textUtils';
 import { appendActivity, createActivityItem } from '../utils/activityLog';
 import { logAuditEvent } from '../utils/auditLogger';
 import { isOrderAllowedForUser, fetchAllowedSerials, resolveFactoryDisplay } from '../utils/permissionUtils';
+
+const createReceivingId = () => (
+  typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+);
+
+const createMixedItem = () => ({
+  id: createReceivingId(),
+  serial: '',
+  quantity: ''
+});
+
+const createReceivingPackage = (index) => ({
+  id: `Package_${index + 1}`,
+  kind: '',
+  status: '',
+  fromCtn: '',
+  toCtn: '',
+  pcsPerCtn: '',
+  active: index === 0,
+  mixedCaseId: '',
+  mixedItems: []
+});
+
+const normalizeReceivingPackage = (pkg, index) => {
+  const mixedItems = Array.isArray(pkg?.mixedItems)
+    ? pkg.mixedItems.map(item => ({ ...createMixedItem(), ...item, id: item.id || createReceivingId() }))
+    : [];
+  const mixedTotal = mixedItems.reduce((sum, item) => sum + (parseInt(item.quantity) || 0), 0);
+  const isMixed = pkg?.status === 'Mixed';
+  return {
+    ...createReceivingPackage(index),
+    ...pkg,
+    id: pkg?.id || `Package_${index + 1}`,
+    active: pkg?.active !== undefined
+      ? pkg.active
+      : Boolean(pkg?.fromCtn || pkg?.toCtn || pkg?.pcsPerCtn || index === 0),
+    kind: isMixed ? 'Pcs' : (pkg?.kind || ''),
+    toCtn: isMixed ? (pkg?.fromCtn || '') : (pkg?.toCtn || ''),
+    pcsPerCtn: isMixed ? (mixedTotal ? String(mixedTotal) : '') : (pkg?.pcsPerCtn || ''),
+    mixedItems
+  };
+};
+
+const InfoBox = ({ label, value, highlight }) => (
+  <div style={{ background: highlight ? 'rgba(212,175,55,0.05)' : 'var(--bg-color)', padding: '12px 16px', borderRadius: '10px', border: highlight ? '1px solid rgba(212,175,55,0.3)' : '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{label}</span>
+    <span style={{ fontSize: '1rem', fontWeight: 'bold', color: highlight ? 'var(--accent-color)' : 'var(--text-main)' }}>{value || '---'}</span>
+  </div>
+);
 
 const FactoryReceiving = () => {
   const { t } = useTranslation();
@@ -25,6 +76,7 @@ const FactoryReceiving = () => {
   const [availableSerials, setAvailableSerials] = useState([]);
   const [serialSearchQuery, setSerialSearchQuery] = useState('');
   const [fetchingSerials, setFetchingSerials] = useState(false);
+  const [mixedSerialTarget, setMixedSerialTarget] = useState(null);
   const serialSearchRef = React.useRef(null);
   
   // Header Info State
@@ -42,15 +94,7 @@ const FactoryReceiving = () => {
   });
 
   // Package Table State
-  const [packages, setPackages] = useState(Array.from({ length: 4 }).map((_, i) => ({
-    id: `Package_${i + 1}`,
-    kind: '',
-    status: '',
-    fromCtn: '',
-    toCtn: '',
-    pcsPerCtn: '',
-    active: i === 0 // Only the first package is active by default
-  })));
+  const [packages, setPackages] = useState(Array.from({ length: 4 }, (_, i) => createReceivingPackage(i)));
 
   // Factory Packages State (Read-only)
   const [factoryPackages, setFactoryPackages] = useState([]);
@@ -67,7 +111,10 @@ const FactoryReceiving = () => {
   const getPackageCalculations = (pkg) => {
     const from = parseInt(pkg.fromCtn);
     const to = parseInt(pkg.toCtn);
-    const units = parseInt(pkg.pcsPerCtn);
+    const mixedUnits = pkg.status === 'Mixed'
+      ? (pkg.mixedItems || []).reduce((sum, item) => sum + (parseInt(item.quantity) || 0), 0)
+      : 0;
+    const units = pkg.status === 'Mixed' ? mixedUnits : parseInt(pkg.pcsPerCtn);
 
     const hasRange = !isNaN(from) && !isNaN(to) && to >= from;
     const hasUnits = !isNaN(units) && units > 0;
@@ -160,15 +207,10 @@ const FactoryReceiving = () => {
       
       if (recData && recData.receive_data && recData.receive_data.packages) {
         // Ensure fetched packages have an 'active' status if they contain data
-        const fetchedPkgs = recData.receive_data.packages.map((p, idx) => ({
-           ...p,
-           active: p.active !== undefined ? p.active : (p.fromCtn || p.toCtn || p.pcsPerCtn || idx === 0)
-        }));
+        const fetchedPkgs = recData.receive_data.packages.map(normalizeReceivingPackage);
         setPackages(fetchedPkgs);
       } else {
-        const newPkgs = Array.from({ length: 4 }).map((_, i) => ({
-          id: `Package_${i + 1}`, kind: '', status: '', fromCtn: '', toCtn: '', pcsPerCtn: '', active: i === 0
-        }));
+        const newPkgs = Array.from({ length: 4 }, (_, i) => createReceivingPackage(i));
         setPackages(newPkgs);
       }
       
@@ -254,9 +296,91 @@ const FactoryReceiving = () => {
   };
 
   const handlePackageChange = (index, field, value) => {
-    const updated = [...packages];
-    updated[index][field] = value;
-    setPackages(updated);
+    setPackages(current => current.map((pkg, pkgIndex) => {
+      if (pkgIndex !== index) return pkg;
+
+      if (field === 'status') {
+        if (value === 'Mixed') {
+          const mixedItems = pkg.mixedItems?.length ? pkg.mixedItems : [createMixedItem()];
+          const mixedTotal = mixedItems.reduce((sum, item) => sum + (parseInt(item.quantity) || 0), 0);
+          return {
+            ...pkg,
+            status: 'Mixed',
+            kind: 'Pcs',
+            toCtn: pkg.fromCtn || '',
+            pcsPerCtn: mixedTotal ? String(mixedTotal) : '',
+            mixedCaseId: pkg.mixedCaseId || createReceivingId(),
+            mixedItems
+          };
+        }
+        return { ...pkg, status: value, mixedCaseId: '', mixedItems: [] };
+      }
+
+      if (field === 'fromCtn' && pkg.status === 'Mixed') {
+        return { ...pkg, fromCtn: value, toCtn: value };
+      }
+
+      return { ...pkg, [field]: value };
+    }));
+  };
+
+  const updateMixedItem = (packageIndex, itemId, field, value) => {
+    setPackages(current => current.map((pkg, index) => {
+      if (index !== packageIndex) return pkg;
+      const mixedItems = (pkg.mixedItems || []).map(item => (
+        item.id === itemId ? { ...item, [field]: value } : item
+      ));
+      const mixedTotal = mixedItems.reduce((sum, item) => sum + (parseInt(item.quantity) || 0), 0);
+      return { ...pkg, mixedItems, pcsPerCtn: mixedTotal ? String(mixedTotal) : '' };
+    }));
+  };
+
+  const addMixedItem = (packageIndex) => {
+    setPackages(current => current.map((pkg, index) => (
+      index === packageIndex
+        ? { ...pkg, mixedItems: [...(pkg.mixedItems || []), createMixedItem()] }
+        : pkg
+    )));
+  };
+
+  const removeMixedItem = (packageIndex, itemId) => {
+    setPackages(current => current.map((pkg, index) => {
+      if (index !== packageIndex) return pkg;
+      const remaining = (pkg.mixedItems || []).filter(item => item.id !== itemId);
+      const mixedItems = remaining.length ? remaining : [createMixedItem()];
+      const mixedTotal = mixedItems.reduce((sum, item) => sum + (parseInt(item.quantity) || 0), 0);
+      return { ...pkg, mixedItems, pcsPerCtn: mixedTotal ? String(mixedTotal) : '' };
+    }));
+  };
+
+  const loadAllowedSerials = async () => {
+    setFetchingSerials(true);
+    try {
+      const serials = await fetchAllowedSerials(supabase, user, lookups?.factories);
+      setAvailableSerials(serials);
+      return serials;
+    } catch (err) {
+      console.error(err);
+      setAvailableSerials([]);
+      return [];
+    } finally {
+      setFetchingSerials(false);
+    }
+  };
+
+  const openMixedSerialPicker = async (packageIndex, itemId) => {
+    setShowSerialsList(false);
+    setMixedSerialTarget({ packageIndex, itemId });
+    setSerialSearchQuery('');
+    await loadAllowedSerials();
+    setTimeout(() => serialSearchRef.current?.focus(), 100);
+  };
+
+  const selectMixedSerial = (serial) => {
+    if (!mixedSerialTarget) return;
+    updateMixedItem(mixedSerialTarget.packageIndex, mixedSerialTarget.itemId, 'serial', String(serial));
+    setMixedSerialTarget(null);
+    setSerialSearchQuery('');
   };
 
   const handleColorChange = (index, value) => {
@@ -284,11 +408,62 @@ const FactoryReceiving = () => {
       return;
     }
 
+    const activeMixedPackages = packages.filter(pkg => pkg.active && pkg.status === 'Mixed');
+    for (const pkg of activeMixedPackages) {
+      const cartonNumber = parseInt(pkg.fromCtn);
+      if (!cartonNumber || cartonNumber < 1 || String(pkg.fromCtn) !== String(pkg.toCtn)) {
+        toast.error(t('receiving.messages.mixed_single_carton_required'));
+        return;
+      }
+
+      const mixedItems = Array.isArray(pkg.mixedItems) ? pkg.mixedItems : [];
+      if (mixedItems.length === 0 || mixedItems.some(item => !item.serial?.trim() || (parseInt(item.quantity) || 0) <= 0)) {
+        toast.error(t('receiving.messages.mixed_item_required'));
+        return;
+      }
+
+      const normalizedSerials = mixedItems.map(item => item.serial.trim().toLowerCase());
+      if (new Set(normalizedSerials).size !== normalizedSerials.length) {
+        toast.error(t('receiving.messages.mixed_duplicate_item'));
+        return;
+      }
+    }
+
+    let canonicalSerials = new Map();
+    if (activeMixedPackages.length > 0) {
+      const allowedSerials = await fetchAllowedSerials(supabase, user, lookups?.factories, 10000);
+      canonicalSerials = new Map(allowedSerials.map(serial => [String(serial).trim().toLowerCase(), String(serial)]));
+      const invalidMixedItem = activeMixedPackages
+        .flatMap(pkg => pkg.mixedItems || [])
+        .find(item => !canonicalSerials.has(item.serial.trim().toLowerCase()));
+      if (invalidMixedItem) {
+        toast.error(t('receiving.messages.mixed_item_not_found', { serial: invalidMixedItem.serial }));
+        return;
+      }
+    }
+
+    const packagesToSave = packages.map(pkg => {
+      if (pkg.status !== 'Mixed') return pkg;
+      const mixedItems = (pkg.mixedItems || []).map(item => ({
+        ...item,
+        serial: canonicalSerials.get(item.serial.trim().toLowerCase()) || item.serial.trim(),
+        quantity: String(parseInt(item.quantity) || 0)
+      }));
+      const mixedTotal = mixedItems.reduce((sum, item) => sum + (parseInt(item.quantity) || 0), 0);
+      return {
+        ...pkg,
+        kind: 'Pcs',
+        toCtn: pkg.fromCtn,
+        pcsPerCtn: String(mixedTotal),
+        mixedCaseId: pkg.mixedCaseId || createReceivingId(),
+        mixedItems
+      };
+    });
 
     const payload = {
       serial_number: modelNo.trim(),
       receive_data: {
-        packages: packages,
+        packages: packagesToSave,
         colors: colors,
         status: productInfo.productStatus,
         receivedAt: new Date().toISOString()
@@ -337,6 +512,7 @@ const FactoryReceiving = () => {
           serialNumber: modelNo.trim(),
           totalCartons: totals.totalCtn,
           totalPieces: totals.totalProd,
+          mixedCartons: activeMixedPackages.length,
           factoryId: productInfo.factoryId,
           factoryName: productInfo.factoryName,
         },
@@ -352,9 +528,7 @@ const FactoryReceiving = () => {
         priceCurrency: '', reqCartons: '', reqTotalQuantity: 0, productStatus: 'Not Received',
         factoryId: '', factoryName: ''
       });
-      setPackages(Array.from({ length: 4 }).map((_, i) => ({
-        id: `Package_${i + 1}`, kind: '', status: '', fromCtn: '', toCtn: '', pcsPerCtn: '', active: i === 0
-      })));
+      setPackages(Array.from({ length: 4 }, (_, i) => createReceivingPackage(i)));
       setFactoryPackages([]);
       setColors(Array.from({ length: 9 }).map((_, i) => ({
         id: `Colors_${i + 1}`, colorName: '', quantity: '', expected: 0
@@ -383,11 +557,16 @@ const FactoryReceiving = () => {
     const pkgsData = packages.filter(p => p.kind).map(p => ({
         [t('receiving.packages.id') || 'ID']: p.id,
         [t('receiving.packages.kind')]: p.kind,
-        [t('receiving.packages.carton_status')]: p.status === 'Full' ? t('receiving.packages.full') : (p.status === 'Not Full' ? t('receiving.packages.not_full') : p.status),
+        [t('receiving.packages.carton_status')]: p.status === 'Full'
+          ? t('receiving.packages.full')
+          : (p.status === 'Mixed' ? t('receiving.packages.mixed') : (p.status === 'Not Full' ? t('receiving.packages.not_full') : p.status)),
         [t('receiving.packages.from')]: p.fromCtn,
         [t('receiving.packages.to')]: p.toCtn,
         [t('receiving.packages.pcs_per_ctn')]: p.pcsPerCtn,
-        [t('receiving.packages.total_pcs')]: getPackageCalculations(p).totalProdQty
+        [t('receiving.packages.total_pcs')]: getPackageCalculations(p).totalProdQty,
+        [t('receiving.packages.mixed_items_title')]: p.status === 'Mixed'
+          ? (p.mixedItems || []).map(item => `${item.serial}: ${item.quantity}`).join(' | ')
+          : ''
     }));
 
     const colorsData = colors.filter(c => c.colorName).map(c => ({
@@ -475,14 +654,6 @@ const FactoryReceiving = () => {
     }
   };
 
-
-  // Helper component for Product Info fields
-  const InfoBox = ({ label, value, highlight }) => (
-    <div style={{ background: highlight ? 'rgba(212,175,55,0.05)' : 'var(--bg-color)', padding: '12px 16px', borderRadius: '10px', border: highlight ? '1px solid rgba(212,175,55,0.3)' : '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{label}</span>
-      <span style={{ fontSize: '1rem', fontWeight: 'bold', color: highlight ? 'var(--accent-color)' : 'var(--text-main)' }}>{value || '---'}</span>
-    </div>
-  );
 
   return (
     <div className="fade-in" style={{ paddingBottom: '2rem' }}>
@@ -714,7 +885,7 @@ const FactoryReceiving = () => {
                       <div key={idx} style={{ background: 'var(--surface-color)', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '0.85rem' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
                           <span style={{ fontWeight: 'bold' }}>{pkg.id}</span>
-                          <span style={{ color: 'var(--text-muted)' }}>{pkg.kind} • {pkg.status === 'Full' ? t('receiving.packages.full') : (pkg.status === 'Not Full' ? t('receiving.packages.not_full') : pkg.status)}</span>
+                          <span style={{ color: 'var(--text-muted)' }}>{pkg.kind} • {pkg.status === 'Full' ? t('receiving.packages.full') : (pkg.status === 'Mixed' ? t('receiving.packages.mixed') : (pkg.status === 'Not Full' ? t('receiving.packages.not_full') : pkg.status))}</span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-main)' }}>
                           <span>{t('receiving.packages.cartons')}: {from} - {to} ({totalCtn})</span>
@@ -776,7 +947,7 @@ const FactoryReceiving = () => {
                       <div className="fade-in" style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'flex-end', paddingTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
                         <div className="form-group" style={{ flex: 1, minWidth: '120px', marginBottom: 0 }}>
                           <label className="form-label" style={{ fontSize: '0.75rem' }}>{t('receiving.packages.kind')}</label>
-                          <select className="form-control" value={pkg.kind} onChange={e => handlePackageChange(idx, 'kind', e.target.value)}>
+                          <select className="form-control" value={pkg.kind} onChange={e => handlePackageChange(idx, 'kind', e.target.value)} disabled={pkg.status === 'Mixed'}>
                             <option value=""></option>
                             <option value="Pcs">{t('receiving.packages.pcs')}</option>
                             <option value="Doz">{t('receiving.packages.doz')}</option>
@@ -788,6 +959,7 @@ const FactoryReceiving = () => {
                             <option value=""></option>
                             <option value="Full">{t('receiving.packages.full')}</option>
                             <option value="Not Full">{t('receiving.packages.not_full')}</option>
+                            <option value="Mixed">{t('receiving.packages.mixed')}</option>
                           </select>
                         </div>
                         <div className="form-group" style={{ flex: 1, minWidth: '80px', marginBottom: 0 }}>
@@ -796,11 +968,11 @@ const FactoryReceiving = () => {
                         </div>
                         <div className="form-group" style={{ flex: 1, minWidth: '80px', marginBottom: 0 }}>
                           <label className="form-label" style={{ fontSize: '0.75rem' }}>{t('receiving.packages.to')}</label>
-                          <input type="number" className="form-control" value={pkg.toCtn} onChange={e => handlePackageChange(idx, 'toCtn', e.target.value)} />
+                          <input type="number" className="form-control" value={pkg.toCtn} onChange={e => handlePackageChange(idx, 'toCtn', e.target.value)} readOnly={pkg.status === 'Mixed'} style={pkg.status === 'Mixed' ? { opacity: 0.75, cursor: 'not-allowed' } : undefined} />
                         </div>
                         <div className="form-group" style={{ flex: 1.5, minWidth: '120px', marginBottom: 0 }}>
                           <label className="form-label" style={{ fontSize: '0.75rem' }}>{t('receiving.packages.pcs_per_ctn')}</label>
-                          <input type="number" className="form-control" value={pkg.pcsPerCtn} onChange={e => handlePackageChange(idx, 'pcsPerCtn', e.target.value)} />
+                          <input type="number" className="form-control" value={pkg.pcsPerCtn} onChange={e => handlePackageChange(idx, 'pcsPerCtn', e.target.value)} readOnly={pkg.status === 'Mixed'} style={pkg.status === 'Mixed' ? { opacity: 0.75, cursor: 'not-allowed' } : undefined} />
                         </div>
 
                         {/* Result Segment Restored */}
@@ -825,6 +997,83 @@ const FactoryReceiving = () => {
                             </div>
                           </div>
                         )}
+                      </div>
+                    )}
+
+                    {pkg.active && pkg.status === 'Mixed' && (
+                      <div className="fade-in" style={{
+                        padding: '1rem', borderRadius: '10px',
+                        border: '1px solid rgba(239,68,68,0.35)', background: 'rgba(239,68,68,0.05)'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
+                          <div>
+                            <strong style={{ color: '#f87171' }}>{t('receiving.packages.mixed_items_title')}</strong>
+                            <div style={{ color: 'var(--text-muted)', fontSize: '0.78rem', marginTop: '0.25rem' }}>
+                              {t('receiving.packages.mixed_single_carton_hint')}
+                            </div>
+                          </div>
+                          <span style={{ color: 'var(--accent-color)', fontWeight: 'bold' }}>
+                            {t('receiving.packages.mixed_total')}: {(pkg.mixedItems || []).reduce((sum, item) => sum + (parseInt(item.quantity) || 0), 0)}
+                          </span>
+                        </div>
+
+                        <datalist id="receiving-mixed-serials">
+                          {availableSerials.map(serial => <option key={serial} value={serial} />)}
+                        </datalist>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                          {(pkg.mixedItems || []).map((item, itemIndex) => (
+                            <div key={item.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(190px, 1fr) minmax(110px, 0.35fr) auto', gap: '0.65rem', alignItems: 'end' }}>
+                              <div className="form-group" style={{ marginBottom: 0 }}>
+                                <label className="form-label" style={{ fontSize: '0.75rem' }}>
+                                  {t('receiving.packages.mixed_item')} {itemIndex + 1}
+                                </label>
+                                <div style={{ display: 'flex', gap: '0.4rem' }}>
+                                  <input
+                                    type="text"
+                                    className="form-control"
+                                    list="receiving-mixed-serials"
+                                    value={item.serial}
+                                    onChange={event => updateMixedItem(idx, item.id, 'serial', event.target.value)}
+                                    onFocus={() => { if (availableSerials.length === 0 && !fetchingSerials) loadAllowedSerials(); }}
+                                    onKeyDown={event => {
+                                      if (event.key === 'F9') {
+                                        event.preventDefault();
+                                        openMixedSerialPicker(idx, item.id);
+                                      }
+                                    }}
+                                    placeholder={t('receiving.packages.mixed_item_placeholder')}
+                                    autoComplete="off"
+                                  />
+                                  <button type="button" className="btn btn-outline" onClick={() => openMixedSerialPicker(idx, item.id)} title={t('receiving.packages.browse_items')} style={{ padding: '0.55rem 0.7rem', flexShrink: 0 }}>
+                                    <Search size={16} /> F9
+                                  </button>
+                                </div>
+                              </div>
+                              <div className="form-group" style={{ marginBottom: 0 }}>
+                                <label className="form-label" style={{ fontSize: '0.75rem' }}>{t('receiving.packages.mixed_quantity')}</label>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  className="form-control"
+                                  value={item.quantity}
+                                  onChange={event => updateMixedItem(idx, item.id, 'quantity', event.target.value)}
+                                />
+                              </div>
+                              <button type="button" onClick={() => removeMixedItem(idx, item.id)} title={t('receiving.packages.remove_mixed_item')} style={{
+                                width: '38px', height: '38px', borderRadius: '8px', cursor: 'pointer',
+                                border: '1px solid rgba(239,68,68,0.35)', background: 'rgba(239,68,68,0.1)', color: '#ef4444',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center'
+                              }}>
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+
+                        <button type="button" className="btn btn-outline" onClick={() => addMixedItem(idx)} style={{ marginTop: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.45rem', color: '#4ade80', borderColor: 'rgba(74,222,128,0.45)' }}>
+                          <Plus size={17} /> {t('receiving.packages.add_mixed_item')}
+                        </button>
                       </div>
                     )}
                   </div>
@@ -945,6 +1194,72 @@ const FactoryReceiving = () => {
                  {t('receiving.summary.save_btn')}
                </button>
              )}
+          </div>
+        </div>
+      )}
+
+      {mixedSerialTarget && (
+        <div className="no-print" style={{
+          position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(0,0,0,0.78)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', backdropFilter: 'blur(5px)'
+        }} onMouseDown={event => { if (event.target === event.currentTarget) setMixedSerialTarget(null); }}>
+          <div className="card fade-in" style={{ width: 'min(520px, 95vw)', maxHeight: '78vh', padding: 0, overflow: 'hidden', border: '2px solid var(--accent-color)', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ padding: '1rem 1.15rem', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--surface-highlight)' }}>
+              <strong>{t('receiving.packages.browse_items')}</strong>
+              <button type="button" onClick={() => { setMixedSerialTarget(null); setSerialSearchQuery(''); }} style={{ background: 'none', border: 'none', color: 'var(--text-main)', cursor: 'pointer', display: 'flex' }}>
+                <X size={20} />
+              </button>
+            </div>
+            <div style={{ padding: '0.85rem', borderBottom: '1px solid var(--border-color)' }}>
+              <input
+                ref={serialSearchRef}
+                type="text"
+                className="form-control"
+                value={serialSearchQuery}
+                onChange={event => setSerialSearchQuery(event.target.value)}
+                onKeyDown={event => {
+                  if (event.key === 'Escape') {
+                    setMixedSerialTarget(null);
+                    setSerialSearchQuery('');
+                  }
+                  if (event.key === 'Enter') {
+                    const firstMatch = availableSerials.find(serial => String(serial).toLowerCase().includes(serialSearchQuery.trim().toLowerCase()));
+                    if (firstMatch) selectMixedSerial(firstMatch);
+                  }
+                }}
+                placeholder={t('export.search_placeholder')}
+                autoComplete="off"
+              />
+            </div>
+            <div style={{ overflowY: 'auto', minHeight: '180px' }}>
+              {fetchingSerials ? (
+                <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>{t('entry.actions.loading')}</div>
+              ) : (() => {
+                const query = serialSearchQuery.trim().toLowerCase();
+                const filtered = query
+                  ? availableSerials.filter(serial => String(serial).toLowerCase().includes(query))
+                  : availableSerials;
+                return filtered.length > 0 ? (
+                  filtered.map(serial => (
+                    <button
+                      type="button"
+                      key={serial}
+                      onClick={() => selectMixedSerial(serial)}
+                      style={{
+                        width: '100%', padding: '0.75rem 1rem', border: 'none', borderBottom: '1px solid var(--border-color)',
+                        background: 'transparent', color: 'var(--text-main)', textAlign: 'start', cursor: 'pointer', fontWeight: 'bold'
+                      }}
+                      onMouseEnter={event => { event.currentTarget.style.background = 'var(--surface-highlight)'; }}
+                      onMouseLeave={event => { event.currentTarget.style.background = 'transparent'; }}
+                    >
+                      {serial}
+                    </button>
+                  ))
+                ) : (
+                  <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>{t('entry.actions.no_match')}</div>
+                );
+              })()}
+            </div>
           </div>
         </div>
       )}

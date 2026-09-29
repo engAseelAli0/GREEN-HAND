@@ -1,15 +1,50 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '../supabaseClient';
-import { useAppData } from '../context/AppDataContext';
 import { useAuth } from '../context/AuthContext';
 import { useTranslation } from 'react-i18next';
-import { Printer, Plus, Trash2, Search, Package, Layers, AlertCircle, X, FileSpreadsheet } from 'lucide-react';
+import { Printer, Plus, Trash2, Search, Package, Layers, AlertCircle, X, FileSpreadsheet, Save, History, Copy, RefreshCw, ExternalLink } from 'lucide-react';
 import { englishOnly } from '../utils/textUtils';
 import { normalizeImageUrl } from '../utils/imageUtils';
 import toast from 'react-hot-toast';
 import { CustomDateInput } from '../components/CustomDateInput';
 import { useFilteredLookups } from '../hooks/useFilteredLookups';
 import { isOrderAllowedForUser } from '../utils/permissionUtils';
+import { logAuditEvent } from '../utils/auditLogger';
+
+const createPackingId = () => (
+  typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+);
+
+const createEmptyPackage = () => ({
+  id: createPackingId(),
+  cartonNo: '',
+  cartonQty: '',
+  packingKind: 'Pcs',
+  qtyPerCarton: ''
+});
+
+const createEmptyPackingRow = () => ({
+  id: createPackingId(),
+  serial: '',
+  desc: '',
+  details: '',
+  image: '',
+  packages: [createEmptyPackage()],
+  factoryCode: ''
+});
+
+const createEmptyPackingFooter = () => ({ containerNo: '', sealNo: '' });
+
+const packingStateSignature = (header, packingRows, groups, footer, includeImages) => JSON.stringify({
+  headerInfo: header,
+  rows: packingRows,
+  mixedGroups: groups,
+  footerInfo: footer,
+  showImageColumn: includeImages
+});
+
 const toEnglishNumbers = (str) => {
   if (str === null || str === undefined) return '';
   return str.toString().replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d));
@@ -26,13 +61,12 @@ const PackingList = () => {
     tel: 'Tel:(8620)-83265754',
     fax: 'FAX:(8620)-83265204',
     invoiceNo: '',
-    branch: '',
+    customerName: '',
     date: localDate
   });
 
-  const { lookups } = useAppData();
   const filteredLookups = useFilteredLookups();
-  const companies = filteredLookups?.companies || [];
+  const companies = useMemo(() => filteredLookups?.companies || [], [filteredLookups?.companies]);
   const factories = filteredLookups?.factories || [];
   const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
 
@@ -41,29 +75,25 @@ const PackingList = () => {
       const currentAllowed = companies.some(c => (c.name || c) === headerInfo.companyName);
       if (!currentAllowed) {
         const comp = companies[0];
+        // Synchronize the selected company with the user's allowed scope.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setHeaderInfo(prev => ({
           ...prev,
           companyName: comp.name || '',
           fax: comp.fax ? `FAX:${comp.fax} ` : '',
-          tel: comp.mobile ? `Tel:${comp.mobile} ` : '',
-          branch: comp.address || ''
+          tel: comp.mobile ? `Tel:${comp.mobile} ` : ''
         }));
       }
     }
-  }, [companies, user]);
+  }, [companies, user, headerInfo.companyName]);
 
-  const [rows, setRows] = useState([
-    { id: Date.now(), serial: '', desc: '', details: '', image: '', packages: [{ id: Date.now() + 1, cartonNo: '', cartonQty: '', packingKind: 'Pcs', qtyPerCarton: '' }], factoryCode: '' }
-  ]);
+  const [rows, setRows] = useState([createEmptyPackingRow()]);
 
   const [mixedGroups, setMixedGroups] = useState([]);
 
-  const [footerInfo, setFooterInfo] = useState({
-    containerNo: '',
-    sealNo: ''
-  });
+  const [footerInfo, setFooterInfo] = useState(createEmptyPackingFooter);
 
-  const [isExporting, setIsExporting] = useState(false);
+  const isExporting = false;
   const [showFetchDialog, setShowFetchDialog] = useState(false);
   const [showImageColumn, setShowImageColumn] = useState(false);
 
@@ -85,22 +115,49 @@ const PackingList = () => {
   // Clear Confirm State
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
+  // Saved packing lists state
+  const [currentPackingList, setCurrentPackingList] = useState(null);
+  const [savedPackingSignature, setSavedPackingSignature] = useState(null);
+  const [isSavingPackingList, setIsSavingPackingList] = useState(false);
+  const [showPackingBrowser, setShowPackingBrowser] = useState(false);
+  const [savedPackingLists, setSavedPackingLists] = useState([]);
+  const [packingSearch, setPackingSearch] = useState('');
+  const [isLoadingPackingLists, setIsLoadingPackingLists] = useState(false);
+
+  const hasMeaningfulPackingData = Boolean(
+    headerInfo.invoiceNo?.trim()
+    || rows.some(row => row.serial?.trim() || row.desc?.trim())
+    || mixedGroups.some(group => group.items?.some(item => item.serial?.trim()))
+    || Object.values(footerInfo).some(value => String(value || '').trim())
+  );
+  const currentPackingSignature = packingStateSignature(headerInfo, rows, mixedGroups, footerInfo, showImageColumn);
+  const hasUnsavedPackingChanges = savedPackingSignature === null
+    ? hasMeaningfulPackingData
+    : currentPackingSignature !== savedPackingSignature;
+
   const clearAllData = () => {
-    setRows([{ id: Date.now(), serial: '', desc: '', packages: [{ id: Date.now() + 1, cartonNo: '', cartonQty: '', packingKind: 'Pcs', qtyPerCarton: '' }], details: '', image: '', factoryCode: '' }]);
+    const nextHeader = { ...headerInfo, invoiceNo: '', customerName: '', date: localDate };
+    const nextRows = [createEmptyPackingRow()];
+    const nextFooter = createEmptyPackingFooter();
+    setRows(nextRows);
     setMixedGroups([]);
-    setHeaderInfo(prev => ({ ...prev, invoiceNo: '', branch: '' }));
+    setHeaderInfo(nextHeader);
+    setFooterInfo(nextFooter);
+    setShowImageColumn(false);
+    setCurrentPackingList(null);
+    setSavedPackingSignature(packingStateSignature(nextHeader, nextRows, [], nextFooter, false));
     setShowClearConfirm(false);
     toast.success(t('shipping.messages.clear_success'));
   };
 
   // Auto-calculate Totals Handlers
   const addRow = () => {
-    setRows([...rows, { id: Date.now(), serial: '', desc: '', details: '', image: '', packages: [{ id: Date.now() + 1, cartonNo: '', cartonQty: '', packingKind: 'Pcs', qtyPerCarton: '' }], factoryCode: '' }]);
+    setRows(prev => [...prev, createEmptyPackingRow()]);
   };
 
   const removeRow = (id) => {
     if (rows.length === 1 && mixedGroups.length === 0) return;
-    setRows(rows.filter(r => r.id !== id));
+    setRows(prev => prev.filter(r => r.id !== id));
   };
 
   const handleRowChange = (id, field, value) => {
@@ -108,7 +165,7 @@ const PackingList = () => {
     if (field === 'serial') {
         finalValue = toEnglishNumbers(value);
     }
-    setRows(rows.map(r => r.id === id ? { ...r, [field]: finalValue } : r));
+    setRows(prev => prev.map(r => r.id === id ? { ...r, [field]: finalValue } : r));
   };
 
   const handlePackageChange = (rowId, pkgId, field, value) => {
@@ -116,7 +173,7 @@ const PackingList = () => {
     if (['cartonQty', 'qtyPerCarton'].includes(field)) {
         finalValue = toEnglishNumbers(value);
     }
-    setRows(rows.map(r => {
+    setRows(prev => prev.map(r => {
       if (r.id === rowId) {
         return { ...r, packages: r.packages.map(p => p.id === pkgId ? { ...p, [field]: finalValue } : p) };
       }
@@ -124,7 +181,7 @@ const PackingList = () => {
     }));
   };
 
-  // Mixed groups are now auto-detected from receivings data (read-only)
+  // Mixed groups are explicitly recorded in receiving data and remain read-only here.
 
   const handleSerialKeyDown = async (e, rowId) => {
     if (e.key === 'Enter') {
@@ -244,9 +301,12 @@ const PackingList = () => {
     setShowImageColumn(withImage);
     const toastId = toast.loading(t('shipping.messages.fetching_data'));
     let successCount = 0;
-    let newBuyer = headerInfo.buyer;
+    let fetchedCustomerName = '';
 
-    // Map: serial -> { rowId, serial, factoryId, receivedAt, expandedCartons[], originalPackages[], desc, image, details, factoryCode }
+    // Explicit mixed cartons are recorded by the receiving user and carry their own unique case ID.
+    const explicitMixedPackages = [];
+
+    // Map: serial -> { rowId, serial, originalPackages[], desc, image, details, factoryCode }
     const serialCartonMap = [];
     
     // Determine the working rows
@@ -260,7 +320,7 @@ const PackingList = () => {
     }
 
     if (workingRows.length === 0) {
-        workingRows = [{ id: Date.now(), serial: '', desc: '', details: '', image: '', packages: [{ id: Date.now() + 1, cartonNo: '', cartonQty: '', packingKind: 'Pcs', qtyPerCarton: '' }], factoryCode: '' }];
+        workingRows = [createEmptyPackingRow()];
     }
 
     // First pass
@@ -304,7 +364,7 @@ const PackingList = () => {
                     const firstImage = d.productImages[0];
                     imageUrl = normalizeImageUrl(firstImage);
                 }
-                if (!newBuyer && d.buyerCompany) newBuyer = d.buyerCompany;
+                if (!fetchedCustomerName && d.buyerMobile) fetchedCustomerName = d.buyerMobile;
                 if (!desc) desc = englishOnly(d.productName) || '';
             }
 
@@ -312,14 +372,29 @@ const PackingList = () => {
                 receivedAt = recData.receive_data.receivedAt ? recData.receive_data.receivedAt.split('T')[0] : '';
             }
 
-            let originalPackages = [];
-            let expandedCartons = [];
+            const originalPackages = [];
             if (recData && recData.receive_data && recData.receive_data.packages && Array.isArray(recData.receive_data.packages)) {
-                const validPkgs = recData.receive_data.packages.filter(p => p.fromCtn && p.toCtn && p.pcsPerCtn);
+                const validPkgs = recData.receive_data.packages.filter(p => p.active !== false && p.fromCtn && p.toCtn);
                 validPkgs.forEach((pkg, index) => {
                     const from = parseInt(pkg.fromCtn) || 0;
                     const to = parseInt(pkg.toCtn) || 0;
                     const qty = from <= to ? (to - from + 1) : 0;
+
+                    const mixedItems = Array.isArray(pkg.mixedItems)
+                      ? pkg.mixedItems.filter(item => item.serial?.trim() && (parseInt(item.quantity) || 0) > 0)
+                      : [];
+                    if (pkg.status === 'Mixed' && from > 0 && from === to && mixedItems.length > 0) {
+                        explicitMixedPackages.push({
+                            id: pkg.mixedCaseId || `${matchedSerial}-${pkg.id || index}-${from}`,
+                            cartonNo: String(from),
+                            cartonQty: '1',
+                            packingKind: pkg.kind || 'Pcs',
+                            items: mixedItems
+                        });
+                        return;
+                    }
+
+                    if (!pkg.pcsPerCtn || qty <= 0) return;
                     originalPackages.push({
                         id: Date.now() + Math.random() + index,
                         cartonNo: `${from}-${to}`,
@@ -327,9 +402,6 @@ const PackingList = () => {
                         packingKind: pkg.kind || 'Pcs',
                         qtyPerCarton: pkg.pcsPerCtn.toString()
                     });
-                    for (let c = from; c <= to; c++) {
-                        expandedCartons.push({ ctn: c, pcsPerCtn: pkg.pcsPerCtn.toString(), kind: pkg.kind || 'Pcs' });
-                    }
                 });
             }
 
@@ -339,7 +411,6 @@ const PackingList = () => {
                 serial: matchedSerial,
                 factoryId,
                 receivedAt,
-                expandedCartons,
                 originalPackages,
                 desc,
                 imageUrl,
@@ -354,125 +425,86 @@ const PackingList = () => {
         }
     }
 
-    // ─── AUTO-DETECT MIXED CARTONS ───
-    // Group by factoryId+receivedAt, then find carton numbers that appear in multiple serials
-    const groupKey = (item) => `${item.factoryId}__${item.receivedAt}`;
-    const factoryGroups = {};
+    // ─── EXPLICIT MIXED CARTONS FROM RECEIVING ───
+    // Build mixed cartons only from explicit Mixed receiving records.
+    // Resolve display information for the items explicitly stored inside mixed cartons.
+    const mixedItemMetadata = new Map();
     serialCartonMap.forEach(item => {
-        if (item.isSkipped || !item.factoryId || !item.receivedAt) return;
-        const key = groupKey(item);
-        if (!factoryGroups[key]) factoryGroups[key] = [];
-        factoryGroups[key].push(item);
-    });
-
-    const detectedMixedGroups = [];
-    const mixedCartonSet = new Set(); // Store strings of carton numbers
-
-    Object.values(factoryGroups).forEach(items => {
-        if (items.length < 2) return; // need at least 2 serials to have a mix
-        // Build map: cartonNumber -> [{ serial, desc, image, pcsPerCtn, kind }]
-        const ctnMap = {};
-        items.forEach(item => {
-            item.expandedCartons.forEach(ec => {
-                if (!ctnMap[ec.ctn]) ctnMap[ec.ctn] = [];
-                ctnMap[ec.ctn].push({
-                    serial: item.serial,
-                    desc: item.desc,
-                    imageUrl: item.imageUrl,
-                    pcsPerCtn: ec.pcsPerCtn,
-                    kind: ec.kind,
-                    factoryCode: item.factoryCode
-                });
-            });
-        });
-        // Find cartons with more than 1 serial
-        Object.entries(ctnMap).forEach(([ctnNo, entries]) => {
-            if (entries.length < 2) return;
-            // Check it's actually different serials (not duplicates)
-            const uniqueSerials = [...new Set(entries.map(e => e.serial))];
-            if (uniqueSerials.length < 2) return;
-            
-            mixedCartonSet.add(ctnNo.toString());
-            
-            detectedMixedGroups.push({
-                id: Date.now() + Math.random() + parseInt(ctnNo),
-                cartonNo: ctnNo,
-                cartonQty: '1',
-                items: entries.map((e, idx) => ({
-                    id: Date.now() + Math.random() + idx,
-                    serial: e.serial,
-                    desc: e.desc || '',
-                    packingKind: e.kind || 'Pcs',
-                    qtyPerCarton: e.pcsPerCtn || '',
-                    details: '',
-                    image: e.imageUrl || '',
-                    factoryCode: e.factoryCode || ''
-                }))
-            });
+        if (item.isSkipped || !item.serial) return;
+        mixedItemMetadata.set(item.serial.trim().toLowerCase(), {
+            serial: item.serial,
+            desc: item.desc || '',
+            image: item.imageUrl || '',
+            factoryCode: item.factoryCode || ''
         });
     });
 
-    // ─── SECOND PASS: BUILD newRows FILTERING OUT MIXED CARTONS ───
-    let newRows = [];
-    serialCartonMap.forEach(item => {
-        if (item.isSkipped) {
-            newRows.push(item.row);
-            return;
-        }
+    const explicitMixedSerials = [...new Set(
+        explicitMixedPackages.flatMap(pkg => pkg.items.map(item => item.serial.trim()))
+    )];
+    const missingMixedSerials = explicitMixedSerials.filter(serial => !mixedItemMetadata.has(serial.toLowerCase()));
+    if (missingMixedSerials.length > 0) {
+        const { data: mixedOrders } = await supabase
+            .from('orders')
+            .select('serial_number, order_data')
+            .in('serial_number', missingMixedSerials);
 
-        let packagesToUse = item.originalPackages;
-        
-        // If there are generated packages, filter out mixed cartons and rebuild ranges
-        if (item.expandedCartons.length > 0) {
-            const nonMixedCartons = item.expandedCartons.filter(c => !mixedCartonSet.has(c.ctn.toString()));
-            
-            if (nonMixedCartons.length === 0) {
-                // All cartons were mixed! No non-mixed cartons.
-                // We leave packagesToUse empty so the row uses a fallback empty structure in render.
-                packagesToUse = []; 
-            } else {
-                // Rebuild contiguous ranges from nonMixedCartons
-                nonMixedCartons.sort((a, b) => a.ctn - b.ctn);
-                const rebuiltPkgs = [];
-                let currentGroup = { ...nonMixedCartons[0], startCtn: nonMixedCartons[0].ctn, endCtn: nonMixedCartons[0].ctn, count: 1 };
-                
-                for (let i = 1; i < nonMixedCartons.length; i++) {
-                    const c = nonMixedCartons[i];
-                    if (c.ctn === currentGroup.endCtn + 1 && c.pcsPerCtn === currentGroup.pcsPerCtn && c.kind === currentGroup.kind) {
-                        currentGroup.endCtn = c.ctn;
-                        currentGroup.count++;
-                    } else {
-                        rebuiltPkgs.push(currentGroup);
-                        currentGroup = { ...c, startCtn: c.ctn, endCtn: c.ctn, count: 1 };
-                    }
-                }
-                rebuiltPkgs.push(currentGroup);
-                
-                packagesToUse = rebuiltPkgs.map((g, idx) => ({
-                    id: Date.now() + Math.random() + idx,
-                    cartonNo: `${g.startCtn}-${g.endCtn}`,
-                    cartonQty: g.count.toString(),
-                    packingKind: g.kind || 'Pcs',
-                    qtyPerCarton: g.pcsPerCtn
-                }));
-            }
-        } else if (!item.orderDataFound) {
-            packagesToUse = item.row.packages;
-        }
+        (mixedOrders || []).forEach(order => {
+            const orderInfo = order.order_data || {};
+            if (user && user.role !== 'admin' && !isOrderAllowedForUser(orderInfo, user, factories)) return;
+            const factoryObj = factories.find(factory => (factory.name || factory) === (orderInfo.factoryId || ''));
+            const image = withImage && Array.isArray(orderInfo.productImages) && orderInfo.productImages.length > 0
+                ? normalizeImageUrl(orderInfo.productImages[0])
+                : '';
+            mixedItemMetadata.set(order.serial_number.trim().toLowerCase(), {
+                serial: order.serial_number,
+                desc: englishOnly(orderInfo.productName) || '',
+                image,
+                factoryCode: typeof factoryObj === 'object' ? factoryObj.code : (orderInfo.factoryCode || '')
+            });
+        });
+    }
 
-        newRows.push({
+    const mixedCaseMap = new Map();
+    explicitMixedPackages.forEach(pkg => {
+        if (!mixedCaseMap.has(pkg.id)) mixedCaseMap.set(pkg.id, pkg);
+    });
+    const detectedMixedGroups = [...mixedCaseMap.values()].map(pkg => ({
+        id: pkg.id,
+        cartonNo: pkg.cartonNo,
+        cartonQty: '1',
+        items: pkg.items.map(item => {
+            const metadata = mixedItemMetadata.get(item.serial.trim().toLowerCase());
+            if (!metadata) return null;
+            return {
+                id: item.id || createPackingId(),
+                serial: metadata.serial || item.serial.trim(),
+                desc: metadata.desc,
+                packingKind: pkg.packingKind,
+                qtyPerCarton: String(parseInt(item.quantity) || 0),
+                details: '',
+                image: metadata.image,
+                factoryCode: metadata.factoryCode
+            };
+        }).filter(Boolean)
+    })).filter(group => group.items.length > 0);
+
+    const newRows = serialCartonMap.map(item => {
+        if (item.isSkipped) return item.row;
+        return {
             id: item.rowId,
             serial: item.serial,
             desc: item.desc,
             details: item.details,
             image: item.imageUrl,
-            packages: packagesToUse.length > 0 ? packagesToUse : item.row.packages, 
+            packages: item.originalPackages.length > 0 ? item.originalPackages : [createEmptyPackage()],
             factoryCode: item.factoryCode || ''
-        });
+        };
     });
 
     setRows(newRows);
     setMixedGroups(detectedMixedGroups);
+    setHeaderInfo(prev => ({ ...prev, customerName: fetchedCustomerName }));
 
     if (successCount > 0) {
         const mixMsg = detectedMixedGroups.length > 0 ? ` | ${t('packing.messages.mix_detected', { count: detectedMixedGroups.length })}` : '';
@@ -521,6 +553,336 @@ const PackingList = () => {
               serialTotals[s] = (serialTotals[s] || 0) + itemQty;
           }
       });
+  });
+
+  const isPackingTableMissing = (error) => (
+    error?.code === 'PGRST205'
+    || error?.message?.includes('packing_lists') && error?.message?.includes('schema cache')
+  );
+
+  const showPackingStorageError = (error, toastId) => {
+    if (isPackingTableMissing(error)) {
+      toast.error(t('packing.saved.table_missing'), { id: toastId, duration: 7000 });
+      return;
+    }
+    if (error?.code === '42501') {
+      toast.error(t('packing.saved.permission_error'), { id: toastId });
+      return;
+    }
+    toast.error(error?.message || t('packing.saved.generic_error'), { id: toastId });
+  };
+
+  const buildPackingPayload = () => ({
+    packing_no: headerInfo.invoiceNo.trim(),
+    packing_date: headerInfo.date,
+    company_name: headerInfo.companyName || '',
+    customer_name: headerInfo.customerName || '',
+    packing_data: {
+      schemaVersion: 1,
+      headerInfo,
+      rows,
+      mixedGroups,
+      footerInfo,
+      showImageColumn
+    },
+    total_cartons: Number(totalCtn.toFixed(2)),
+    total_pieces: Math.max(0, Math.round(totalPcs)),
+    updated_by_username: user?.username || null
+  });
+
+  const savePackingList = async () => {
+    const packingNumber = headerInfo.invoiceNo.trim();
+    const hasItems = rows.some(row => row.serial?.trim())
+      || mixedGroups.some(group => group.items?.some(item => item.serial?.trim()));
+
+    if (!packingNumber) {
+      toast.error(t('packing.saved.number_required'));
+      return;
+    }
+    if (!headerInfo.date) {
+      toast.error(t('packing.saved.date_required'));
+      return;
+    }
+    if (!hasItems) {
+      toast.error(t('packing.saved.items_required'));
+      return;
+    }
+
+    const isUpdating = Boolean(currentPackingList?.id);
+    if (isUpdating && !hasPermission('packing-list', 'edit')) {
+      toast.error(t('packing.saved.permission_error'));
+      return;
+    }
+    if (!isUpdating && !hasPermission('packing-list', 'add')) {
+      toast.error(t('packing.saved.permission_error'));
+      return;
+    }
+
+    setIsSavingPackingList(true);
+    const toastId = toast.loading(isUpdating ? t('packing.saved.updating') : t('packing.saved.saving'));
+
+    try {
+      const payload = buildPackingPayload();
+      let savedRecord;
+
+      if (isUpdating) {
+        const { data, error } = await supabase
+          .from('packing_lists')
+          .update(payload)
+          .eq('id', currentPackingList.id)
+          .eq('updated_at', currentPackingList.updated_at)
+          .select('*')
+          .maybeSingle();
+        if (error) throw error;
+        if (!data) {
+          const conflictError = new Error(t('packing.saved.conflict_error'));
+          conflictError.code = 'PACKING_CONFLICT';
+          throw conflictError;
+        }
+        savedRecord = data;
+      } else {
+        const { data, error } = await supabase
+          .from('packing_lists')
+          .insert([{
+            ...payload,
+            created_by: user?.id || null,
+            created_by_username: user?.username || null
+          }])
+          .select('*')
+          .single();
+        if (error) throw error;
+        savedRecord = data;
+      }
+
+      setCurrentPackingList({
+        id: savedRecord.id,
+        updated_at: savedRecord.updated_at,
+        created_at: savedRecord.created_at,
+        created_by_username: savedRecord.created_by_username
+      });
+      setSavedPackingSignature(packingStateSignature(headerInfo, rows, mixedGroups, footerInfo, showImageColumn));
+
+      await logAuditEvent({
+        action: isUpdating ? 'UPDATE_PACKING_LIST' : 'CREATE_PACKING_LIST',
+        actionType: isUpdating ? 'UPDATE' : 'CREATE',
+        entityType: 'packing-list',
+        entityId: savedRecord.id,
+        user,
+        screenKey: 'packing-list',
+        screenName: 'قائمة التعبئة',
+        summary: `${isUpdating ? 'تعديل' : 'إنشاء'} قائمة التعبئة رقم ${packingNumber}`,
+        details: {
+          packingNumber,
+          companyName: headerInfo.companyName,
+          customerName: headerInfo.customerName,
+          totalCartons: Number(totalCtn.toFixed(2)),
+          totalPieces: Math.round(totalPcs),
+          mixedCartons: mixedGroups.length
+        }
+      });
+
+      toast.success(isUpdating ? t('packing.saved.update_success') : t('packing.saved.save_success'), { id: toastId });
+    } catch (error) {
+      console.error('Error saving packing list:', error);
+      if (error?.code === '23505') {
+        toast.error(t('packing.saved.duplicate_number'), { id: toastId });
+      } else if (error?.code === 'PACKING_CONFLICT') {
+        toast.error(t('packing.saved.conflict_error'), { id: toastId, duration: 7000 });
+      } else {
+        showPackingStorageError(error, toastId);
+      }
+    } finally {
+      setIsSavingPackingList(false);
+    }
+  };
+
+  const loadSavedPackingLists = async () => {
+    setIsLoadingPackingLists(true);
+    try {
+      const { data, error } = await supabase
+        .from('packing_lists')
+        .select('*')
+        .order('packing_date', { ascending: false })
+        .order('updated_at', { ascending: false })
+        .limit(500);
+      if (error) throw error;
+      setSavedPackingLists(data || []);
+    } catch (error) {
+      console.error('Error loading packing lists:', error);
+      setSavedPackingLists([]);
+      showPackingStorageError(error);
+    } finally {
+      setIsLoadingPackingLists(false);
+    }
+  };
+
+  const openPackingBrowser = () => {
+    setPackingSearch('');
+    setShowPackingBrowser(true);
+    loadSavedPackingLists();
+  };
+
+  const normalizeSavedPackingList = (record, { asCopy = false } = {}) => {
+    const stored = record?.packing_data && typeof record.packing_data === 'object'
+      ? record.packing_data
+      : {};
+    const loadedHeader = {
+      ...headerInfo,
+      ...(stored.headerInfo || {}),
+      invoiceNo: asCopy ? '' : (stored.headerInfo?.invoiceNo || record.packing_no || ''),
+      date: asCopy ? localDate : (stored.headerInfo?.date || record.packing_date || localDate)
+    };
+    const loadedRows = Array.isArray(stored.rows) && stored.rows.length > 0
+      ? stored.rows.map(row => ({
+          ...createEmptyPackingRow(),
+          ...row,
+          id: row.id || createPackingId(),
+          packages: Array.isArray(row.packages) && row.packages.length > 0
+            ? row.packages.map(pkg => ({ ...createEmptyPackage(), ...pkg, id: pkg.id || createPackingId() }))
+            : [createEmptyPackage()]
+        }))
+      : [createEmptyPackingRow()];
+    const loadedGroups = Array.isArray(stored.mixedGroups)
+      ? stored.mixedGroups.map(group => ({
+          ...group,
+          id: group.id || createPackingId(),
+          items: Array.isArray(group.items)
+            ? group.items.map(item => ({ ...item, id: item.id || createPackingId() }))
+            : []
+        }))
+      : [];
+    const loadedFooter = { ...createEmptyPackingFooter(), ...(stored.footerInfo || {}) };
+    const loadedShowImages = Boolean(stored.showImageColumn);
+    return { loadedHeader, loadedRows, loadedGroups, loadedFooter, loadedShowImages };
+  };
+
+  const openSavedPackingList = (record) => {
+    if (hasUnsavedPackingChanges && !window.confirm(t('packing.saved.discard_changes_confirm'))) return;
+
+    const { loadedHeader, loadedRows, loadedGroups, loadedFooter, loadedShowImages } = normalizeSavedPackingList(record);
+    setHeaderInfo(loadedHeader);
+    setRows(loadedRows);
+    setMixedGroups(loadedGroups);
+    setFooterInfo(loadedFooter);
+    setShowImageColumn(loadedShowImages);
+    setCurrentPackingList({
+      id: record.id,
+      updated_at: record.updated_at,
+      created_at: record.created_at,
+      created_by_username: record.created_by_username
+    });
+    setSavedPackingSignature(packingStateSignature(loadedHeader, loadedRows, loadedGroups, loadedFooter, loadedShowImages));
+    setShowPackingBrowser(false);
+
+    logAuditEvent({
+      action: 'VIEW_PACKING_LIST',
+      actionType: 'VIEW',
+      entityType: 'packing-list',
+      entityId: record.id,
+      user,
+      screenKey: 'packing-list',
+      screenName: 'قائمة التعبئة',
+      summary: `فتح قائمة التعبئة رقم ${record.packing_no}`,
+      details: { packingNumber: record.packing_no }
+    }).catch(() => {});
+  };
+
+  const copySavedPackingList = (record) => {
+    if (hasUnsavedPackingChanges && !window.confirm(t('packing.saved.discard_changes_confirm'))) return;
+
+    const { loadedHeader, loadedRows, loadedGroups, loadedFooter, loadedShowImages } = normalizeSavedPackingList(record, { asCopy: true });
+    setHeaderInfo(loadedHeader);
+    setRows(loadedRows);
+    setMixedGroups(loadedGroups);
+    setFooterInfo(loadedFooter);
+    setShowImageColumn(loadedShowImages);
+    setCurrentPackingList(null);
+    setSavedPackingSignature(null);
+    setShowPackingBrowser(false);
+    toast.success(t('packing.saved.copy_ready'));
+  };
+
+  const startNewPackingList = () => {
+    if (hasUnsavedPackingChanges && !window.confirm(t('packing.saved.discard_changes_confirm'))) return;
+
+    const nextHeader = { ...headerInfo, invoiceNo: '', customerName: '', date: localDate };
+    const nextRows = [createEmptyPackingRow()];
+    const nextFooter = createEmptyPackingFooter();
+    setHeaderInfo(nextHeader);
+    setRows(nextRows);
+    setMixedGroups([]);
+    setFooterInfo(nextFooter);
+    setShowImageColumn(false);
+    setCurrentPackingList(null);
+    setSavedPackingSignature(packingStateSignature(nextHeader, nextRows, [], nextFooter, false));
+    toast.success(t('packing.saved.new_ready'));
+  };
+
+  const deleteSavedPackingList = async (record) => {
+    if (!hasPermission('packing-list', 'delete')) return;
+    if (!window.confirm(t('packing.saved.delete_confirm', { number: record.packing_no }))) return;
+
+    const toastId = toast.loading(t('packing.saved.deleting'));
+    try {
+      const { data, error } = await supabase
+        .from('packing_lists')
+        .delete()
+        .eq('id', record.id)
+        .select('id')
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) throw new Error(t('packing.saved.permission_error'));
+
+      setSavedPackingLists(prev => prev.filter(list => list.id !== record.id));
+      if (currentPackingList?.id === record.id) {
+        const nextHeader = { ...headerInfo, invoiceNo: '', customerName: '', date: localDate };
+        const nextRows = [createEmptyPackingRow()];
+        const nextFooter = createEmptyPackingFooter();
+        setHeaderInfo(nextHeader);
+        setRows(nextRows);
+        setMixedGroups([]);
+        setFooterInfo(nextFooter);
+        setShowImageColumn(false);
+        setCurrentPackingList(null);
+        setSavedPackingSignature(packingStateSignature(nextHeader, nextRows, [], nextFooter, false));
+      }
+
+      await logAuditEvent({
+        action: 'DELETE_PACKING_LIST',
+        actionType: 'DELETE',
+        entityType: 'packing-list',
+        entityId: record.id,
+        user,
+        screenKey: 'packing-list',
+        screenName: 'قائمة التعبئة',
+        summary: `حذف قائمة التعبئة رقم ${record.packing_no}`,
+        details: { packingNumber: record.packing_no, fullSnapshot: record.packing_data }
+      });
+      toast.success(t('packing.saved.delete_success'), { id: toastId });
+    } catch (error) {
+      console.error('Error deleting packing list:', error);
+      showPackingStorageError(error, toastId);
+    }
+  };
+
+  const normalizedPackingSearch = packingSearch.trim().toLowerCase();
+  const filteredSavedPackingLists = savedPackingLists.filter(record => {
+    if (!normalizedPackingSearch) return true;
+    const regularSerials = Array.isArray(record.packing_data?.rows)
+      ? record.packing_data.rows.map(row => row.serial || '').join(' ')
+      : '';
+    const mixedSerials = Array.isArray(record.packing_data?.mixedGroups)
+      ? record.packing_data.mixedGroups.flatMap(group => group.items || []).map(item => item.serial || '').join(' ')
+      : '';
+    return [
+      record.packing_no,
+      record.packing_date,
+      record.company_name,
+      record.customer_name,
+      record.created_by_username,
+      regularSerials,
+      mixedSerials
+    ].some(value => String(value || '').toLowerCase().includes(normalizedPackingSearch));
   });
 
   const exportToExcel = async () => {
@@ -718,8 +1080,8 @@ const PackingList = () => {
     <tr>
       <td class="pl-meta-label" width="15%">${t('packing.header.invoice_no')}:</td>
       <td width="18%">${headerInfo.invoiceNo || ''}</td>
-      <td class="pl-meta-label" width="15%">${t('packing.header.branch')}:</td>
-      <td width="18%">${headerInfo.branch || ''}</td>
+      <td class="pl-meta-label" width="15%">${t('packing.header.customer_name')}:</td>
+      <td width="18%">${headerInfo.customerName || ''}</td>
       <td class="pl-meta-label" width="15%">${t('packing.header.date')}:</td>
       <td width="19%">${headerInfo.date || ''}</td>
     </tr>
@@ -792,7 +1154,7 @@ const PackingList = () => {
       </tr>
 `;
 
-      mixedGroups.forEach((group, index) => {
+      mixedGroups.forEach((group) => {
         const c = parseFloat(group.cartonQty) || 0;
         let totalGroupQty = 0;
         group.items.forEach(i => {
@@ -978,7 +1340,7 @@ ${imgInfo.base64Data}
           </tr>
         `;
 
-        mixedGroups.forEach((group, index) => {
+        mixedGroups.forEach((group) => {
           const c = parseFloat(group.cartonQty) || 0;
           let totalGroupQty = 0;
           group.items.forEach(i => {
@@ -1022,8 +1384,8 @@ ${imgInfo.base64Data}
           <tr>
             <td style="${bl}width:16%;font-weight:bold;color:#1a5276;">${t('packing.header.invoice_no')}：</td>
             <td style="${tc}width:17%;font-weight:bold;">${headerInfo.invoiceNo || '-'}</td>
-            <td style="${bl}width:16%;font-weight:bold;color:#1a5276;">${t('packing.header.branch')}：</td>
-            <td style="${tc}width:17%;font-weight:bold;">${headerInfo.branch || '-'}</td>
+            <td style="${bl}width:16%;font-weight:bold;color:#1a5276;">${t('packing.header.customer_name')}：</td>
+            <td style="${tc}width:17%;font-weight:bold;">${headerInfo.customerName || '-'}</td>
             <td style="${bl}width:16%;font-weight:bold;color:#1a5276;">${t('packing.header.date')}：</td>
             <td style="${tc}width:18%;font-weight:bold;">${fD(headerInfo.date)}</td>
           </tr>
@@ -1117,8 +1479,53 @@ ${imgInfo.base64Data}
           <p style={{ color: 'var(--text-muted)', margin: '0.5rem 0 0' }}>
             {t('packing.subtitle')}
           </p>
+          <div className="no-print" style={{ marginTop: '0.65rem', display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.3rem 0.7rem',
+              borderRadius: '999px', fontSize: '0.8rem', fontWeight: 'bold',
+              color: currentPackingList ? '#22c55e' : 'var(--text-muted)',
+              background: currentPackingList ? 'rgba(34,197,94,0.1)' : 'rgba(148,163,184,0.1)',
+              border: `1px solid ${currentPackingList ? 'rgba(34,197,94,0.35)' : 'rgba(148,163,184,0.25)'}`
+            }}>
+              {currentPackingList ? t('packing.saved.saved_status') : t('packing.saved.new_status')}
+            </span>
+            {hasUnsavedPackingChanges && (
+              <span style={{ color: '#f59e0b', fontSize: '0.8rem', fontWeight: 'bold' }}>
+                {t('packing.saved.unsaved_changes')}
+              </span>
+            )}
+            {currentPackingList?.updated_at && (
+              <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>
+                {t('packing.saved.last_saved')}: {new Date(currentPackingList.updated_at).toLocaleString()}
+              </span>
+            )}
+          </div>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          {hasPermission('packing-list', 'add') && (
+            <button className="btn btn-outline no-print" onClick={startNewPackingList} style={{ padding: '10px 18px', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Plus size={20} /> {t('packing.saved.new_list')}
+            </button>
+          )}
+          <button className="btn btn-outline no-print" onClick={openPackingBrowser} style={{ padding: '10px 18px', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#60a5fa', borderColor: '#60a5fa' }}>
+            <History size={20} /> {t('packing.saved.previous_lists')}
+          </button>
+          {((currentPackingList && hasPermission('packing-list', 'edit')) || (!currentPackingList && hasPermission('packing-list', 'add'))) && (
+            <button
+              className="btn no-print"
+              onClick={savePackingList}
+              disabled={isSavingPackingList || !hasUnsavedPackingChanges}
+              style={{
+                padding: '10px 22px', display: 'flex', alignItems: 'center', gap: '0.5rem', border: 'none',
+                background: hasUnsavedPackingChanges ? 'linear-gradient(135deg, #2563eb, #1d4ed8)' : 'rgba(100,116,139,0.35)',
+                color: 'white', cursor: isSavingPackingList || !hasUnsavedPackingChanges ? 'not-allowed' : 'pointer',
+                opacity: isSavingPackingList || !hasUnsavedPackingChanges ? 0.65 : 1
+              }}
+            >
+              {isSavingPackingList ? <RefreshCw size={20} className="spin" /> : <Save size={20} />}
+              {currentPackingList ? t('packing.saved.save_changes') : t('packing.saved.save_list')}
+            </button>
+          )}
           {hasPermission('packing-list', 'export') && (
             <>
               <button onClick={exportToExcel} className="btn" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', backgroundColor: '#10b981', color: 'white', border: 'none', padding: '10px 20px', fontSize: '1.1rem', boxShadow: '0 4px 15px rgba(16, 185, 129, 0.3)' }}>
@@ -1263,8 +1670,7 @@ ${imgInfo.base64Data}
                             ...headerInfo,
                             companyName: comp.name || '',
                             fax: comp.fax ? `FAX:${comp.fax}` : '',
-                            tel: comp.mobile ? `Tel:${comp.mobile}` : '',
-                            branch: comp.address || ''
+                            tel: comp.mobile ? `Tel:${comp.mobile}` : ''
                           });
                           setShowCompanyDropdown(false);
                         }}
@@ -1294,8 +1700,8 @@ ${imgInfo.base64Data}
                     <input type="text" className="form-control" value={headerInfo.invoiceNo} onChange={e => setHeaderInfo({...headerInfo, invoiceNo: toEnglishNumbers(e.target.value)})} style={{ background: 'var(--bg-color)' }} />
                  </div>
                  <div>
-                    <label style={{ fontSize: '0.85rem', color: 'var(--accent-color)', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>{t('packing.header.branch')}</label>
-                    <input type="text" className="form-control" value={headerInfo.branch} onChange={e => setHeaderInfo({...headerInfo, branch: e.target.value})} style={{ background: 'var(--bg-color)' }} />
+                    <label style={{ fontSize: '0.85rem', color: 'var(--accent-color)', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>{t('packing.header.customer_name')}</label>
+                    <input type="text" className="form-control" value={headerInfo.customerName} readOnly style={{ background: 'var(--bg-color)', opacity: 0.85 }} />
                  </div>
                  <div style={{ position: 'relative' }}>
                     <label style={{ fontSize: '0.85rem', color: 'var(--accent-color)', fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>{t('packing.header.date')}</label>
@@ -1668,6 +2074,130 @@ ${imgInfo.base64Data}
          </div>
         </div>
       </div>
+
+      {showPackingBrowser && (
+        <div className="no-print" style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.82)', zIndex: 10000,
+          display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '1.5rem',
+          backdropFilter: 'blur(6px)'
+        }}>
+          <div className="card fade-in" style={{
+            width: 'min(1150px, 96vw)', maxHeight: '90vh', overflow: 'hidden', padding: 0,
+            border: '2px solid var(--accent-color)', boxShadow: '0 18px 60px rgba(0,0,0,0.55)',
+            display: 'flex', flexDirection: 'column'
+          }}>
+            <div style={{
+              padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border-color)',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem',
+              background: 'var(--surface-highlight)'
+            }}>
+              <div>
+                <h2 style={{ margin: 0, color: 'var(--text-strong)', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                  <History size={25} color="var(--accent-color)" />
+                  {t('packing.saved.previous_lists')}
+                </h2>
+                <p style={{ margin: '0.35rem 0 0', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                  {t('packing.saved.browser_desc')}
+                </p>
+              </div>
+              <button onClick={() => setShowPackingBrowser(false)} aria-label={t('shipping.fetch_dialog.cancel')} style={{
+                background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
+                color: '#ef4444', width: '38px', height: '38px', borderRadius: '9px', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center'
+              }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{ padding: '1rem 1.5rem', display: 'flex', gap: '0.75rem', borderBottom: '1px solid var(--border-color)' }}>
+              <div style={{ position: 'relative', flex: 1 }}>
+                <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                <input
+                  type="text"
+                  className="form-control"
+                  value={packingSearch}
+                  onChange={event => setPackingSearch(event.target.value)}
+                  placeholder={t('packing.saved.search_placeholder')}
+                  style={{ paddingLeft: '40px', width: '100%' }}
+                  autoFocus
+                />
+              </div>
+              <button className="btn btn-outline" onClick={loadSavedPackingLists} disabled={isLoadingPackingLists} style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                <RefreshCw size={18} className={isLoadingPackingLists ? 'spin' : ''} />
+                {t('packing.saved.refresh')}
+              </button>
+            </div>
+
+            <div style={{ overflow: 'auto', padding: '1rem 1.5rem 1.5rem' }}>
+              {isLoadingPackingLists ? (
+                <div style={{ padding: '4rem 1rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  <RefreshCw size={30} className="spin" style={{ marginBottom: '0.75rem' }} />
+                  <div>{t('packing.saved.loading')}</div>
+                </div>
+              ) : filteredSavedPackingLists.length === 0 ? (
+                <div style={{ padding: '4rem 1rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  <Package size={42} style={{ opacity: 0.45, marginBottom: '0.75rem' }} />
+                  <div>{packingSearch ? t('packing.saved.no_search_results') : t('packing.saved.no_lists')}</div>
+                </div>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '920px' }}>
+                  <thead>
+                    <tr style={{ background: 'rgba(var(--accent-rgb),0.08)', color: 'var(--accent-color)' }}>
+                      <th style={{ padding: '0.8rem', textAlign: 'start', borderBottom: '1px solid var(--border-color)' }}>{t('packing.saved.list_number')}</th>
+                      <th style={{ padding: '0.8rem', textAlign: 'start', borderBottom: '1px solid var(--border-color)' }}>{t('packing.saved.list_date')}</th>
+                      <th style={{ padding: '0.8rem', textAlign: 'start', borderBottom: '1px solid var(--border-color)' }}>{t('packing.saved.company')}</th>
+                      <th style={{ padding: '0.8rem', textAlign: 'start', borderBottom: '1px solid var(--border-color)' }}>{t('packing.saved.customer')}</th>
+                      <th style={{ padding: '0.8rem', textAlign: 'center', borderBottom: '1px solid var(--border-color)' }}>{t('packing.saved.cartons')}</th>
+                      <th style={{ padding: '0.8rem', textAlign: 'center', borderBottom: '1px solid var(--border-color)' }}>{t('packing.saved.pieces')}</th>
+                      <th style={{ padding: '0.8rem', textAlign: 'start', borderBottom: '1px solid var(--border-color)' }}>{t('packing.saved.last_update')}</th>
+                      <th style={{ padding: '0.8rem', textAlign: 'center', borderBottom: '1px solid var(--border-color)' }}>{t('packing.saved.actions')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredSavedPackingLists.map(record => {
+                      const isCurrent = currentPackingList?.id === record.id;
+                      return (
+                        <tr key={record.id} style={{ background: isCurrent ? 'rgba(34,197,94,0.07)' : 'transparent' }}>
+                          <td style={{ padding: '0.85rem', borderBottom: '1px solid var(--border-color)', fontWeight: 'bold' }}>
+                            {record.packing_no}
+                            {isCurrent && <span style={{ marginInlineStart: '0.5rem', fontSize: '0.7rem', color: '#22c55e' }}>{t('packing.saved.current')}</span>}
+                          </td>
+                          <td style={{ padding: '0.85rem', borderBottom: '1px solid var(--border-color)' }}>{record.packing_date || '-'}</td>
+                          <td style={{ padding: '0.85rem', borderBottom: '1px solid var(--border-color)', maxWidth: '200px' }}>{record.company_name || '-'}</td>
+                          <td style={{ padding: '0.85rem', borderBottom: '1px solid var(--border-color)' }}>{record.customer_name || '-'}</td>
+                          <td style={{ padding: '0.85rem', borderBottom: '1px solid var(--border-color)', textAlign: 'center' }}>{Number(record.total_cartons || 0).toLocaleString('en-US')}</td>
+                          <td style={{ padding: '0.85rem', borderBottom: '1px solid var(--border-color)', textAlign: 'center' }}>{record.total_pieces ?? 0}</td>
+                          <td style={{ padding: '0.85rem', borderBottom: '1px solid var(--border-color)', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                            <div>{record.updated_at ? new Date(record.updated_at).toLocaleString() : '-'}</div>
+                            <div>{record.updated_by_username || record.created_by_username || '-'}</div>
+                          </td>
+                          <td style={{ padding: '0.7rem', borderBottom: '1px solid var(--border-color)' }}>
+                            <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center' }}>
+                              <button onClick={() => openSavedPackingList(record)} title={t('packing.saved.open')} style={{ background: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.3)', color: '#60a5fa', borderRadius: '7px', padding: '0.45rem', cursor: 'pointer', display: 'flex' }}>
+                                <ExternalLink size={16} />
+                              </button>
+                              {hasPermission('packing-list', 'add') && (
+                                <button onClick={() => copySavedPackingList(record)} title={t('packing.saved.copy_as_new')} style={{ background: 'rgba(168,85,247,0.12)', border: '1px solid rgba(168,85,247,0.3)', color: '#c084fc', borderRadius: '7px', padding: '0.45rem', cursor: 'pointer', display: 'flex' }}>
+                                  <Copy size={16} />
+                                </button>
+                              )}
+                              {hasPermission('packing-list', 'delete') && (
+                                <button onClick={() => deleteSavedPackingList(record)} title={t('packing.saved.delete')} style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)', color: '#ef4444', borderRadius: '7px', padding: '0.45rem', cursor: 'pointer', display: 'flex' }}>
+                                  <Trash2 size={16} />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ─── FETCH DIALOG ─── */}
       {showFetchDialog && (

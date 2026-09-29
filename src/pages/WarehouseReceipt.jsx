@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../supabaseClient';
 import { useAppData } from '../context/AppDataContext';
@@ -17,6 +17,7 @@ const WarehouseReceipt = () => {
   const { lookups } = useAppData();
   const { user, hasPermission } = useAuth();
   const filteredLookups = useFilteredLookups();
+  const isChineseLanguage = (i18n.resolvedLanguage || i18n.language || '').toLowerCase().startsWith('zh');
   const [orders, setOrders] = useState([]);
   const [receivings, setReceivings] = useState([]);
   const [filteredData, setFilteredData] = useState([]);
@@ -125,6 +126,11 @@ const WarehouseReceipt = () => {
   const applyFilters = (currentOrders = orders, currentReceivings = receivings) => {
     if (!currentOrders.length) return;
 
+    const getCartonNumber = (value) => {
+      const match = String(value ?? '').match(/\d+/);
+      return match ? Number.parseInt(match[0], 10) : Number.MAX_SAFE_INTEGER;
+    };
+
     // Create a map for fast receiving lookups
     const recMap = {};
     currentReceivings.forEach(r => {
@@ -179,6 +185,13 @@ const WarehouseReceipt = () => {
             }];
         }
 
+        // Keep carton ranges in their real numeric order (1, 2, 10), not text order (1, 10, 2).
+        pkgs = [...pkgs].sort((a, b) => {
+            const fromDifference = getCartonNumber(a.fromCtn) - getCartonNumber(b.fromCtn);
+            if (fromDifference !== 0) return fromDifference;
+            return getCartonNumber(a.toCtn) - getCartonNumber(b.toCtn);
+        });
+
         // Calculate totals for the entire serial
         let serialTotalCtn = 0;
         let serialTotalProd = 0;
@@ -224,6 +237,16 @@ const WarehouseReceipt = () => {
       }
     });
 
+    // Orders are grouped in the invoice, so sort each group by its first carton number.
+    result.sort((a, b) => {
+      const firstCarton = (order) => order.packages.reduce(
+        (minimum, pkg) => Math.min(minimum, getCartonNumber(pkg.cartonNo)),
+        Number.MAX_SAFE_INTEGER
+      );
+
+      return firstCarton(a) - firstCarton(b);
+    });
+
     setFilteredData(result);
     toast.success(t('warehouse.messages.results_found', { count: result.length }), { id: 'filter-toast' });
   };
@@ -246,92 +269,165 @@ const WarehouseReceipt = () => {
   // Export Handlers - تصدير نفس تصميم الطباعة بالكامل بدقة متناهية
   const exportToPDF = async () => {
     if (filteredData.length === 0) return toast.error(t('warehouse.messages.no_data_export'));
+
     const toastId = toast.loading(t('warehouse.messages.exporting_pdf'));
+    let clone = null;
+
     try {
       const originalElement = document.getElementById('receipt-print-area');
       if (!originalElement) throw new Error('Receipt element not found');
 
-      // 1. استنساخ عنصر الفاتورة المعروضة
-      const clone = originalElement.cloneNode(true);
-
-      // 2. إخفاء حقول الإدخال وإظهار النصوص كما في أمر الطباعة تماماً
-      clone.querySelectorAll('.hide-on-print').forEach(el => el.remove());
-      clone.querySelectorAll('.print-only-inline').forEach(el => {
-        el.style.display = 'inline';
+      clone = originalElement.cloneNode(true);
+      clone.querySelectorAll('.hide-on-print').forEach((element) => element.remove());
+      clone.querySelectorAll('.print-only-inline').forEach((element) => {
+        element.style.display = 'inline';
       });
-
-      // 3. إزالة الثيم الداكن في المستنسخ لضمان طباعة نقية بخلفية بيضاء
       clone.classList.remove('dark-theme-receipt');
 
-      // 4. ضبط أبعاد ومظهر المستنسخ ليتطابق بنسبة 100% مع ورقة الطباعة الأفقية
-      clone.style.position = 'fixed';
-      clone.style.left = '-9999px';
-      clone.style.top = '0';
-      clone.style.width = '1250px';
-      clone.style.maxWidth = '1250px';
-      clone.style.backgroundColor = '#ffffff';
-      clone.style.color = '#0f172a';
-      clone.style.boxShadow = 'none';
-      clone.style.borderRadius = '0';
-      clone.style.border = 'none';
-      clone.style.padding = '15px 20px 25px 20px';
-      clone.style.margin = '0';
-      clone.style.display = 'flex';
-      clone.style.flexDirection = 'column';
-      clone.style.minHeight = '780px';
-      clone.style.boxSizing = 'border-box';
-      clone.style.direction = 'ltr';
-
-      // معالجة الجدول داخل المستنسخ لضمان عدم تكسر خلايا rowspan في html2canvas
-      clone.querySelectorAll('table.data-table').forEach(tbl => {
-        tbl.style.borderCollapse = 'separate';
-        tbl.style.borderSpacing = '0';
+      Object.assign(clone.style, {
+        position: 'fixed',
+        left: '-10000px',
+        top: '0',
+        width: '1250px',
+        maxWidth: '1250px',
+        height: 'auto',
+        minHeight: '0',
+        maxHeight: 'none',
+        overflow: 'visible',
+        backgroundColor: '#ffffff',
+        color: '#0f172a',
+        boxShadow: 'none',
+        borderRadius: '0',
+        border: 'none',
+        padding: '15px 20px 20px',
+        margin: '0',
+        display: 'block',
+        boxSizing: 'border-box',
+        direction: 'ltr'
       });
 
-      clone.querySelectorAll('tbody tr').forEach(tr => {
-        tr.style.backgroundColor = 'transparent';
-        tr.style.border = 'none';
+      clone.querySelectorAll('table.data-table').forEach((table) => {
+        table.style.borderCollapse = 'separate';
+        table.style.borderSpacing = '0';
       });
 
       const footerBlock = clone.querySelector('.receipt-footer-block');
       if (footerBlock) {
-        footerBlock.style.marginTop = 'auto'; // ضمان دفع التذييل لأسفل الصفحة تماماً وعدم ارتباطه بالجدول
-        footerBlock.style.paddingTop = '15px';
+        footerBlock.style.marginTop = '15px';
+        footerBlock.style.paddingTop = '0';
       }
 
       document.body.appendChild(clone);
       await document.fonts?.ready;
 
-      // 5. التقاط نسخة عالية الدقة من المستند
+      const cloneRect = clone.getBoundingClientRect();
+      const tableHead = clone.querySelector('.data-table thead');
+      const orderEndRows = [...clone.querySelectorAll('.receipt-order-end')];
+      const totalsGroup = clone.querySelector('.receipt-totals-group');
+
+      const localBottom = (element) => element.getBoundingClientRect().bottom - cloneRect.top;
+      const localTop = (element) => element.getBoundingClientRect().top - cloneRect.top;
+
+      const preferredDomBreaks = [
+        ...orderEndRows.map(localBottom),
+        totalsGroup ? localBottom(totalsGroup) : 0,
+        footerBlock ? localBottom(footerBlock) : 0,
+        clone.scrollHeight
+      ].filter((value) => value > 0);
+
+      const rowDomBreaks = [...clone.querySelectorAll('.receipt-data-row')]
+        .map(localBottom)
+        .filter((value) => value > 0);
+
+      const orderContentEnd = orderEndRows.length
+        ? Math.max(...orderEndRows.map(localBottom))
+        : (tableHead ? localBottom(tableHead) : 0);
+
       const canvas = await html2canvas(clone, {
-        scale: 2.5,
+        scale: 2,
         useCORS: true,
         logging: false,
-        backgroundColor: '#ffffff'
+        backgroundColor: '#ffffff',
+        windowWidth: clone.scrollWidth,
+        windowHeight: clone.scrollHeight
       });
 
-      document.body.removeChild(clone);
+      const renderedScale = canvas.width / clone.scrollWidth;
+      const toCanvasY = (value) => Math.max(0, Math.round(value * renderedScale));
+      const uniqueSorted = (values) => [...new Set(values.map(toCanvasY))].sort((a, b) => a - b);
 
-      const imgData = canvas.toDataURL('image/jpeg', 0.98);
+      const preferredBreaks = uniqueSorted(preferredDomBreaks);
+      const rowBreaks = uniqueSorted(rowDomBreaks);
+      const headTop = tableHead ? toCanvasY(localTop(tableHead)) : 0;
+      const headBottom = tableHead ? toCanvasY(localBottom(tableHead)) : 0;
+      const headHeight = Math.max(0, headBottom - headTop);
+      const orderEnd = toCanvasY(orderContentEnd);
 
-      // 6. إنشاء ملف PDF قياسي ورقة واحدة A4 Landscape دائماً دون أي انقسام
-      const pdfWidthMM = 297;
-      const pdfHeightMM = 210;
-      const margin = 4;
-      const maxContentWidthMM = pdfWidthMM - (margin * 2); // 289mm
-      const maxContentHeightMM = pdfHeightMM - (margin * 2); // 202mm
+      clone.remove();
+      clone = null;
 
-      const scaleRatio = Math.min(
-        maxContentWidthMM / canvas.width,
-        maxContentHeightMM / canvas.height
-      );
+      const pdfWidth = 297;
+      const pdfHeight = 210;
+      const margin = 5;
+      const contentWidth = pdfWidth - (margin * 2);
+      const contentHeight = pdfHeight - (margin * 2);
+      const millimetresPerPixel = contentWidth / canvas.width;
+      const pageCapacity = contentHeight / millimetresPerPixel;
 
-      const renderWidthMM = canvas.width * scaleRatio;
-      const renderHeightMM = canvas.height * scaleRatio;
+      const findPageEnd = (pageStart, availableHeight) => {
+        const target = Math.min(canvas.height, pageStart + availableHeight);
+        if (target >= canvas.height) return canvas.height;
 
-      const posX = margin + (maxContentWidthMM - renderWidthMM) / 2;
-      const posY = margin + (maxContentHeightMM - renderHeightMM) / 2;
+        const minimumUsefulEnd = pageStart + Math.min(40 * renderedScale, availableHeight * 0.15);
+        const findLastBreak = (breaks) => {
+          const candidates = breaks.filter((point) => point > minimumUsefulEnd && point <= target);
+          return candidates.length ? candidates[candidates.length - 1] : 0;
+        };
 
+        return findLastBreak(preferredBreaks)
+          || findLastBreak(rowBreaks)
+          || Math.max(pageStart + 1, Math.floor(target));
+      };
+
+      const pages = [];
+      let pageStart = 0;
+
+      while (pageStart < canvas.height - 1) {
+        const repeatTableHead = pages.length > 0 && headHeight > 0 && pageStart < orderEnd;
+        const availableHeight = pageCapacity - (repeatTableHead ? headHeight : 0);
+        const pageEnd = findPageEnd(pageStart, availableHeight);
+
+        pages.push({
+          start: pageStart,
+          end: Math.min(pageEnd, canvas.height),
+          repeatTableHead
+        });
+        pageStart = Math.min(pageEnd, canvas.height);
+      }
+
+      const cropCanvas = (sourceCanvas, startY, endY) => {
+        const cropped = document.createElement('canvas');
+        cropped.width = sourceCanvas.width;
+        cropped.height = Math.max(1, Math.ceil(endY - startY));
+        const context = cropped.getContext('2d');
+        context.fillStyle = '#ffffff';
+        context.fillRect(0, 0, cropped.width, cropped.height);
+        context.drawImage(
+          sourceCanvas,
+          0,
+          startY,
+          sourceCanvas.width,
+          cropped.height,
+          0,
+          0,
+          cropped.width,
+          cropped.height
+        );
+        return cropped;
+      };
+
+      const tableHeadCanvas = headHeight > 0 ? cropCanvas(canvas, headTop, headBottom) : null;
+      const tableHeadImage = tableHeadCanvas?.toDataURL('image/jpeg', 0.94);
       const pdf = new jsPDF({
         orientation: 'landscape',
         unit: 'mm',
@@ -339,19 +435,41 @@ const WarehouseReceipt = () => {
         compress: true
       });
 
-      pdf.addImage(imgData, 'JPEG', posX, posY, renderWidthMM, renderHeightMM, undefined, 'FAST');
+      pages.forEach((page, index) => {
+        if (index > 0) pdf.addPage('a4', 'landscape');
 
-      const fileName = `Warehouse_Receipt_${headerInfo.orderNo || headerInfo.buyerNo || new Date().toISOString().split('T')[0]}.pdf`;
-      pdf.save(fileName);
+        let y = margin;
+        if (page.repeatTableHead && tableHeadCanvas && tableHeadImage) {
+          const tableHeadHeight = tableHeadCanvas.height * millimetresPerPixel;
+          pdf.addImage(tableHeadImage, 'JPEG', margin, y, contentWidth, tableHeadHeight, undefined, 'FAST');
+          y += tableHeadHeight;
+        }
 
-      toast.success(t('warehouse.messages.export_success', { defaultValue: 'تم تصدير ملف الـ PDF بنجاح!' }), { id: toastId });
+        const pageCanvas = cropCanvas(canvas, page.start, page.end);
+        const pageImage = pageCanvas.toDataURL('image/jpeg', 0.94);
+        const renderedHeight = pageCanvas.height * millimetresPerPixel;
+        pdf.addImage(pageImage, 'JPEG', margin, y, contentWidth, renderedHeight, undefined, 'FAST');
+
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(7);
+        pdf.setTextColor(100, 116, 139);
+        pdf.text(`Page ${index + 1} / ${pages.length}`, pdfWidth - margin, pdfHeight - 1.8, { align: 'right' });
+      });
+
+      const reference = headerInfo.orderNo || headerInfo.buyerNo || new Date().toISOString().split('T')[0];
+      const safeReference = String(reference).replace(/[\\/:*?"<>|]/g, '-');
+      pdf.save(`Warehouse_Receipt_${safeReference}.pdf`);
+
+      toast.success(t('warehouse.messages.export_success'), { id: toastId });
     } catch (err) {
       console.error('PDF Export Error:', err);
-      toast.error(t('warehouse.messages.export_failed', { defaultValue: 'حدث خطأ أثناء تحميل ملف الـ PDF' }), { id: toastId });
+      toast.error(t('warehouse.messages.export_failed'), { id: toastId });
+    } finally {
+      if (clone?.isConnected) clone.remove();
     }
   };
 
-  // طباعة الورقة في صفحة A4 أفقية واحدة دائماً
+  // Print the receipt using normal A4 landscape pagination.
   const handlePrint = () => {
     window.print();
   };
@@ -448,8 +566,7 @@ const WarehouseReceipt = () => {
             boxShadow: '0 10px 40px rgba(0,0,0,0.28)',
             direction: 'ltr',
             fontFamily: 'Inter, Tajawal, sans-serif',
-            display: 'flex',
-            flexDirection: 'column',
+            display: 'block',
             minHeight: '190mm',
             border: '2px solid #0f172a'
         }}>
@@ -484,10 +601,10 @@ const WarehouseReceipt = () => {
             {/* Print Header */}
             <div className="print-header" style={{ textAlign: 'center', marginBottom: '1rem', paddingBottom: '0.6rem', borderBottom: '4px solid #0f172a' }}>
                 <h1 style={{ fontSize: '2.35rem', margin: 0, color: '#0f172a', fontWeight: '900', letterSpacing: '0' }}>
-                    {t('warehouse.title')}
+                    {isChineseLanguage ? t('warehouse.title', { lng: 'en' }) : t('warehouse.title')}
                 </h1>
                 <h2 style={{ fontSize: '1.55rem', margin: '0.2rem 0 0', color: '#1e293b', fontWeight: 'bold' }}>
-                    {t('warehouse.subtitle').split(' - ')[1]}
+                    {isChineseLanguage ? t('warehouse.title') : t('warehouse.subtitle').split(' - ')[1]}
                 </h2>
             </div>
 
@@ -604,10 +721,12 @@ const WarehouseReceipt = () => {
                         </th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody className="receipt-data-body">
                     {filteredData.map((order, oIdx) => {
                         const rowBg = oIdx % 2 === 0 ? '#ffffff' : '#f8fafc';
-                        return order.packages.map((pkg, pIdx) => {
+                        return (
+                            <React.Fragment key={`order-${oIdx}-${order.serial}`}>
+                            {order.packages.map((pkg, pIdx) => {
                             const isFirstPkg = pIdx === 0;
                             const isLastPkg = pIdx === order.packages.length - 1;
                             const rowSpan = order.packages.length;
@@ -615,7 +734,7 @@ const WarehouseReceipt = () => {
                             const bottomBorder = isLastPkg ? '1px solid #334155' : tBorderStyle;
 
                             return (
-                                <tr key={`${oIdx}-${pIdx}`} style={{ textAlign: 'center', backgroundColor: 'transparent' }}>
+                                <tr className={`receipt-data-row${isLastPkg ? ' receipt-order-end' : ''}`} key={`${oIdx}-${pIdx}`} style={{ textAlign: 'center', backgroundColor: 'transparent' }}>
                                     <td style={{ padding: '4px', borderRight: tBorderStyle, borderBottom: bottomBorder, backgroundColor: rowBg, verticalAlign: 'middle' }}>{pkg.cartonNo}</td>
                                     
                                     {isFirstPkg && (
@@ -673,10 +792,14 @@ const WarehouseReceipt = () => {
                                     )}
                                 </tr>
                             );
-                        });
+                            })}
+                            </React.Fragment>
+                        );
                     })}
+                </tbody>
 
                     {/* Totals Row */}
+                <tbody className="receipt-totals-group">
                     <tr className="totals-row" style={{ backgroundColor: '#cbd5e1', textAlign: 'center', fontWeight: 'bold' }}>
                         <td colSpan={3} style={{ padding: '10px 4px', borderRight: '1px solid #94a3b8', borderBottom: '2px solid #0f172a', borderTop: '2px solid #0f172a', fontSize: '1rem', backgroundColor: '#cbd5e1' }}>{t('packing.footer.total')}</td>
                         <td style={{ padding: '10px 4px', borderRight: '1px solid #94a3b8', borderBottom: '2px solid #0f172a', borderTop: '2px solid #0f172a', color: '#1e293b', backgroundColor: '#cbd5e1' }}>{grandTotalItems} {t('warehouse.results.models_count')}</td>
@@ -688,7 +811,7 @@ const WarehouseReceipt = () => {
             </table>
 
             {/* Footer Summary */}
-            <div className="receipt-footer-block" style={{ marginTop: 'auto', paddingTop: '1.5rem' }}>
+            <div className="receipt-footer-block" style={{ marginTop: '1.5rem', paddingTop: 0 }}>
                 <div className="footer-summary" style={{ display: 'flex', justifyContent: 'space-between', padding: '1rem', backgroundColor: '#e2e8f0', border: '2px solid #334155', borderRadius: '6px', fontSize: '1rem', fontWeight: 'bold', color: '#0f172a', flexWrap: 'wrap', gap: '1rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <span style={{ color: '#ef4444' }}>{t('warehouse.footer.shipping_date_zh')}</span>
@@ -825,19 +948,19 @@ const WarehouseReceipt = () => {
 
                 @media print {
                     @page {
-                        size: landscape;
+                        size: A4 landscape;
                         margin: 4mm 5mm;
                     }
                     html, body {
                         width: 100% !important;
-                        height: 100% !important;
+                        height: auto !important;
                         margin: 0 !important;
                         padding: 0 !important;
                         background: #fff !important;
                         direction: ltr !important;
                         -webkit-print-color-adjust: exact !important;
                         print-color-adjust: exact !important;
-                        overflow: hidden !important;
+                        overflow: visible !important;
                     }
                     body * {
                         visibility: hidden;
@@ -861,35 +984,38 @@ const WarehouseReceipt = () => {
                         box-shadow: none !important;
                         background-color: #ffffff !important;
                         color: #000000 !important;
-                        display: flex !important;
-                        flex-direction: column !important;
-                        height: calc(100vh - 8mm) !important;
-                        max-height: calc(100vh - 8mm) !important;
+                        display: block !important;
+                        height: auto !important;
+                        min-height: 0 !important;
+                        max-height: none !important;
+                        overflow: visible !important;
                         box-sizing: border-box !important;
-                        page-break-inside: avoid !important;
-                        break-inside: avoid !important;
-                        page-break-after: avoid !important;
-                        break-after: avoid !important;
-                        page-break-before: avoid !important;
-                        break-before: avoid !important;
+                        page-break-inside: auto !important;
+                        break-inside: auto !important;
+                        page-break-after: auto !important;
+                        break-after: auto !important;
                     }
                     #receipt-print-area .receipt-footer-block {
-                        margin-top: auto !important;
+                        margin-top: 3mm !important;
                         padding-top: 3mm !important;
                         page-break-inside: avoid !important;
                         break-inside: avoid !important;
                     }
 
-                    /* Force single page */
-                    #receipt-print-area * {
-                        page-break-inside: avoid !important;
-                        break-inside: avoid !important;
-                    }
                     #receipt-print-area .data-table {
+                        page-break-inside: auto !important;
+                        break-inside: auto !important;
+                    }
+                    #receipt-print-area .data-table thead {
+                        display: table-header-group !important;
+                    }
+                    #receipt-print-area .data-table .receipt-totals-group,
+                    #receipt-print-area .data-table tr {
                         page-break-inside: avoid !important;
                         break-inside: avoid !important;
                     }
-                    #receipt-print-area .data-table tr {
+                    #receipt-print-area .print-header,
+                    #receipt-print-area .info-grid {
                         page-break-inside: avoid !important;
                         break-inside: avoid !important;
                     }

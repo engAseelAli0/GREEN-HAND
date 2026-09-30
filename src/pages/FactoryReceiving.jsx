@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useAppData } from '../context/AppDataContext';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../supabaseClient';
-import { Search, Save, PackageCheck, AlertCircle, Info, Box, Palette, Calculator, CheckCircle2, XCircle, Download, Printer, X, Factory, Plus, Trash2 } from 'lucide-react';
+import { Search, Save, PackageCheck, AlertCircle, Info, Box, Palette, Calculator, CheckCircle2, XCircle, Download, Printer, X, Factory, Plus, Trash2, History } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 import { useTranslation } from 'react-i18next';
@@ -70,6 +70,10 @@ const FactoryReceiving = () => {
   const [modelNo, setModelNo] = useState('');
   const [isFetched, setIsFetched] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
+  const [showReceivingHistory, setShowReceivingHistory] = useState(false);
+  const [savedReceivings, setSavedReceivings] = useState([]);
+  const [receivingHistorySearch, setReceivingHistorySearch] = useState('');
+  const [isLoadingReceivingHistory, setIsLoadingReceivingHistory] = useState(false);
   
   // F9 Search States
   const [showSerialsList, setShowSerialsList] = useState(false);
@@ -90,7 +94,8 @@ const FactoryReceiving = () => {
     reqTotalQuantity: 0,
     productStatus: '',
     factoryId: '',
-    factoryName: ''
+    factoryName: '',
+    companyName: ''
   });
 
   // Package Table State
@@ -98,6 +103,7 @@ const FactoryReceiving = () => {
 
   // Factory Packages State (Read-only)
   const [factoryPackages, setFactoryPackages] = useState([]);
+  const [originalOrderData, setOriginalOrderData] = useState(null);
 
   // Colors Table State
   const [colors, setColors] = useState(Array.from({ length: 9 }).map((_, i) => ({
@@ -151,11 +157,37 @@ const FactoryReceiving = () => {
     setIsSearching(true);
     
     try {
-      const { data: recData } = await supabase
-        .from('receivings')
-        .select('serial_number, receive_data')
+      let recData = null;
+      const { data: savedReceiving, error: savedReceivingError } = await supabase
+        .from('company_receivings')
+        .select('serial_number, receive_data, order_data')
         .ilike('serial_number', termToSearch.trim())
-        .single();
+        .maybeSingle();
+
+      if (savedReceivingError?.code === 'PGRST205') {
+        const { data: legacyReceiving, error: legacyReceivingError } = await supabase
+          .from('receivings')
+          .select('serial_number, receive_data')
+          .ilike('serial_number', termToSearch.trim())
+          .maybeSingle();
+        if (legacyReceivingError) throw legacyReceivingError;
+        recData = legacyReceiving;
+      } else if (savedReceivingError) {
+        throw savedReceivingError;
+      } else {
+        recData = savedReceiving;
+
+        // Keep existing receipts visible during the migration period.
+        if (!recData) {
+          const { data: legacyReceiving, error: legacyReceivingError } = await supabase
+            .from('receivings')
+            .select('serial_number, receive_data')
+            .ilike('serial_number', termToSearch.trim())
+            .maybeSingle();
+          if (legacyReceivingError) throw legacyReceivingError;
+          recData = legacyReceiving;
+        }
+      }
 
       const { data: oDataResp, error: oError } = await supabase
         .from('orders')
@@ -170,11 +202,15 @@ const FactoryReceiving = () => {
          return;
       }
       
-      const oData = oDataResp.order_data;
+      const oData = {
+        ...(oDataResp.order_data || {}),
+        ...(recData?.order_data || {})
+      };
       setModelNo(oDataResp.serial_number);
+      setOriginalOrderData(oData);
 
       // Scoped permissions check: ensure user has access to this factory
-      if (!isOrderAllowedForUser(oDataResp, user, lookups?.factories)) {
+      if (!isOrderAllowedForUser({ ...oDataResp, order_data: oData }, user, lookups?.factories)) {
          toast.error(t('auth.unauthorized_factory', { defaultValue: 'ليس لديك صلاحية للوصول إلى بيانات هذا المصنع' }));
          setIsSearching(false);
          setIsFetched(false);
@@ -202,7 +238,8 @@ const FactoryReceiving = () => {
         )) ? 'Received' : 'Not Received',
         factoryId: factoryDisplay.code || oData.factoryId || t('receiving.messages.undefined'),
         factoryName: factoryDisplay.name || '',
-        factoryLabel: factoryDisplay.label || oData.factoryId || t('receiving.messages.undefined')
+        factoryLabel: factoryDisplay.label || oData.factoryId || t('receiving.messages.undefined'),
+        companyName: oData.buyerCompany || oData.company || ''
       });
       
       if (recData && recData.receive_data && recData.receive_data.packages) {
@@ -323,6 +360,72 @@ const FactoryReceiving = () => {
       return { ...pkg, [field]: value };
     }));
   };
+
+  const loadSavedReceivings = async () => {
+    setIsLoadingReceivingHistory(true);
+    try {
+      const { data: dedicatedData, error: dedicatedError } = await supabase
+        .from('company_receivings')
+        .select('serial_number, receive_data')
+        .limit(500);
+      let data = dedicatedData || [];
+      if (dedicatedError?.code === 'PGRST205') {
+        const { data: legacyData, error: legacyError } = await supabase
+          .from('receivings')
+          .select('serial_number, receive_data')
+          .limit(500);
+        if (legacyError) throw legacyError;
+        data = legacyData || [];
+      } else if (dedicatedError) {
+        throw dedicatedError;
+      } else {
+        // Include older records until they are migrated, while preferring the dedicated row.
+        const { data: legacyData, error: legacyError } = await supabase
+          .from('receivings')
+          .select('serial_number, receive_data')
+          .limit(500);
+        if (!legacyError && legacyData) {
+          const recordsBySerial = new Map(legacyData.map(record => [String(record.serial_number), record]));
+          data.forEach(record => recordsBySerial.set(String(record.serial_number), record));
+          data = Array.from(recordsBySerial.values());
+        }
+      }
+
+      const allowedFactories = user?.permissions?.allowed_factories || [];
+      const allowedCompanies = user?.permissions?.allowed_companies || [];
+      const isRestricted = Boolean(
+        user
+        && user.role !== 'admin'
+        && (allowedFactories.length > 0 || allowedCompanies.length > 0)
+      );
+      const allowedSerialSet = isRestricted
+        ? new Set((await fetchAllowedSerials(supabase, user, lookups?.factories, 10000)).map(serial => String(serial)))
+        : null;
+
+      setSavedReceivings((data || []).filter(record => (
+        record.serial_number
+        && (!allowedSerialSet || allowedSerialSet.has(String(record.serial_number)))
+      )));
+    } catch (error) {
+      console.error('Error loading saved receivings:', error);
+      setSavedReceivings([]);
+      toast.error(t('receiving.messages.db_error'));
+    } finally {
+      setIsLoadingReceivingHistory(false);
+    }
+  };
+
+  const openReceivingHistory = () => {
+    setReceivingHistorySearch('');
+    setShowReceivingHistory(true);
+    loadSavedReceivings();
+  };
+
+  const filteredSavedReceivings = savedReceivings.filter(record => {
+    const query = receivingHistorySearch.trim().toLowerCase();
+    if (!query) return true;
+    return String(record.serial_number || '').toLowerCase().includes(query);
+  });
 
   const updateMixedItem = (packageIndex, itemId, field, value) => {
     setPackages(current => current.map((pkg, index) => {
@@ -469,11 +572,26 @@ const FactoryReceiving = () => {
         receivedAt: new Date().toISOString()
       }
     };
+    const dedicatedPayload = {
+      serial_number: payload.serial_number,
+      factory_id: productInfo.factoryId || originalOrderData?.factoryId || '',
+      factory_name: productInfo.factoryName || '',
+      company_name: productInfo.companyName || originalOrderData?.buyerCompany || originalOrderData?.company || '',
+      receive_data: payload.receive_data,
+      order_data: originalOrderData || {},
+      received_at: payload.receive_data.receivedAt
+    };
     
     const toastId = toast.loading(t('receiving.messages.saving'));
     try {
-      const { error } = await supabase.from('receivings').upsert(payload);
-      if (error) throw error;
+      const { error: dedicatedError } = await supabase
+        .from('company_receivings')
+        .upsert(dedicatedPayload, { onConflict: 'serial_number' });
+      if (dedicatedError && dedicatedError.code !== 'PGRST205') throw dedicatedError;
+
+      // Keep the legacy mirror for Packing List and reporting compatibility.
+      const { error: legacyError } = await supabase.from('receivings').upsert(payload);
+      if (legacyError) throw legacyError;
       const { data: orderRow } = await supabase
         .from('orders')
         .select('order_data')
@@ -526,8 +644,9 @@ const FactoryReceiving = () => {
       setProductInfo({
         mainBarcode: '', prodFullName: '', prodShortName: '', prodPrice: 0,
         priceCurrency: '', reqCartons: '', reqTotalQuantity: 0, productStatus: 'Not Received',
-        factoryId: '', factoryName: ''
+        factoryId: '', factoryName: '', companyName: ''
       });
+      setOriginalOrderData(null);
       setPackages(Array.from({ length: 4 }, (_, i) => createReceivingPackage(i)));
       setFactoryPackages([]);
       setColors(Array.from({ length: 9 }).map((_, i) => ({
@@ -812,7 +931,54 @@ const FactoryReceiving = () => {
           <button className="btn btn-primary" onClick={() => handleSearch()} disabled={isSearching} style={{ padding: '14px 30px', fontSize: '1.1rem' }}>
             {isSearching ? <div className="spinner" style={{ width: '22px', height: '22px', border: '3px solid #fff', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} /> : t('receiving.search.btn')}
           </button>
+          <button type="button" className="btn btn-outline" onClick={openReceivingHistory} style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+            <History size={18} /> {t('export.select_saved')}
+          </button>
         </div>
+
+        {showReceivingHistory && (
+          <div className="card fade-in" style={{ marginTop: '1.25rem', padding: 0, overflow: 'hidden', border: '1px solid var(--accent-color)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', padding: '1rem 1.25rem', borderBottom: '1px solid var(--border-color)', background: 'var(--surface-highlight)' }}>
+              <strong>{t('export.select_saved')}</strong>
+              <button type="button" onClick={() => setShowReceivingHistory(false)} style={{ background: 'none', border: 'none', color: 'var(--text-main)', cursor: 'pointer', display: 'flex' }}>
+                <X size={20} />
+              </button>
+            </div>
+            <div style={{ padding: '0.85rem', borderBottom: '1px solid var(--border-color)' }}>
+              <input
+                type="text"
+                className="form-control"
+                value={receivingHistorySearch}
+                onChange={event => setReceivingHistorySearch(event.target.value)}
+                placeholder={t('export.search_placeholder')}
+              />
+            </div>
+            <div style={{ maxHeight: '260px', overflowY: 'auto' }}>
+              {isLoadingReceivingHistory ? (
+                <div style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--text-muted)' }}>{t('entry.actions.loading')}</div>
+              ) : filteredSavedReceivings.length === 0 ? (
+                <div style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--text-muted)' }}>{t('entry.actions.no_saved_models')}</div>
+              ) : (
+                filteredSavedReceivings.map(record => (
+                  <button
+                    type="button"
+                    key={record.serial_number}
+                    onClick={() => {
+                      setShowReceivingHistory(false);
+                      handleSearch(String(record.serial_number));
+                    }}
+                    style={{ width: '100%', padding: '0.8rem 1rem', border: 'none', borderBottom: '1px solid var(--border-color)', background: 'transparent', color: 'var(--text-main)', textAlign: 'start', cursor: 'pointer', fontWeight: 'bold' }}
+                  >
+                    {record.serial_number}
+                    <span style={{ display: 'block', marginTop: '0.2rem', fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 'normal' }}>
+                      {record.receive_data?.receivedAt ? new Date(record.receive_data.receivedAt).toLocaleString() : '-'}
+                    </span>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        )}
         
         {/* Export Action Buttons */}
         {isFetched && (

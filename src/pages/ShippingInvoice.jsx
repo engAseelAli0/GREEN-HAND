@@ -3,7 +3,7 @@ import { supabase } from '../supabaseClient';
 import { useAuth } from '../context/AuthContext';
 import { englishOnly } from '../utils/textUtils';
 import { normalizeImageUrl } from '../utils/imageUtils';
-import { Printer, Plus, Trash2, Search, FileText, AlertCircle, X, FileSpreadsheet, Save, History, Copy, RefreshCw, ExternalLink } from 'lucide-react';
+import { Printer, Plus, Trash2, Search, FileText, AlertCircle, X, FileSpreadsheet, FileDown, Save, History, Copy, RefreshCw, ExternalLink } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
 import { CustomDateInput } from '../components/CustomDateInput';
@@ -56,6 +56,48 @@ const invoiceStateSignature = (header, invoiceRows, footer, includeImages) => JS
 const toEnglishNumbers = (str) => {
   if (str === null || str === undefined) return '';
   return str.toString().replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d));
+};
+
+const getPackingRowQuantity = (row) => (row?.packages || []).reduce((sum, pkg) => (
+  sum + ((parseFloat(pkg?.cartonQty) || 0) * (parseFloat(pkg?.qtyPerCarton) || 0))
+), 0);
+
+const buildPackingImportItems = (record) => {
+  const stored = record?.packing_data && typeof record.packing_data === 'object'
+    ? record.packing_data
+    : {};
+  const itemsBySerial = new Map();
+
+  const addItem = (item, quantity) => {
+    const serial = String(item?.serial || '').trim();
+    if (!serial) return;
+    const key = serial.toLowerCase();
+    const current = itemsBySerial.get(key) || {
+      serial,
+      desc: item?.desc || '',
+      image: item?.image || '',
+      factoryCode: item?.factoryCode || '',
+      qty: 0
+    };
+    current.qty += Number(quantity) || 0;
+    if (!current.desc && item?.desc) current.desc = item.desc;
+    if (!current.image && item?.image) current.image = item.image;
+    if (!current.factoryCode && item?.factoryCode) current.factoryCode = item.factoryCode;
+    itemsBySerial.set(key, current);
+  };
+
+  (Array.isArray(stored.rows) ? stored.rows : []).forEach(row => {
+    addItem(row, getPackingRowQuantity(row));
+  });
+
+  (Array.isArray(stored.mixedGroups) ? stored.mixedGroups : []).forEach(group => {
+    const cartonQty = parseFloat(group?.cartonQty) || 0;
+    (Array.isArray(group?.items) ? group.items : []).forEach(item => {
+      addItem(item, cartonQty * (parseFloat(item?.qtyPerCarton) || 0));
+    });
+  });
+
+  return Array.from(itemsBySerial.values()).filter(item => item.qty > 0);
 };
 
 const ShippingInvoice = () => {
@@ -130,6 +172,12 @@ const ShippingInvoice = () => {
   const [savedInvoices, setSavedInvoices] = useState([]);
   const [invoiceSearch, setInvoiceSearch] = useState('');
   const [isLoadingInvoices, setIsLoadingInvoices] = useState(false);
+  const [showPackingImport, setShowPackingImport] = useState(false);
+  const [savedPackingListsForImport, setSavedPackingListsForImport] = useState([]);
+  const [packingImportSearch, setPackingImportSearch] = useState('');
+  const [isLoadingPackingImports, setIsLoadingPackingImports] = useState(false);
+  const [isImportingPacking, setIsImportingPacking] = useState(false);
+  const [sourcePackingList, setSourcePackingList] = useState(null);
 
   const hasMeaningfulData = Boolean(
     headerInfo.invoiceNo?.trim()
@@ -150,6 +198,7 @@ const ShippingInvoice = () => {
     setFooterInfo(nextFooter);
     setShowImageColumn(false);
     setCurrentInvoice(null);
+    setSourcePackingList(null);
     setSavedFormSignature(invoiceStateSignature(nextHeader, nextRows, nextFooter, false));
     setShowClearConfirm(false);
     toast.success(t('shipping.messages.clear_success'));
@@ -358,10 +407,6 @@ const ShippingInvoice = () => {
                         imageUrl = normalizeImageUrl(firstImage);
                     }
 
-                    const factName = d.factoryId || '';
-                    const factoryObj = factories.find(f => (f.name || f) === factName);
-                    const factoryCode = typeof factoryObj === 'object' ? factoryObj.code : (d.factoryCode || '');
-
                     if (!fetchedCustomerName && d.buyerMobile) {
                         fetchedCustomerName = d.buyerMobile;
                     }
@@ -374,7 +419,9 @@ const ShippingInvoice = () => {
                         currency: d.currency || '¥ RMB',
                         unitPrice: d.productPrice || '',
                         image: imageUrl,
-                        factoryCode: factoryCode || ''
+                        // Other Details is a manual invoice field. Do not populate it
+                        // from the factory lookup or from the order data.
+                        factoryCode: ''
                     });
                     successCount++;
                 }
@@ -434,7 +481,8 @@ const ShippingInvoice = () => {
       headerInfo,
       rows,
       footerInfo,
-      showImageColumn
+      showImageColumn,
+      sourcePackingList
     },
     total_amount: Number(invoiceTotal.toFixed(2)),
     total_pieces: Math.max(0, Math.round(totalPcs)),
@@ -528,7 +576,8 @@ const ShippingInvoice = () => {
           companyName: headerInfo.companyName,
           totalAmount: Number(invoiceTotal.toFixed(2)),
           totalPieces: Math.round(totalPcs),
-          itemCount: validRows.length
+          itemCount: validRows.length,
+          sourcePackingList: sourcePackingList?.packingNo || null
         }
       });
 
@@ -574,6 +623,169 @@ const ShippingInvoice = () => {
     loadSavedInvoices();
   };
 
+  const loadPackingListsForImport = async () => {
+    setIsLoadingPackingImports(true);
+    try {
+      const { data, error } = await supabase
+        .from('packing_lists')
+        .select('id, packing_no, packing_date, company_name, customer_name, packing_data, total_cartons, total_pieces, updated_at')
+        .order('packing_date', { ascending: false })
+        .order('updated_at', { ascending: false })
+        .limit(500);
+      if (error) throw error;
+      setSavedPackingListsForImport(data || []);
+    } catch (error) {
+      console.error('Error loading packing lists for invoice import:', error);
+      setSavedPackingListsForImport([]);
+      if (error?.code === 'PGRST205') {
+        toast.error(t('shipping.import.packing_table_missing'), { duration: 7000 });
+      } else if (error?.code === '42501') {
+        toast.error(t('shipping.saved.permission_error'));
+      } else {
+        toast.error(error?.message || t('shipping.saved.generic_error'));
+      }
+    } finally {
+      setIsLoadingPackingImports(false);
+    }
+  };
+
+  const openPackingImport = () => {
+    setPackingImportSearch('');
+    setShowPackingImport(true);
+    loadPackingListsForImport();
+  };
+
+  const importPackingList = async (record) => {
+    if (hasUnsavedChanges && !window.confirm(t('shipping.saved.discard_changes_confirm'))) return;
+    if (!hasPermission('shipping-invoice', 'add')) {
+      toast.error(t('shipping.saved.permission_error'));
+      return;
+    }
+
+    setIsImportingPacking(true);
+    const toastId = toast.loading(t('shipping.import.importing'));
+    try {
+      const sourceItems = buildPackingImportItems(record);
+      if (sourceItems.length === 0) {
+        const emptyError = new Error(t('shipping.import.no_items'));
+        emptyError.code = 'PACKING_IMPORT_EMPTY';
+        throw emptyError;
+      }
+
+      const serialVariants = [...new Set(sourceItems.flatMap(item => [
+        item.serial,
+        item.serial.toLowerCase(),
+        item.serial.toUpperCase()
+      ]))];
+      const { data: orderRecords, error: ordersError } = await supabase
+        .from('orders')
+        .select('serial_number, order_data')
+        .in('serial_number', serialVariants);
+      if (ordersError) throw ordersError;
+
+      const ordersBySerial = new Map((orderRecords || []).map(order => [
+        String(order.serial_number || '').trim().toLowerCase(),
+        order
+      ]));
+      const inaccessibleItems = [];
+      const importedRows = sourceItems.map(item => {
+        const order = ordersBySerial.get(item.serial.toLowerCase());
+        const orderData = order?.order_data || {};
+        if (order && !isOrderAllowedForUser(order, user, factories)) {
+          inaccessibleItems.push(item.serial);
+          return null;
+        }
+
+        const firstImage = Array.isArray(orderData.productImages) && orderData.productImages.length > 0
+          ? normalizeImageUrl(orderData.productImages[0])
+          : '';
+        return withCalculatedRowTotal({
+          ...createEmptyInvoiceRow(),
+          id: createRowId(),
+          serial: order?.serial_number || item.serial,
+          desc: item.desc || orderData.productName || '',
+          arabicName: orderData.productName || item.desc || '',
+          qty: String(item.qty || 0),
+          currency: orderData.currency || 'آ¥ RMB',
+          unitPrice: orderData.productPrice ?? '',
+          image: item.image || firstImage,
+          // Other Details is entered separately by the invoice user. Do not
+          // import a factory code or any other automatic value into it.
+          factoryCode: '',
+          details: item.details || ''
+        });
+      }).filter(Boolean);
+
+      if (importedRows.length === 0) {
+        const accessError = new Error(t('shipping.import.no_accessible_items'));
+        accessError.code = 'PACKING_IMPORT_NO_ACCESS';
+        throw accessError;
+      }
+
+      const stored = record.packing_data && typeof record.packing_data === 'object'
+        ? record.packing_data
+        : {};
+      const sourceHeader = stored.headerInfo || {};
+      setHeaderInfo(prev => ({
+        ...prev,
+        companyName: sourceHeader.companyName || record.company_name || prev.companyName,
+        tel: sourceHeader.tel || prev.tel,
+        fax: sourceHeader.fax || prev.fax,
+        customerName: sourceHeader.customerName || record.customer_name || '',
+        date: record.packing_date || localDate,
+        invoiceNo: ''
+      }));
+      setRows(importedRows);
+      setFooterInfo(createEmptyFooterInfo());
+      setShowImageColumn(importedRows.some(row => row.image));
+      setCurrentInvoice(null);
+      setSavedFormSignature(null);
+      setSourcePackingList({
+        id: record.id,
+        packingNo: record.packing_no,
+        packingDate: record.packing_date
+      });
+      setShowPackingImport(false);
+
+      await logAuditEvent({
+        action: 'IMPORT_PACKING_LIST_TO_INVOICE',
+        actionType: 'IMPORT',
+        entityType: 'shipping-invoice',
+        entityId: record.id,
+        user,
+        screenKey: 'shipping-invoice',
+        screenName: 'ظپط§طھظˆط±ط© ط§ظ„ط´ط­ظ†',
+        summary: `ط§ط³طھظٹط±ط§ط¯ ظ‚ط§ط¦ظ…ط© طھط¹ط¨ط¦ط© ${record.packing_no} ظ„ظپط§طھظˆط±ط© ط´ط­ظ†`,
+        details: { packingListId: record.id, packingNumber: record.packing_no, itemCount: importedRows.length }
+      }).catch(() => {});
+
+      const skippedMessage = inaccessibleItems.length > 0
+        ? ` ${t('shipping.import.skipped_items', { count: inaccessibleItems.length })}`
+        : '';
+      toast.success(`${t('shipping.import.success', { count: importedRows.length })}${skippedMessage}`, { id: toastId });
+    } catch (error) {
+      console.error('Error importing packing list into invoice:', error);
+      if (error?.code === 'PACKING_IMPORT_EMPTY') {
+        toast.error(t('shipping.import.no_items'), { id: toastId });
+      } else if (error?.code === 'PACKING_IMPORT_NO_ACCESS') {
+        toast.error(t('shipping.import.no_accessible_items'), { id: toastId });
+      } else if (error?.code === '42501') {
+        toast.error(t('shipping.saved.permission_error'), { id: toastId });
+      } else {
+        toast.error(error?.message || t('shipping.saved.generic_error'), { id: toastId });
+      }
+    } finally {
+      setIsImportingPacking(false);
+    }
+  };
+
+  const filteredPackingListsForImport = savedPackingListsForImport.filter(record => {
+    const query = packingImportSearch.trim().toLowerCase();
+    if (!query) return true;
+    return [record.packing_no, record.packing_date, record.company_name, record.customer_name]
+      .some(value => String(value || '').toLowerCase().includes(query));
+  });
+
   const normalizeSavedInvoice = (record, { asCopy = false } = {}) => {
     const stored = record?.invoice_data && typeof record.invoice_data === 'object'
       ? record.invoice_data
@@ -590,18 +802,20 @@ const ShippingInvoice = () => {
       : [createEmptyInvoiceRow()];
     const loadedFooter = { ...createEmptyFooterInfo(), ...(stored.footerInfo || {}) };
     const loadedShowImages = Boolean(stored.showImageColumn);
+    const loadedSourcePackingList = stored.sourcePackingList || null;
 
-    return { loadedHeader, loadedRows, loadedFooter, loadedShowImages };
+    return { loadedHeader, loadedRows, loadedFooter, loadedShowImages, loadedSourcePackingList };
   };
 
   const openSavedInvoice = async (record) => {
     if (hasUnsavedChanges && !window.confirm(t('shipping.saved.discard_changes_confirm'))) return;
 
-    const { loadedHeader, loadedRows, loadedFooter, loadedShowImages } = normalizeSavedInvoice(record);
+    const { loadedHeader, loadedRows, loadedFooter, loadedShowImages, loadedSourcePackingList } = normalizeSavedInvoice(record);
     setHeaderInfo(loadedHeader);
     setRows(loadedRows);
     setFooterInfo(loadedFooter);
     setShowImageColumn(loadedShowImages);
+    setSourcePackingList(loadedSourcePackingList);
     setCurrentInvoice({
       id: record.id,
       updated_at: record.updated_at,
@@ -627,11 +841,12 @@ const ShippingInvoice = () => {
   const copySavedInvoice = (record) => {
     if (hasUnsavedChanges && !window.confirm(t('shipping.saved.discard_changes_confirm'))) return;
 
-    const { loadedHeader, loadedRows, loadedFooter, loadedShowImages } = normalizeSavedInvoice(record, { asCopy: true });
+    const { loadedHeader, loadedRows, loadedFooter, loadedShowImages, loadedSourcePackingList } = normalizeSavedInvoice(record, { asCopy: true });
     setHeaderInfo(loadedHeader);
     setRows(loadedRows);
     setFooterInfo(loadedFooter);
     setShowImageColumn(loadedShowImages);
+    setSourcePackingList(loadedSourcePackingList);
     setCurrentInvoice(null);
     setSavedFormSignature(null);
     setShowInvoiceBrowser(false);
@@ -649,6 +864,7 @@ const ShippingInvoice = () => {
     setFooterInfo(nextFooter);
     setShowImageColumn(false);
     setCurrentInvoice(null);
+    setSourcePackingList(null);
     setSavedFormSignature(invoiceStateSignature(nextHeader, nextRows, nextFooter, false));
     toast.success(t('shipping.saved.new_ready'));
   };
@@ -1275,6 +1491,11 @@ ${imgInfo.base64Data}
           <button className="btn btn-outline no-print" onClick={openInvoiceBrowser} style={{ padding: '12px 18px', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#60a5fa', borderColor: '#60a5fa' }}>
             <History size={20} /> {t('shipping.saved.previous_invoices')}
           </button>
+          {hasPermission('shipping-invoice', 'add') && (
+            <button className="btn btn-outline no-print" onClick={openPackingImport} style={{ padding: '12px 18px', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#a78bfa', borderColor: '#a78bfa' }}>
+              <FileDown size={20} /> {t('shipping.import.button')}
+            </button>
+          )}
           {((currentInvoice && hasPermission('shipping-invoice', 'edit')) || (!currentInvoice && hasPermission('shipping-invoice', 'add'))) && (
             <button
               className="btn no-print"
@@ -1699,6 +1920,111 @@ ${imgInfo.base64Data}
 
         </div>
       </div>
+
+      {showPackingImport && (
+        <div className="no-print" style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.82)', zIndex: 10000,
+          display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '1.5rem',
+          backdropFilter: 'blur(6px)'
+        }}>
+          <div className="card fade-in" style={{
+            width: 'min(1100px, 96vw)', maxHeight: '90vh', overflow: 'hidden', padding: 0,
+            border: '2px solid #a78bfa', boxShadow: '0 18px 60px rgba(0,0,0,0.55)',
+            display: 'flex', flexDirection: 'column'
+          }}>
+            <div style={{
+              padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border-color)',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem',
+              background: 'var(--surface-highlight)'
+            }}>
+              <div>
+                <h2 style={{ margin: 0, color: 'var(--text-strong)', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                  <FileDown size={25} color="#a78bfa" />
+                  {t('shipping.import.title')}
+                </h2>
+                <p style={{ margin: '0.35rem 0 0', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                  {t('shipping.import.description')}
+                </p>
+              </div>
+              <button type="button" onClick={() => setShowPackingImport(false)} aria-label={t('shipping.fetch_dialog.cancel')} style={{
+                background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
+                color: '#ef4444', width: '38px', height: '38px', borderRadius: '9px', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center'
+              }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{ padding: '1rem 1.5rem', display: 'flex', gap: '0.75rem', borderBottom: '1px solid var(--border-color)' }}>
+              <div style={{ position: 'relative', flex: 1 }}>
+                <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                <input
+                  type="text"
+                  className="form-control"
+                  value={packingImportSearch}
+                  onChange={event => setPackingImportSearch(event.target.value)}
+                  placeholder={t('shipping.import.search_placeholder')}
+                  style={{ paddingLeft: '40px', width: '100%' }}
+                  autoFocus
+                />
+              </div>
+              <button type="button" className="btn btn-outline" onClick={loadPackingListsForImport} disabled={isLoadingPackingImports} style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                <RefreshCw size={18} className={isLoadingPackingImports ? 'spin' : ''} />
+                {t('shipping.saved.refresh')}
+              </button>
+            </div>
+
+            <div style={{ overflow: 'auto', padding: '1rem 1.5rem 1.5rem' }}>
+              {isLoadingPackingImports ? (
+                <div style={{ padding: '4rem 1rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  <RefreshCw size={30} className="spin" style={{ marginBottom: '0.75rem' }} />
+                  <div>{t('shipping.import.loading')}</div>
+                </div>
+              ) : filteredPackingListsForImport.length === 0 ? (
+                <div style={{ padding: '4rem 1rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  <FileSpreadsheet size={42} style={{ opacity: 0.45, marginBottom: '0.75rem' }} />
+                  <div>{packingImportSearch ? t('shipping.import.no_search_results') : t('shipping.import.empty')}</div>
+                </div>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '820px' }}>
+                  <thead>
+                    <tr style={{ background: 'rgba(var(--accent-rgb),0.08)', color: 'var(--accent-color)' }}>
+                      <th style={{ padding: '0.8rem', textAlign: 'start', borderBottom: '1px solid var(--border-color)' }}>{t('shipping.import.packing_number')}</th>
+                      <th style={{ padding: '0.8rem', textAlign: 'start', borderBottom: '1px solid var(--border-color)' }}>{t('shipping.import.date')}</th>
+                      <th style={{ padding: '0.8rem', textAlign: 'start', borderBottom: '1px solid var(--border-color)' }}>{t('shipping.import.customer')}</th>
+                      <th style={{ padding: '0.8rem', textAlign: 'center', borderBottom: '1px solid var(--border-color)' }}>{t('shipping.import.cartons')}</th>
+                      <th style={{ padding: '0.8rem', textAlign: 'center', borderBottom: '1px solid var(--border-color)' }}>{t('shipping.import.pieces')}</th>
+                      <th style={{ padding: '0.8rem', textAlign: 'center', borderBottom: '1px solid var(--border-color)' }}>{t('shipping.import.actions')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredPackingListsForImport.map(record => (
+                      <tr key={record.id}>
+                        <td style={{ padding: '0.85rem', borderBottom: '1px solid var(--border-color)', fontWeight: 'bold' }}>{record.packing_no}</td>
+                        <td style={{ padding: '0.85rem', borderBottom: '1px solid var(--border-color)' }}>{record.packing_date || '-'}</td>
+                        <td style={{ padding: '0.85rem', borderBottom: '1px solid var(--border-color)' }}>{record.customer_name || record.company_name || '-'}</td>
+                        <td style={{ padding: '0.85rem', borderBottom: '1px solid var(--border-color)', textAlign: 'center' }}>{record.total_cartons ?? 0}</td>
+                        <td style={{ padding: '0.85rem', borderBottom: '1px solid var(--border-color)', textAlign: 'center' }}>{record.total_pieces ?? 0}</td>
+                        <td style={{ padding: '0.7rem', borderBottom: '1px solid var(--border-color)', textAlign: 'center' }}>
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            onClick={() => importPackingList(record)}
+                            disabled={isImportingPacking}
+                            style={{ padding: '0.5rem 0.9rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+                          >
+                            <FileDown size={16} /> {t('shipping.import.action')}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {showInvoiceBrowser && (
         <div className="no-print" style={{

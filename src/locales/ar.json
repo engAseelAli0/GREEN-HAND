@@ -1020,6 +1020,28 @@
       "delete_confirm": "هل تريد حذف الفاتورة {{invoice}} نهائيًا؟",
       "deleting": "جاري حذف الفاتورة...",
       "delete_success": "تم حذف الفاتورة بنجاح"
+    },
+    "import": {
+      "button": "استيراد من قائمة التعبئة",
+      "title": "استيراد قائمة تعبئة",
+      "description": "اختر قائمة تعبئة محفوظة واحدة لإنشاء مسودة فاتورة جديدة مع أسعار المنتجات.",
+      "search_placeholder": "ابحث برقم قائمة التعبئة أو التاريخ أو الشركة أو العميل...",
+      "loading": "جاري تحميل قوائم التعبئة المحفوظة...",
+      "empty": "لا توجد قوائم تعبئة محفوظة",
+      "no_search_results": "لا توجد قوائم تعبئة مطابقة للبحث",
+      "packing_number": "رقم قائمة التعبئة",
+      "date": "التاريخ",
+      "customer": "العميل",
+      "cartons": "الكراتين",
+      "pieces": "القطع",
+      "actions": "الإجراءات",
+      "action": "استيراد",
+      "importing": "جاري استيراد قائمة التعبئة...",
+      "success": "تم استيراد {{count}} منتجات. أدخل رقم فاتورة فريدًا قبل الحفظ.",
+      "skipped_items": "(تم تجاهل {{count}} أصناف غير مسموحة)",
+      "no_items": "قائمة التعبئة لا تحتوي على أصناف بكميات.",
+      "no_accessible_items": "لم يتم العثور على أصناف مسموحة في قائمة التعبئة.",
+      "packing_table_missing": "تخزين قوائم التعبئة غير مفعّل في Supabase بعد."
     }
   },
   "packing": {
@@ -1207,8 +1229,8 @@
     "footer": {
       "shipping_date": "Shipping Date",
       "shipping_date_zh": "出货日期",
-      "cabinet_no": "Cabinet Number",
-      "cabinet_no_zh": "柜号",
+      "cabinet_no": "Container Number",
+      "cabinet_no_zh": "集装箱号",
       "shipper": "Shipper",
       "shipper_zh": "出货人"
     },

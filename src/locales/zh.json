@@ -1016,6 +1016,28 @@
       "delete_confirm": "永久删除发票 {{invoice}}？",
       "deleting": "正在删除发票...",
       "delete_success": "发票删除成功"
+    },
+    "import": {
+      "button": "从装箱单导入",
+      "title": "导入装箱单",
+      "description": "选择一份已保存的装箱单，创建带有产品价格的新发票草稿。",
+      "search_placeholder": "按装箱单号、日期、公司或客户搜索...",
+      "loading": "正在加载已保存的装箱单...",
+      "empty": "暂无已保存的装箱单",
+      "no_search_results": "没有匹配的装箱单",
+      "packing_number": "装箱单号",
+      "date": "日期",
+      "customer": "客户",
+      "cartons": "箱数",
+      "pieces": "件数",
+      "actions": "操作",
+      "action": "导入",
+      "importing": "正在导入装箱单...",
+      "success": "已导入 {{count}} 个产品。保存前请输入唯一发票号。",
+      "skipped_items": "（已跳过 {{count}} 个无权限产品）",
+      "no_items": "此装箱单没有带数量的产品。",
+      "no_accessible_items": "此装箱单中没有可访问的产品。",
+      "packing_table_missing": "Supabase 尚未启用装箱单存储。"
     }
   },
   "packing": {
@@ -1203,8 +1225,8 @@
     "footer": {
       "shipping_date": "发货日期",
       "shipping_date_zh": "出货日期",
-      "cabinet_no": "柜号",
-      "cabinet_no_zh": "柜号",
+      "cabinet_no": "Container Number",
+      "cabinet_no_zh": "集装箱号",
       "shipper": "发货人",
       "shipper_zh": "出货人"
     },

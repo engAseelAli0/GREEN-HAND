@@ -13,11 +13,10 @@ import { useFilteredLookups } from '../hooks/useFilteredLookups';
 import { isOrderAllowedForUser } from '../utils/permissionUtils';
 
 const WarehouseReceipt = () => {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const { lookups } = useAppData();
   const { user, hasPermission } = useAuth();
   const filteredLookups = useFilteredLookups();
-  const isChineseLanguage = (i18n.resolvedLanguage || i18n.language || '').toLowerCase().startsWith('zh');
   const [orders, setOrders] = useState([]);
   const [receivings, setReceivings] = useState([]);
   const [filteredData, setFilteredData] = useState([]);
@@ -228,7 +227,6 @@ const WarehouseReceipt = () => {
             productName: oData.productName,
             ccy: oData.currency || 'RMB',
             cartonSize: oData.cartonSize || '-',
-            remarks: oData.remarks || '',
             totalCtn: serialTotalCtn,
             totalProd: serialTotalProd,
             totalAmount: serialTotalPrice,
@@ -573,27 +571,27 @@ const WarehouseReceipt = () => {
             {/* Header Form Settings (Visible on screen, looks like text on print) */}
             <div className="hide-on-print" style={{ marginBottom: '1.5rem', padding: '1rem', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', direction: 'rtl' }}>
                 <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label style={{ fontSize: '0.8rem', color: '#64748b' }}>{t('warehouse.header.buyer_no')}</label>
+                    <label style={{ fontSize: '0.8rem', color: '#64748b' }}>{t('warehouse.header.buyer_no', { lng: 'en' })} / {t('warehouse.header.buyer_no_zh', { lng: 'en' })}</label>
                     <input type="text" value={headerInfo.buyerNo} onChange={e => updateHeaderInfo('buyerNo', e.target.value)} style={{ width: '100%', padding: '0.4rem', border: '1px solid #cbd5e1', borderRadius: '4px' }} />
                 </div>
                 <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label style={{ fontSize: '0.8rem', color: '#64748b' }}>{t('warehouse.header.supplier')}</label>
+                    <label style={{ fontSize: '0.8rem', color: '#64748b' }}>{t('warehouse.header.supplier', { lng: 'en' })} / {t('warehouse.header.supplier_zh', { lng: 'en' })}</label>
                     <input type="text" value={headerInfo.supplier} onChange={e => updateHeaderInfo('supplier', e.target.value)} style={{ width: '100%', padding: '0.4rem', border: '1px solid #cbd5e1', borderRadius: '4px' }} />
                 </div>
                 <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label style={{ fontSize: '0.8rem', color: '#64748b' }}>{t('warehouse.header.consignee')}</label>
+                    <label style={{ fontSize: '0.8rem', color: '#64748b' }}>{t('warehouse.header.consignee', { lng: 'en' })} / {t('warehouse.header.consignee_zh', { lng: 'en' })}</label>
                     <input type="text" value={headerInfo.consignee} onChange={e => updateHeaderInfo('consignee', e.target.value)} style={{ width: '100%', padding: '0.4rem', border: '1px solid #cbd5e1', borderRadius: '4px' }} />
                 </div>
                 <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label style={{ fontSize: '0.8rem', color: '#64748b' }}>{t('warehouse.header.inspector')}</label>
+                    <label style={{ fontSize: '0.8rem', color: '#64748b' }}>{t('warehouse.header.inspector', { lng: 'en' })} / {t('warehouse.header.inspector_zh', { lng: 'en' })}</label>
                     <input type="text" value={headerInfo.inspector} onChange={e => updateHeaderInfo('inspector', e.target.value)} style={{ width: '100%', padding: '0.4rem', border: '1px solid #cbd5e1', borderRadius: '4px' }} />
                 </div>
                 <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label style={{ fontSize: '0.8rem', color: '#64748b' }}>{t('warehouse.header.order_no')}</label>
+                    <label style={{ fontSize: '0.8rem', color: '#64748b' }}>{t('warehouse.header.order_no', { lng: 'en' })} / {t('warehouse.header.order_no_zh', { lng: 'en' })}</label>
                     <input type="text" value={headerInfo.orderNo} onChange={e => updateHeaderInfo('orderNo', e.target.value)} style={{ width: '100%', padding: '0.4rem', border: '1px solid #cbd5e1', borderRadius: '4px' }} />
                 </div>
                 <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label style={{ fontSize: '0.8rem', color: '#64748b' }}>{t('warehouse.header.receipt_date')}</label>
+                    <label style={{ fontSize: '0.8rem', color: '#64748b' }}>{t('warehouse.header.receipt_date', { lng: 'en' })} / {t('warehouse.header.receipt_date_zh', { lng: 'en' })}</label>
                     <input type="date" value={headerInfo.receiptDate} onChange={e => updateHeaderInfo('receiptDate', e.target.value)} style={{ width: '100%', padding: '0.4rem', border: '1px solid #cbd5e1', borderRadius: '4px' }} />
                 </div>
             </div>
@@ -601,10 +599,10 @@ const WarehouseReceipt = () => {
             {/* Print Header */}
             <div className="print-header" style={{ textAlign: 'center', marginBottom: '1rem', paddingBottom: '0.6rem', borderBottom: '4px solid #0f172a' }}>
                 <h1 style={{ fontSize: '2.35rem', margin: 0, color: '#0f172a', fontWeight: '900', letterSpacing: '0' }}>
-                    {isChineseLanguage ? t('warehouse.title', { lng: 'en' }) : t('warehouse.title')}
+                    {t('warehouse.title', { lng: 'en' })}
                 </h1>
                 <h2 style={{ fontSize: '1.55rem', margin: '0.2rem 0 0', color: '#1e293b', fontWeight: 'bold' }}>
-                    {isChineseLanguage ? t('warehouse.title') : t('warehouse.subtitle').split(' - ')[1]}
+                    {t('warehouse.subtitle', { lng: 'en' }).split(' - ')[1]}
                 </h2>
             </div>
 
@@ -612,44 +610,44 @@ const WarehouseReceipt = () => {
             <div className="info-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1px', backgroundColor: '#475569', border: '2px solid #0f172a', marginBottom: '1rem' }}>
                 <div style={{ display: 'flex', backgroundColor: '#fff' }}>
                     <div className="info-label" style={{ width: '40%', padding: '9px', backgroundColor: '#cbd5e1', fontWeight: 'bold', fontSize: '0.95rem', color: '#0f172a', borderRight: '1px solid #475569' }}>
-                        <div>{t('warehouse.header.buyer_no').split(' (')[0]}</div>
-                        <div style={{ color: '#ef4444', fontSize: '0.75rem' }}>{t('warehouse.header.buyer_no_zh')}:</div>
+                        <div>{t('warehouse.header.buyer_no', { lng: 'en' })}</div>
+                        <div style={{ color: '#ef4444', fontSize: '0.75rem' }}>{t('warehouse.header.buyer_no_zh', { lng: 'en' })}:</div>
                     </div>
                     <div style={{ width: '60%', padding: '9px', fontSize: '0.95rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{headerInfo.buyerNo || '-'}</div>
                 </div>
                 <div style={{ display: 'flex', backgroundColor: '#fff' }}>
                     <div className="info-label" style={{ width: '40%', padding: '9px', backgroundColor: '#cbd5e1', fontWeight: 'bold', fontSize: '0.95rem', color: '#0f172a', borderRight: '1px solid #475569' }}>
-                        <div>{t('warehouse.header.supplier').split(' (')[0]}</div>
-                        <div style={{ color: '#ef4444', fontSize: '0.75rem' }}>{t('warehouse.header.supplier_zh')}:</div>
+                        <div>{t('warehouse.header.supplier', { lng: 'en' })}</div>
+                        <div style={{ color: '#ef4444', fontSize: '0.75rem' }}>{t('warehouse.header.supplier_zh', { lng: 'en' })}:</div>
                     </div>
                     <div style={{ width: '60%', padding: '9px', fontSize: '0.95rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{headerInfo.supplier || '-'}</div>
                 </div>
                 <div style={{ display: 'flex', backgroundColor: '#fff' }}>
                     <div className="info-label" style={{ width: '40%', padding: '9px', backgroundColor: '#cbd5e1', fontWeight: 'bold', fontSize: '0.95rem', color: '#0f172a', borderRight: '1px solid #475569' }}>
-                        <div>{t('warehouse.header.consignee').split(' (')[0]}</div>
-                        <div style={{ color: '#ef4444', fontSize: '0.75rem' }}>{t('warehouse.header.consignee_zh')}:</div>
+                        <div>{t('warehouse.header.consignee', { lng: 'en' })}</div>
+                        <div style={{ color: '#ef4444', fontSize: '0.75rem' }}>{t('warehouse.header.consignee_zh', { lng: 'en' })}:</div>
                     </div>
                     <div style={{ width: '60%', padding: '9px', fontSize: '0.95rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{headerInfo.consignee || '-'}</div>
                 </div>
                 
                 <div style={{ display: 'flex', backgroundColor: '#fff' }}>
                     <div className="info-label" style={{ width: '40%', padding: '9px', backgroundColor: '#cbd5e1', fontWeight: 'bold', fontSize: '0.95rem', color: '#0f172a', borderRight: '1px solid #475569' }}>
-                        <div>{t('warehouse.header.receipt_date').split(' (')[0]}</div>
-                        <div style={{ color: '#ef4444', fontSize: '0.75rem' }}>{t('warehouse.header.receipt_date_zh')}:</div>
+                        <div>{t('warehouse.header.receipt_date', { lng: 'en' })}</div>
+                        <div style={{ color: '#ef4444', fontSize: '0.75rem' }}>{t('warehouse.header.receipt_date_zh', { lng: 'en' })}:</div>
                     </div>
                     <div style={{ width: '60%', padding: '9px', fontSize: '0.95rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{headerInfo.receiptDate || '-'}</div>
                 </div>
                 <div style={{ display: 'flex', backgroundColor: '#fff' }}>
                     <div className="info-label" style={{ width: '40%', padding: '9px', backgroundColor: '#cbd5e1', fontWeight: 'bold', fontSize: '0.95rem', color: '#0f172a', borderRight: '1px solid #475569' }}>
-                        <div>{t('warehouse.header.order_no').split(' (')[0]}</div>
-                        <div style={{ color: '#ef4444', fontSize: '0.75rem' }}>{t('warehouse.header.order_no_zh')}:</div>
+                        <div>{t('warehouse.header.order_no', { lng: 'en' })}</div>
+                        <div style={{ color: '#ef4444', fontSize: '0.75rem' }}>{t('warehouse.header.order_no_zh', { lng: 'en' })}:</div>
                     </div>
                     <div style={{ width: '60%', padding: '9px', fontSize: '0.95rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{headerInfo.orderNo || '-'}</div>
                 </div>
                 <div style={{ display: 'flex', backgroundColor: '#fff' }}>
                     <div className="info-label" style={{ width: '40%', padding: '9px', backgroundColor: '#cbd5e1', fontWeight: 'bold', fontSize: '0.95rem', color: '#0f172a', borderRight: '1px solid #475569' }}>
-                        <div>{t('warehouse.header.inspector').split(' (')[0]}</div>
-                        <div style={{ color: '#ef4444', fontSize: '0.75rem' }}>{t('warehouse.header.inspector_zh')}:</div>
+                        <div>{t('warehouse.header.inspector', { lng: 'en' })}</div>
+                        <div style={{ color: '#ef4444', fontSize: '0.75rem' }}>{t('warehouse.header.inspector_zh', { lng: 'en' })}:</div>
                     </div>
                     <div style={{ width: '60%', padding: '9px', fontSize: '0.95rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{headerInfo.inspector || '-'}</div>
                 </div>
@@ -660,64 +658,60 @@ const WarehouseReceipt = () => {
                 <thead>
                     <tr style={{ backgroundColor: '#cbd5e1', textAlign: 'center' }}>
                         <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', borderBottom: '2px solid #0f172a', width: '6%' }}>
-                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.carton_no_zh')}</div>
-                            <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.carton_no')}</div>
+                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.carton_no_zh', { lng: 'en' })}</div>
+                            <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.carton_no', { lng: 'en' })}</div>
                         </th>
                         <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', borderBottom: '2px solid #0f172a', width: '8%' }}>
-                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.item_no_zh')}</div>
-                            <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.item_no')}</div>
+                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.item_no_zh', { lng: 'en' })}</div>
+                            <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.item_no', { lng: 'en' })}</div>
                         </th>
                         <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', borderBottom: '2px solid #0f172a', width: '8%' }}>
-                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.received_at_zh')}</div>
-                            <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.received_at')}</div>
+                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.received_at_zh', { lng: 'en' })}</div>
+                            <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.received_at', { lng: 'en' })}</div>
                         </th>
                         <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', borderBottom: '2px solid #0f172a', width: '10%' }}>
-                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.product_name_zh')}</div>
-                            <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.product_name')}</div>
+                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.product_name_zh', { lng: 'en' })}</div>
+                            <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.product_name', { lng: 'en' })}</div>
                         </th>
                         <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', borderBottom: '2px solid #0f172a', width: '5%' }}>
-                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.ctns_qty_zh')}</div>
-                            <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.ctns_qty')}</div>
+                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.ctns_qty_zh', { lng: 'en' })}</div>
+                            <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.ctns_qty', { lng: 'en' })}</div>
                         </th>
                         <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', borderBottom: '2px solid #0f172a', width: '6%' }}>
-                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.ctn_pcs_zh')}</div>
-                            <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.ctn_pcs')}</div>
+                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.ctn_pcs_zh', { lng: 'en' })}</div>
+                            <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.ctn_pcs', { lng: 'en' })}</div>
                         </th>
                         <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', borderBottom: '2px solid #0f172a', width: '6%' }}>
-                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.item_qty_zh')}</div>
-                            <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.item_qty')}</div>
+                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.item_qty_zh', { lng: 'en' })}</div>
+                            <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.item_qty', { lng: 'en' })}</div>
                         </th>
                         <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', borderBottom: '2px solid #0f172a', width: '6%' }}>
-                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.total_qty_zh')}</div>
-                            <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.total_qty')}</div>
+                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.total_qty_zh', { lng: 'en' })}</div>
+                            <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.total_qty', { lng: 'en' })}</div>
                         </th>
                         <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', borderBottom: '2px solid #0f172a', width: '4%' }}>
-                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.ccy_zh')}</div>
-                            <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.ccy')}</div>
+                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.ccy_zh', { lng: 'en' })}</div>
+                            <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.ccy', { lng: 'en' })}</div>
                         </th>
                         <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', borderBottom: '2px solid #0f172a', width: '7%' }}>
-                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.unit_price_zh')}</div>
-                            <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.unit_price')}</div>
+                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.unit_price_zh', { lng: 'en' })}</div>
+                            <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.unit_price', { lng: 'en' })}</div>
                         </th>
                         <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', borderBottom: '2px solid #0f172a', width: '7%' }}>
-                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.total_price_zh')}</div>
-                            <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.total_price')}</div>
+                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.total_price_zh', { lng: 'en' })}</div>
+                            <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.total_price', { lng: 'en' })}</div>
                         </th>
                         <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', borderBottom: '2px solid #0f172a', width: '8%' }}>
-                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.tot_amount_zh')}</div>
-                            <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.tot_amount')}</div>
+                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.tot_amount_zh', { lng: 'en' })}</div>
+                            <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.tot_amount', { lng: 'en' })}</div>
                         </th>
                         <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', borderBottom: '2px solid #0f172a', width: '7%' }}>
-                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.carton_size_zh')}</div>
-                            <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.carton_size')}</div>
+                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.carton_size_zh', { lng: 'en' })}</div>
+                            <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.carton_size', { lng: 'en' })}</div>
                         </th>
                         <th style={{ padding: '8px 4px', borderRight: '1px solid #94a3b8', borderBottom: '2px solid #0f172a', width: '5%' }}>
-                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.cbm_zh')}</div>
-                            <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.cbm')}</div>
-                        </th>
-                        <th style={{ padding: '8px 4px', borderBottom: '2px solid #0f172a', width: '5%' }}>
-                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.remarks_zh')}</div>
-                            <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.remarks')}</div>
+                            <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.9rem' }}>{t('warehouse.table.cols.cbm_zh', { lng: 'en' })}</div>
+                            <div style={{ fontSize: '0.7rem' }}>{t('warehouse.table.cols.cbm', { lng: 'en' })}</div>
                         </th>
                     </tr>
                 </thead>
@@ -785,10 +779,7 @@ const WarehouseReceipt = () => {
                                     <td style={{ padding: '4px', borderRight: tBorderStyle, fontSize: '0.75rem', borderBottom: bottomBorder, backgroundColor: rowBg, verticalAlign: 'middle' }}>{order.cartonSize}</td>
                                     
                                     {isFirstPkg && (
-                                        <>
-                                            <td rowSpan={rowSpan} style={{ padding: '4px', borderRight: tBorderStyle, borderBottom: '1px solid #334155', backgroundColor: rowBg, verticalAlign: 'middle', position: 'relative', zIndex: 2 }}>{pkg.cbm}</td>
-                                            <td rowSpan={rowSpan} style={{ padding: '4px', fontSize: '0.75rem', borderBottom: '1px solid #334155', backgroundColor: rowBg, verticalAlign: 'middle', position: 'relative', zIndex: 2 }}>{order.remarks}</td>
-                                        </>
+                                        <td rowSpan={rowSpan} style={{ padding: '4px', borderRight: tBorderStyle, borderBottom: '1px solid #334155', backgroundColor: rowBg, verticalAlign: 'middle', position: 'relative', zIndex: 2 }}>{pkg.cbm}</td>
                                     )}
                                 </tr>
                             );
@@ -805,7 +796,7 @@ const WarehouseReceipt = () => {
                         <td style={{ padding: '10px 4px', borderRight: '1px solid #94a3b8', borderBottom: '2px solid #0f172a', borderTop: '2px solid #0f172a', color: '#1e293b', backgroundColor: '#cbd5e1' }}>{grandTotalItems} {t('warehouse.results.models_count')}</td>
                         <td colSpan={2} style={{ padding: '10px 4px', borderRight: '1px solid #94a3b8', borderBottom: '2px solid #0f172a', borderTop: '2px solid #0f172a', color: '#1e293b', backgroundColor: '#cbd5e1' }}>{grandTotalCtn} {t('shipping.footer.ctn', { defaultValue: 'كرتون CTN' })}</td>
                         <td colSpan={2} style={{ padding: '10px 4px', borderRight: '1px solid #94a3b8', borderBottom: '2px solid #0f172a', borderTop: '2px solid #0f172a', color: '#1e293b', backgroundColor: '#cbd5e1' }}>{grandTotalPcs} {t('shipping.footer.pcs', { defaultValue: 'قطعة PCS' })}</td>
-                        <td colSpan={7} style={{ padding: '10px 4px', borderBottom: '2px solid #0f172a', borderTop: '2px solid #0f172a', color: '#1e293b', fontSize: '1.1rem', backgroundColor: '#cbd5e1' }}>{grandTotalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })} ¥ RMB</td>
+                        <td colSpan={6} style={{ padding: '10px 4px', borderBottom: '2px solid #0f172a', borderTop: '2px solid #0f172a', color: '#1e293b', fontSize: '1.1rem', backgroundColor: '#cbd5e1' }}>{grandTotalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })} ¥ RMB</td>
                     </tr>
                 </tbody>
             </table>
@@ -814,26 +805,26 @@ const WarehouseReceipt = () => {
             <div className="receipt-footer-block" style={{ marginTop: '1.5rem', paddingTop: 0 }}>
                 <div className="footer-summary" style={{ display: 'flex', justifyContent: 'space-between', padding: '1rem', backgroundColor: '#e2e8f0', border: '2px solid #334155', borderRadius: '6px', fontSize: '1rem', fontWeight: 'bold', color: '#0f172a', flexWrap: 'wrap', gap: '1rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <span style={{ color: '#ef4444' }}>{t('warehouse.footer.shipping_date_zh')}</span>
-                        <span>{t('warehouse.footer.shipping_date')}:</span>
+                        <span style={{ color: '#ef4444' }}>{t('warehouse.footer.shipping_date_zh', { lng: 'en' })}</span>
+                        <span>{t('warehouse.footer.shipping_date', { lng: 'en' })}:</span>
                         <input className="hide-on-print" type="date" value={headerInfo.shippingDate} onChange={e => updateHeaderInfo('shippingDate', e.target.value)} style={{ padding: '0.2rem', border: '1px solid #cbd5e1', borderRadius: '4px' }} />
                         <span className="print-only-inline" style={{ display: 'none' }}>{headerInfo.shippingDate || '------------------'}</span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <span style={{ color: '#ef4444' }}>{t('warehouse.footer.cabinet_no_zh')}</span>
-                        <span>{t('warehouse.footer.cabinet_no')}:</span>
+                        <span style={{ color: '#ef4444' }}>{t('warehouse.footer.cabinet_no_zh', { lng: 'en' })}</span>
+                        <span>{t('warehouse.footer.cabinet_no', { lng: 'en' })}:</span>
                         <input className="hide-on-print" type="text" value={headerInfo.cabinetNumber} onChange={e => updateHeaderInfo('cabinetNumber', e.target.value)} style={{ padding: '0.2rem', border: '1px solid #cbd5e1', borderRadius: '4px' }} />
                         <span className="print-only-inline" style={{ display: 'none' }}>{headerInfo.cabinetNumber || '------------------'}</span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <span style={{ color: '#ef4444' }}>{t('warehouse.footer.shipper_zh')}</span>
-                        <span>{t('warehouse.footer.shipper')}:</span>
+                        <span style={{ color: '#ef4444' }}>{t('warehouse.footer.shipper_zh', { lng: 'en' })}</span>
+                        <span>{t('warehouse.footer.shipper', { lng: 'en' })}:</span>
                         <input className="hide-on-print" type="text" value={headerInfo.shipper} onChange={e => updateHeaderInfo('shipper', e.target.value)} style={{ padding: '0.2rem', border: '1px solid #cbd5e1', borderRadius: '4px' }} />
                         <span className="print-only-inline" style={{ display: 'none' }}>{headerInfo.shipper || '------------------'}</span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <span style={{ color: '#ef4444' }}>{t('warehouse.header.inspector_zh')}:</span>
-                        <span>{t('warehouse.header.inspector')}:</span>
+                        <span style={{ color: '#ef4444' }}>{t('warehouse.header.inspector_zh', { lng: 'en' })}:</span>
+                        <span>{t('warehouse.header.inspector', { lng: 'en' })}:</span>
                         <input className="hide-on-print" type="text" value={headerInfo.inspector} onChange={e => updateHeaderInfo('inspector', e.target.value)} style={{ padding: '0.2rem', border: '1px solid #cbd5e1', borderRadius: '4px' }} />
                         <span className="print-only-inline" style={{ display: 'none' }}>{headerInfo.inspector || '------------------'}</span>
                     </div>
@@ -841,8 +832,8 @@ const WarehouseReceipt = () => {
 
                 <div style={{ marginTop: '1rem', display: 'flex', gap: '1.5rem', alignItems: 'center', color: '#0f172a', fontWeight: 'bold' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <span>{t('warehouse.header.company_phone')}</span>
-                        <span style={{ color: '#ef4444' }}>{t('warehouse.header.company_phone_zh')}:</span>
+                        <span>{t('warehouse.header.company_phone', { lng: 'en' })}</span>
+                        <span style={{ color: '#ef4444' }}>{t('warehouse.header.company_phone_zh', { lng: 'en' })}:</span>
                     </div>
                     <div style={{ display: 'flex', gap: '2rem', fontSize: '1.1rem' }}>
                         <input className="hide-on-print" type="text" value={headerInfo.companyPhone} onChange={e => updateHeaderInfo('companyPhone', e.target.value)} style={{ width: '300px', padding: '0.2rem', border: '1px solid #cbd5e1', borderRadius: '4px' }} />

@@ -20,14 +20,18 @@ const BackupRestore = () => {
         { data: lookups, error: errLookups },
         { data: users, error: errUsers },
         { data: shippingInvoices, error: rawShippingInvoicesError },
-        { data: packingLists, error: rawPackingListsError }
+        { data: packingLists, error: rawPackingListsError },
+        { data: companyReceivings, error: rawCompanyReceivingsError },
+        { data: factoryReceivings, error: rawFactoryReceivingsError }
       ] = await Promise.all([
         supabase.from('orders').select('*'),
         supabase.from('receivings').select('*'),
         supabase.from('lookup_settings').select('*'),
         supabase.from('system_users').select('*'),
         supabase.from('shipping_invoices').select('*'),
-        supabase.from('packing_lists').select('*')
+        supabase.from('packing_lists').select('*'),
+        supabase.from('company_receivings').select('*'),
+        supabase.from('factory_receivings').select('*')
       ]);
 
       // Older deployments may not have the saved-invoices migration yet.
@@ -37,15 +41,21 @@ const BackupRestore = () => {
       const errPackingLists = rawPackingListsError?.code === 'PGRST205'
         ? null
         : rawPackingListsError;
+      const errCompanyReceivings = rawCompanyReceivingsError?.code === 'PGRST205'
+        ? null
+        : rawCompanyReceivingsError;
+      const errFactoryReceivings = rawFactoryReceivingsError?.code === 'PGRST205'
+        ? null
+        : rawFactoryReceivingsError;
 
-      if (errOrders || errReceivings || errLookups || errUsers || errShippingInvoices || errPackingLists) {
+      if (errOrders || errReceivings || errLookups || errUsers || errShippingInvoices || errPackingLists || errCompanyReceivings || errFactoryReceivings) {
         throw new Error(
-          (errOrders?.message || errReceivings?.message || errLookups?.message || errUsers?.message || errShippingInvoices?.message || errPackingLists?.message) || 'Error reading data'
+          (errOrders?.message || errReceivings?.message || errLookups?.message || errUsers?.message || errShippingInvoices?.message || errPackingLists?.message || errCompanyReceivings?.message || errFactoryReceivings?.message) || 'Error reading data'
         );
       }
 
       const backupData = {
-        version: '1.2.0',
+        version: '1.3.0',
         timestamp: new Date().toISOString(),
         data: {
           orders: orders || [],
@@ -53,7 +63,9 @@ const BackupRestore = () => {
           lookup_settings: lookups || [],
           system_users: users || [],
           shipping_invoices: shippingInvoices || [],
-          packing_lists: packingLists || []
+          packing_lists: packingLists || [],
+          company_receivings: companyReceivings || [],
+          factory_receivings: factoryReceivings || []
         }
       };
 
@@ -103,7 +115,7 @@ const BackupRestore = () => {
             throw new Error('الملف المرفوع ليس ملف نسخة احتياطية صالح لـ Green Hand.');
           }
 
-          const { orders, receivings, lookup_settings, system_users, shipping_invoices, packing_lists } = backupObj.data;
+          const { orders, receivings, lookup_settings, system_users, shipping_invoices, packing_lists, company_receivings, factory_receivings } = backupObj.data;
 
           // 1. Restore lookup_settings (upsert)
           if (Array.isArray(lookup_settings) && lookup_settings.length > 0) {
@@ -139,6 +151,17 @@ const BackupRestore = () => {
           if (Array.isArray(packing_lists) && packing_lists.length > 0) {
             const { error: err } = await supabase.from('packing_lists').upsert(packing_lists);
             if (err) throw new Error(`Packing lists restore error: ${err.message}`);
+          }
+
+          // 7. Restore dedicated receiving records (available in backup version 1.3+)
+          if (Array.isArray(company_receivings) && company_receivings.length > 0) {
+            const { error: err } = await supabase.from('company_receivings').upsert(company_receivings);
+            if (err) throw new Error(`Company receivings restore error: ${err.message}`);
+          }
+
+          if (Array.isArray(factory_receivings) && factory_receivings.length > 0) {
+            const { error: err } = await supabase.from('factory_receivings').upsert(factory_receivings);
+            if (err) throw new Error(`Factory receivings restore error: ${err.message}`);
           }
 
           toast.success(t('backup.import_success', { defaultValue: 'تم استعادة البيانات وتحديث قاعدة البيانات بنجاح!' }), { id: toastId });

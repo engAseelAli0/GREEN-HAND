@@ -1024,6 +1024,28 @@
       "delete_confirm": "Delete invoice {{invoice}} permanently?",
       "deleting": "Deleting invoice...",
       "delete_success": "Invoice deleted successfully"
+    },
+    "import": {
+      "button": "Import from Packing List",
+      "title": "Import a Packing List",
+      "description": "Select one saved Packing List to create a new invoice draft with product prices.",
+      "search_placeholder": "Search by Packing List number, date, company, or customer...",
+      "loading": "Loading saved Packing Lists...",
+      "empty": "No saved Packing Lists yet",
+      "no_search_results": "No Packing Lists match your search",
+      "packing_number": "Packing List No.",
+      "date": "Date",
+      "customer": "Customer",
+      "cartons": "Cartons",
+      "pieces": "Pieces",
+      "actions": "Actions",
+      "action": "Import",
+      "importing": "Importing Packing List...",
+      "success": "{{count}} products imported. Enter a unique invoice number before saving.",
+      "skipped_items": "({{count}} inaccessible products skipped)",
+      "no_items": "This Packing List has no products with quantities.",
+      "no_accessible_items": "No accessible products were found in this Packing List.",
+      "packing_table_missing": "Packing List storage is not activated in Supabase yet."
     }
   },
   "packing": {
@@ -1211,8 +1233,8 @@
     "footer": {
       "shipping_date": "Shipping Date",
       "shipping_date_zh": "出货日期",
-      "cabinet_no": "Cabinet Number",
-      "cabinet_no_zh": "柜号",
+      "cabinet_no": "Container Number",
+      "cabinet_no_zh": "集装箱号",
       "shipper": "Shipper",
       "shipper_zh": "出货人"
     },

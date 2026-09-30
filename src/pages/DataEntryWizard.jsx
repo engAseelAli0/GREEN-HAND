@@ -16,6 +16,18 @@ import { logAuditEvent } from '../utils/auditLogger';
 import { isOrderAllowedForUser, fetchAllowedSerials } from '../utils/permissionUtils';
 import { sanitizeItemCode } from '../utils/textUtils';
 
+const sumColorDistribution = (distribution, colors) => {
+  const colorNames = Array.isArray(colors) ? colors : Object.keys(distribution || {});
+  return colorNames.reduce((total, colorName) => {
+    const sizes = distribution?.[colorName];
+    if (!sizes || typeof sizes !== 'object') return total;
+    return total + Object.values(sizes).reduce((colorTotal, value) => {
+      const quantity = parseInt(value, 10);
+      return colorTotal + (Number.isFinite(quantity) && quantity > 0 ? quantity : 0);
+    }, 0);
+  }, 0);
+};
+
 const ClearableSelect = ({ value, onChange, children, className = "form-control", style, disabled, clearTitle }) => {
   const { t } = useTranslation();
   return (
@@ -900,21 +912,24 @@ const DataEntryWizard = () => {
       toast.error(lockedMessage, { id: 'received-locked-toast' });
       return;
     }
-    setSelectedColorsArr(prev => {
-      let nextArr;
-      if (prev.includes(colorName)) {
-        nextArr = prev.filter(c => c !== colorName);
-      } else {
-        nextArr = [...prev, colorName];
-      }
-      
-      if (nextArr.length === 0) {
-        const dist = { ...(currentOrder.colorDistribution || {}) };
-        delete dist[colorName];
-        updateOrder('colorDistribution', dist);
-      }
-      return nextArr;
+    const wasSelected = selectedColorsArr.includes(colorName);
+    const nextArr = wasSelected
+      ? selectedColorsArr.filter(c => c !== colorName)
+      : [...selectedColorsArr, colorName];
+    const currentDistribution = currentOrder.colorDistribution || {};
+
+    // Keep the distribution in sync with the visible color list. Previously
+    // a color was removed from the data only when it was the last selected
+    // color, leaving its quantities included in totalQuantity.
+    const nextDistribution = {};
+    nextArr.forEach(color => {
+      nextDistribution[color] = { ...(currentDistribution[color] || {}) };
     });
+    const nextTotal = sumColorDistribution(nextDistribution, nextArr);
+
+    setSelectedColorsArr(nextArr);
+    updateOrder('colorDistribution', nextDistribution);
+    updateOrder('totalQuantity', nextTotal > 0 ? String(nextTotal) : '');
   };
 
   useEffect(() => {

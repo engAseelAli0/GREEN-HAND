@@ -2,11 +2,18 @@ import React, { useState, useRef } from 'react';
 import { useAppData } from '../context/AppDataContext';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../supabaseClient';
-import { Search, Save, Factory, AlertCircle, Info, Palette, CheckCircle2, X, Box } from 'lucide-react';
+import { Search, Save, Factory, AlertCircle, Info, Palette, CheckCircle2, X, Box, History } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
 import { extractColorCSS } from '../utils/textUtils';
 import { isOrderAllowedForUser, fetchAllowedSerials, resolveFactoryDisplay } from '../utils/permissionUtils';
+
+const InfoBox = ({ label, value, highlight }) => (
+  <div style={{ background: highlight ? 'rgba(212,175,55,0.05)' : 'var(--bg-color)', padding: '12px 16px', borderRadius: '10px', border: highlight ? '1px solid rgba(212,175,55,0.3)' : '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{label}</span>
+    <span style={{ fontSize: '1rem', fontWeight: 'bold', color: highlight ? 'var(--accent-color)' : 'var(--text-main)' }}>{value || '---'}</span>
+  </div>
+);
 
 const FactoryOwnerPortal = () => {
   const { t } = useTranslation();
@@ -15,6 +22,10 @@ const FactoryOwnerPortal = () => {
   const [modelNo, setModelNo] = useState('');
   const [isFetched, setIsFetched] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
+  const [showFactoryHistory, setShowFactoryHistory] = useState(false);
+  const [savedFactoryReceivings, setSavedFactoryReceivings] = useState([]);
+  const [factoryHistorySearch, setFactoryHistorySearch] = useState('');
+  const [isLoadingFactoryHistory, setIsLoadingFactoryHistory] = useState(false);
   
   // F9 Search States
   const [showSerialsList, setShowSerialsList] = useState(false);
@@ -59,13 +70,35 @@ const FactoryOwnerPortal = () => {
     setIsSearching(true);
     
     try {
-      const { data: oDataResp, error: oError } = await supabase
+      const { data: dedicatedRecord, error: dedicatedError } = await supabase
+        .from('factory_receivings')
+        .select('serial_number, factory_id, factory_name, company_name, receiving_data, order_data')
+        .ilike('serial_number', termToSearch.trim())
+        .maybeSingle();
+      if (dedicatedError && dedicatedError.code !== 'PGRST205') throw dedicatedError;
+
+      const { data: orderRecord } = await supabase
         .from('orders')
         .select('serial_number, order_data')
         .ilike('serial_number', termToSearch.trim())
         .single();
-        
-      if (oError || !oDataResp) {
+
+      let oDataResp = orderRecord;
+      if (dedicatedRecord) {
+        oDataResp = {
+          serial_number: dedicatedRecord.serial_number,
+          order_data: {
+            ...(orderRecord?.order_data || {}),
+            ...(dedicatedRecord.order_data || {}),
+            ...(dedicatedRecord.receiving_data || {}),
+            factoryId: dedicatedRecord.factory_id || dedicatedRecord.order_data?.factoryId || orderRecord?.order_data?.factoryId || '',
+            factoryName: dedicatedRecord.factory_name || dedicatedRecord.order_data?.factoryName || orderRecord?.order_data?.factoryName || '',
+            buyerCompany: dedicatedRecord.company_name || dedicatedRecord.order_data?.buyerCompany || orderRecord?.order_data?.buyerCompany || ''
+          }
+        };
+      }
+
+      if (!oDataResp) {
          toast.error(`${t('owner.messages.not_found')} ${termToSearch}`);
          setIsSearching(false);
          setIsFetched(false);
@@ -140,6 +173,82 @@ const FactoryOwnerPortal = () => {
       setIsSearching(false);
     }
   };
+
+  const loadSavedFactoryReceivings = async () => {
+    setIsLoadingFactoryHistory(true);
+    try {
+      const { data: dedicatedData, error: dedicatedError } = await supabase
+        .from('factory_receivings')
+        .select('serial_number, factory_id, factory_name, company_name, receiving_data, order_data, updated_at')
+        .order('updated_at', { ascending: false })
+        .limit(500);
+
+      let data = [];
+      if (dedicatedError?.code === 'PGRST205') {
+        const { data: legacyData, error: legacyError } = await supabase
+          .from('orders')
+          .select('serial_number, order_data')
+          .limit(500);
+        if (legacyError) throw legacyError;
+        data = legacyData || [];
+      } else if (dedicatedError) {
+        throw dedicatedError;
+      } else {
+        data = (dedicatedData || []).map(record => ({
+          ...record,
+          order_data: {
+            ...(record.order_data || {}),
+            ...(record.receiving_data || {}),
+            factoryId: record.factory_id || record.order_data?.factoryId || '',
+            factoryName: record.factory_name || record.order_data?.factoryName || '',
+            buyerCompany: record.company_name || record.order_data?.buyerCompany || record.order_data?.company || ''
+          }
+        }));
+
+        // Include old order mirrors until existing data is migrated.
+        const { data: legacyData, error: legacyError } = await supabase
+          .from('orders')
+          .select('serial_number, order_data')
+          .limit(500);
+        if (!legacyError && legacyData) {
+          const recordsBySerial = new Map(legacyData.map(record => [String(record.serial_number), record]));
+          data.forEach(record => recordsBySerial.set(String(record.serial_number), record));
+          data = Array.from(recordsBySerial.values());
+        }
+      }
+
+      const saved = (data || []).filter(record => {
+        if (!record.serial_number || !isOrderAllowedForUser(record, user, lookups?.factories)) return false;
+        const orderData = record.order_data || {};
+        return Boolean(
+          orderData.factoryStatus
+          || Object.keys(orderData.factoryProduction || {}).length > 0
+          || (Array.isArray(orderData.factoryPackages) && orderData.factoryPackages.some(pkg => pkg && pkg.active && (pkg.fromCtn || pkg.toCtn || pkg.pcsPerCtn)))
+        );
+      });
+      setSavedFactoryReceivings(saved);
+    } catch (error) {
+      console.error('Error loading saved factory receivings:', error);
+      setSavedFactoryReceivings([]);
+      toast.error(t('owner.messages.db_error'));
+    } finally {
+      setIsLoadingFactoryHistory(false);
+    }
+  };
+
+  const openFactoryHistory = () => {
+    setFactoryHistorySearch('');
+    setShowFactoryHistory(true);
+    loadSavedFactoryReceivings();
+  };
+
+  const filteredSavedFactoryReceivings = savedFactoryReceivings.filter(record => {
+    const query = factoryHistorySearch.trim().toLowerCase();
+    if (!query) return true;
+    const orderData = record.order_data || {};
+    return [record.serial_number, orderData.factoryId, orderData.productName]
+      .some(value => String(value || '').toLowerCase().includes(query));
+  });
 
   const handleF9Press = async (e) => {
     if (e.key === 'Enter') {
@@ -231,9 +340,28 @@ const FactoryOwnerPortal = () => {
         factoryProduction: factoryProductionData,
         factoryPackages: packages
     };
+    const dedicatedPayload = {
+        serial_number: modelNo.trim(),
+        factory_id: productInfo.factoryId || originalOrderData.factoryId || '',
+        factory_name: productInfo.factoryName || originalOrderData.factoryName || '',
+        company_name: originalOrderData.buyerCompany || originalOrderData.company || '',
+        receiving_data: {
+          factoryStatus: productInfo.factoryStatus,
+          factoryProduction: factoryProductionData,
+          factoryPackages: packages,
+          savedAt: new Date().toISOString()
+        },
+        order_data: updatedOrderData,
+        received_at: new Date().toISOString()
+    };
     
     const toastId = toast.loading(t('owner.messages.saving'));
     try {
+      const { error: dedicatedError } = await supabase
+        .from('factory_receivings')
+        .upsert(dedicatedPayload, { onConflict: 'serial_number' });
+      if (dedicatedError && dedicatedError.code !== 'PGRST205') throw dedicatedError;
+
       const { error } = await supabase
         .from('orders')
         .update({ order_data: updatedOrderData })
@@ -259,14 +387,6 @@ const FactoryOwnerPortal = () => {
       toast.error(`${t('entry.messages.save_error')}: ${err.message}`, { id: toastId });
     }
   };
-
-  // Helper component for Product Info fields
-  const InfoBox = ({ label, value, highlight }) => (
-    <div style={{ background: highlight ? 'rgba(212,175,55,0.05)' : 'var(--bg-color)', padding: '12px 16px', borderRadius: '10px', border: highlight ? '1px solid rgba(212,175,55,0.3)' : '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{label}</span>
-      <span style={{ fontSize: '1rem', fontWeight: 'bold', color: highlight ? 'var(--accent-color)' : 'var(--text-main)' }}>{value || '---'}</span>
-    </div>
-  );
 
   return (
     <div className="fade-in" style={{ paddingBottom: '2rem' }}>
@@ -425,7 +545,54 @@ const FactoryOwnerPortal = () => {
           <button className="btn btn-primary" onClick={() => handleSearch()} disabled={isSearching} style={{ padding: '14px 30px', fontSize: '1.1rem' }}>
             {isSearching ? <div className="spinner" style={{ width: '22px', height: '22px', border: '3px solid #fff', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} /> : t('owner.search.btn')}
           </button>
+          <button type="button" className="btn btn-outline" onClick={openFactoryHistory} style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+            <History size={18} /> {t('export.select_saved')}
+          </button>
         </div>
+
+        {showFactoryHistory && (
+          <div className="card fade-in" style={{ marginTop: '1.25rem', padding: 0, overflow: 'hidden', border: '1px solid var(--accent-color)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', padding: '1rem 1.25rem', borderBottom: '1px solid var(--border-color)', background: 'var(--surface-highlight)' }}>
+              <strong>{t('export.select_saved')}</strong>
+              <button type="button" onClick={() => setShowFactoryHistory(false)} style={{ background: 'none', border: 'none', color: 'var(--text-main)', cursor: 'pointer', display: 'flex' }}>
+                <X size={20} />
+              </button>
+            </div>
+            <div style={{ padding: '0.85rem', borderBottom: '1px solid var(--border-color)' }}>
+              <input
+                type="text"
+                className="form-control"
+                value={factoryHistorySearch}
+                onChange={event => setFactoryHistorySearch(event.target.value)}
+                placeholder={t('export.search_placeholder')}
+              />
+            </div>
+            <div style={{ maxHeight: '260px', overflowY: 'auto' }}>
+              {isLoadingFactoryHistory ? (
+                <div style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--text-muted)' }}>{t('entry.actions.loading')}</div>
+              ) : filteredSavedFactoryReceivings.length === 0 ? (
+                <div style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--text-muted)' }}>{t('entry.actions.no_saved_models')}</div>
+              ) : (
+                filteredSavedFactoryReceivings.map(record => (
+                  <button
+                    type="button"
+                    key={record.serial_number}
+                    onClick={() => {
+                      setShowFactoryHistory(false);
+                      handleSearch(String(record.serial_number));
+                    }}
+                    style={{ width: '100%', padding: '0.8rem 1rem', border: 'none', borderBottom: '1px solid var(--border-color)', background: 'transparent', color: 'var(--text-main)', textAlign: 'start', cursor: 'pointer', fontWeight: 'bold' }}
+                  >
+                    {record.serial_number}
+                    <span style={{ display: 'block', marginTop: '0.2rem', fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 'normal' }}>
+                      {record.order_data?.factoryId || '-'} · {record.order_data?.productName || '-'}
+                    </span>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {isFetched && (

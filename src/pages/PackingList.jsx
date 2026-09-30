@@ -356,9 +356,9 @@ const PackingList = () => {
 
                 factoryId = d.factoryId || '';
                 
-                const factName = d.factoryId || '';
-                const factoryObj = factories.find(f => (f.name || f) === factName);
-                factoryCode = typeof factoryObj === 'object' ? factoryObj.code : (d.factoryCode || '');
+                // The Details column is entered by the user. It must not be
+                // populated automatically from the factory lookup.
+                factoryCode = '';
 
                 if (withImage && d.productImages && Array.isArray(d.productImages) && d.productImages.length > 0) {
                     const firstImage = d.productImages[0];
@@ -413,7 +413,7 @@ const PackingList = () => {
                 receivedAt,
                 originalPackages,
                 desc,
-                imageUrl,
+                 imageUrl,
                 details: row.details,
                 factoryCode,
                 orderDataFound: !!orderData
@@ -452,7 +452,6 @@ const PackingList = () => {
         (mixedOrders || []).forEach(order => {
             const orderInfo = order.order_data || {};
             if (user && user.role !== 'admin' && !isOrderAllowedForUser(orderInfo, user, factories)) return;
-            const factoryObj = factories.find(factory => (factory.name || factory) === (orderInfo.factoryId || ''));
             const image = withImage && Array.isArray(orderInfo.productImages) && orderInfo.productImages.length > 0
                 ? normalizeImageUrl(orderInfo.productImages[0])
                 : '';
@@ -460,7 +459,7 @@ const PackingList = () => {
                 serial: order.serial_number,
                 desc: englishOnly(orderInfo.productName) || '',
                 image,
-                factoryCode: typeof factoryObj === 'object' ? factoryObj.code : (orderInfo.factoryCode || '')
+                factoryCode: ''
             });
         });
     }

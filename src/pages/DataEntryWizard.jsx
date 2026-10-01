@@ -16,12 +16,14 @@ import { logAuditEvent } from '../utils/auditLogger';
 import { isOrderAllowedForUser, fetchAllowedSerials } from '../utils/permissionUtils';
 import { sanitizeItemCode } from '../utils/textUtils';
 
-const sumColorDistribution = (distribution, colors) => {
+const sumColorDistribution = (distribution, colors, activeSizes) => {
   const colorNames = Array.isArray(colors) ? colors : Object.keys(distribution || {});
+  const sizeNames = Array.isArray(activeSizes) && activeSizes.length > 0 ? activeSizes : null;
   return colorNames.reduce((total, colorName) => {
     const sizes = distribution?.[colorName];
     if (!sizes || typeof sizes !== 'object') return total;
-    return total + Object.values(sizes).reduce((colorTotal, value) => {
+    const values = sizeNames ? sizeNames.map(size => sizes[size]) : Object.values(sizes);
+    return total + values.reduce((colorTotal, value) => {
       const quantity = parseInt(value, 10);
       return colorTotal + (Number.isFinite(quantity) && quantity > 0 ? quantity : 0);
     }, 0);
@@ -925,7 +927,7 @@ const DataEntryWizard = () => {
     nextArr.forEach(color => {
       nextDistribution[color] = { ...(currentDistribution[color] || {}) };
     });
-    const nextTotal = sumColorDistribution(nextDistribution, nextArr);
+    const nextTotal = sumColorDistribution(nextDistribution, nextArr, getActiveSizes());
 
     setSelectedColorsArr(nextArr);
     updateOrder('colorDistribution', nextDistribution);
@@ -1098,6 +1100,11 @@ const DataEntryWizard = () => {
         }
       });
       cleanOrder.colorDistribution = cleanDistribution;
+      const cleanedColorNames = Object.keys(cleanDistribution);
+      const cleanedDistributionTotal = sumColorDistribution(cleanDistribution, cleanedColorNames);
+      cleanOrder.totalQuantity = cleanedColorNames.length > 0 && cleanedDistributionTotal > 0
+        ? String(cleanedDistributionTotal)
+        : (cleanedColorNames.length > 0 ? '' : cleanOrder.totalQuantity);
     }
     // 5. Clean packagingConditions: only keep those that are true and exist in lookups
     if (cleanOrder.packagingConditions) {
@@ -1567,6 +1574,28 @@ const DataEntryWizard = () => {
       const fetchedOrder = data.order_data || data;
 
       const finalOrder = { ...defaultOrderState, ...fetchedOrder, serialNumber: data.serial_number || fetchedOrder.serialNumber };
+      const fetchedManualSizes = Array.isArray(finalOrder.manualSizes)
+        ? finalOrder.manualSizes.filter(size => size && String(size).trim() !== '')
+        : [];
+      let fetchedActiveSizes = fetchedManualSizes;
+      if (fetchedActiveSizes.length === 0 && finalOrder.sizeFrom && finalOrder.sizeTo) {
+        const sizeNames = lookups.sizes || [];
+        const fromIndex = sizeNames.indexOf(finalOrder.sizeFrom);
+        const toIndex = sizeNames.indexOf(finalOrder.sizeTo);
+        if (fromIndex !== -1 && toIndex !== -1) {
+          fetchedActiveSizes = sizeNames.slice(Math.min(fromIndex, toIndex), Math.max(fromIndex, toIndex) + 1);
+        }
+      }
+      const hasFetchedDistribution = Boolean(finalOrder.colorDistribution
+        && typeof finalOrder.colorDistribution === 'object'
+        && Object.keys(finalOrder.colorDistribution).length > 0);
+      const fetchedDistributionTotal = sumColorDistribution(finalOrder.colorDistribution, undefined, fetchedActiveSizes);
+      if (hasFetchedDistribution) {
+        // The color/size matrix is the authoritative quantity when loading
+        // an existing order. This prevents a stale totalQuantity from being
+        // shown beside a different matrix total.
+        finalOrder.totalQuantity = fetchedDistributionTotal > 0 ? String(fetchedDistributionTotal) : '';
+      }
       if (finalOrder.productImages) {
         finalOrder.productImages = finalOrder.productImages.map(img => {
           const norm = normalizeImageUrl(img);
@@ -1575,6 +1604,9 @@ const DataEntryWizard = () => {
           return { ...img, url: finalUrl };
         });
       }
+      // Preserve the fetched distribution exactly; the auto-distribution
+      // effect should not overwrite an existing order while it is loading.
+      skipNextDistributeRef.current = hasFetchedDistribution;
       setCurrentOrder(finalOrder);
       setAutoFocusLastSize(false);
       setSelectedColorsArr(Object.keys(finalOrder.colorDistribution || {}));
@@ -1633,6 +1665,7 @@ const DataEntryWizard = () => {
     setProductImages([]);
     setOriginalProductImages([]);
     setSelectedColorsArr([]);
+    skipNextDistributeRef.current = false;
     setIsEditMode(false);
     setOriginalSerial('');
     setSerialStatus('checking');
@@ -1707,26 +1740,17 @@ const DataEntryWizard = () => {
       : (qty || '');
     dist[color][size] = normalizedQty;
 
-    // Calculate total distributed pieces across all colors and sizes
-    let totalPieces = 0;
-    Object.values(dist).forEach(sizesObj => {
-      if (sizesObj && typeof sizesObj === 'object') {
-        Object.values(sizesObj).forEach(val => {
-          const num = parseInt(val, 10);
-          if (!isNaN(num) && num > 0) {
-            totalPieces += num;
-          }
-        });
-      }
-    });
+    // Calculate the total from the colors currently visible in the matrix.
+    // This must be synchronized for both increases and decreases.
+    const totalPieces = sumColorDistribution(dist, selectedColorsArr, getActiveSizes());
 
     const currentTotal = parseInt(currentOrder.totalQuantity, 10) || 0;
-    if (totalPieces > currentTotal) {
+    if (totalPieces !== currentTotal) {
       skipNextDistributeRef.current = true;
       setCurrentOrder(prev => ({
         ...prev,
         colorDistribution: dist,
-        totalQuantity: String(totalPieces)
+        totalQuantity: totalPieces > 0 ? String(totalPieces) : ''
       }));
     } else {
       updateOrder('colorDistribution', dist);

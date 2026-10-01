@@ -160,8 +160,9 @@ const HomePortal = () => {
            overflow: hidden;
            cursor: pointer;
            transition: all 0.45s cubic-bezier(0.23, 1, 0.32, 1);
-           border: 1px solid rgba(255, 255, 255, 0.06);
+           border: 1px solid var(--border-color);
            background: var(--surface-color);
+           box-shadow: var(--shadow-sm);
         }
 
         .bento-card::before {
@@ -185,7 +186,7 @@ const HomePortal = () => {
 
         .bento-card:hover {
            transform: translateY(-6px) scale(1.01);
-           box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+           box-shadow: var(--shadow-lg);
         }
 
         .bento-card.direct-card:hover {
@@ -336,8 +337,8 @@ const HomePortal = () => {
            align-items: center;
            gap: 0.65rem;
            padding: 0.75rem 1rem;
-           background: rgba(255, 255, 255, 0.03);
-           border: 1px solid rgba(255, 255, 255, 0.05);
+           background: var(--surface-overlay);
+           border: 1px solid var(--border-color);
            border-radius: 14px;
            text-decoration: none;
            transition: all 0.3s cubic-bezier(0.23, 1, 0.32, 1);
@@ -357,8 +358,8 @@ const HomePortal = () => {
 
         .page-chip:hover {
            transform: translateY(-3px) scale(1.02);
-           border-color: rgba(255, 255, 255, 0.12);
-           box-shadow: 0 8px 25px rgba(0, 0, 0, 0.25);
+           border-color: rgba(var(--accent-rgb), 0.45);
+           box-shadow: var(--shadow-md);
         }
 
         .page-chip:hover::before {
@@ -396,7 +397,7 @@ const HomePortal = () => {
            width: 24px;
            height: 24px;
            border-radius: 6px;
-           background: rgba(255, 255, 255, 0.04);
+           background: var(--surface-overlay-strong);
            display: flex;
            align-items: center;
            justify-content: center;
@@ -477,6 +478,38 @@ const HomePortal = () => {
            position: relative;
            transform: scale(0.9) translateY(20px);
            animation: modalPopIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        }
+
+        [data-theme='light'] .glass-modal-overlay {
+           background: rgba(15, 23, 42, 0.32);
+        }
+
+        [data-theme='light'] .glass-modal-content {
+           background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(243, 246, 247, 0.98));
+           border-color: var(--border-color);
+           box-shadow: 0 28px 80px rgba(15, 23, 42, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+        }
+
+        [data-theme='light'] .glass-modal-close {
+           background: var(--surface-overlay);
+           border-color: var(--border-color);
+           color: var(--text-muted);
+        }
+
+        [data-theme='light'] .modal-header {
+           border-bottom-color: var(--border-color);
+        }
+
+        [data-theme='light'] .bento-card::before {
+           background: linear-gradient(135deg, rgba(var(--accent-rgb), 0.28), rgba(148, 163, 184, 0.08));
+        }
+
+        [data-theme='light'] .bento-pages {
+           border-top-color: var(--border-color);
+        }
+
+        [data-theme='light'] .hero-subtitle {
+           opacity: 1;
         }
 
         @keyframes modalPopIn {

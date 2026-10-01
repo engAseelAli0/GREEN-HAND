@@ -5,6 +5,13 @@
   --accent-color: #d4af37; 
   --accent-hover: #b58d27;
   --accent-rgb: 212, 175, 55;
+  --btn-accent-text: #ffffff;
+  --on-accent: #ffffff;
+  --surface-overlay: rgba(255, 255, 255, 0.04);
+  --surface-overlay-strong: rgba(255, 255, 255, 0.08);
+  --control-placeholder: #94a3b8;
+  --gradient-end: #21262d;
+  --text-color: var(--text-main);
   
   --radius-sm: 8px;
   --radius-md: 12px;
@@ -54,27 +61,33 @@
    PREMIUM LIGHT THEME (Muted Steel / Anti-Glare)
    ═══════════════════════════════════════════════════ */
 [data-theme='light'] {
-  --bg-color: #e2e8f0; /* Slate 200 - Eye-friendly Gray */
-  --surface-color: #f1f5f9; /* Slate 100 */
-  --surface-highlight: #cbd5e1; /* Slate 300 */
+  --bg-color: #eef3f4;
+  --surface-color: #ffffff;
+  --surface-highlight: #f3f6f7;
   
   --text-main: #334155; 
   --text-strong: #0f172a; 
   --text-muted: #64748b;
   
-  --border-color: #cbd5e1;
+  --border-color: #d8e2e5;
   --border-focus: #d4af37;
   
-  --glass-bg: rgba(241, 245, 249, 0.7);
-  --glass-border: rgba(255, 255, 255, 0.4);
+  --glass-bg: rgba(255, 255, 255, 0.84);
+  --glass-border: rgba(148, 163, 184, 0.28);
   
   --btn-primary-bg: #1e293b;
   --btn-primary-text: #ffffff;
   --btn-primary-hover: #0f172a;
+  --btn-accent-text: #1f2937;
+  --on-accent: #1f2937;
+  --surface-overlay: rgba(15, 23, 42, 0.035);
+  --surface-overlay-strong: rgba(15, 23, 42, 0.07);
+  --control-placeholder: #94a3b8;
+  --gradient-end: #f8fafc;
   
   --btn-secondary-bg: #f8fafc;
   --btn-secondary-text: #334155;
-  --btn-secondary-border: #cbd5e1;
+  --btn-secondary-border: #d8e2e5;
   
   --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.02);
   --shadow-md: 0 10px 30px rgba(15, 23, 42, 0.05);
@@ -82,11 +95,9 @@
   --shadow-gold: 0 4px 14px rgba(212, 175, 55, 0.1);
   
   --theme-invert: invert(0);
-  --body-bg: radial-gradient(at 0% 0%, #cbd5e1 0%, transparent 50%),
-             radial-gradient(at 100% 0%, #e2e8f0 0%, transparent 50%),
-             radial-gradient(at 100% 100%, #cbd5e1 0%, transparent 50%),
-             radial-gradient(at 0% 100%, #e2e8f0 0%, transparent 50%),
-             #f1f5f9;
+  --body-bg: radial-gradient(at 0% 0%, rgba(212, 175, 55, 0.08) 0%, transparent 38%),
+             radial-gradient(at 100% 0%, rgba(16, 185, 129, 0.06) 0%, transparent 36%),
+             linear-gradient(180deg, #f8fafb 0%, #eef3f4 100%);
 }
 
 * {
@@ -116,7 +127,7 @@ body {
 }
 
 .luxury-gradient {
-  background: linear-gradient(135deg, var(--bg-color) 0%, #edf1f5 100%);
+  background: linear-gradient(135deg, var(--bg-color) 0%, var(--gradient-end) 100%);
 }
 
 /* Typography */
@@ -178,7 +189,7 @@ h1, h2, h3, h4 {
 
 .btn-accent {
   background-color: var(--accent-color);
-  color: white;
+  color: var(--btn-accent-text);
   box-shadow: var(--shadow-gold);
 }
 
@@ -231,6 +242,11 @@ h1, h2, h3, h4 {
   outline: none;
   border-color: var(--accent-color);
   box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.2);
+}
+
+.form-control::placeholder {
+  color: var(--control-placeholder);
+  opacity: 1;
 }
 
 /* Date Input Premium Styling */
@@ -415,7 +431,7 @@ input[type="number"], .no-spinner {
 
 .tab-btn:hover {
   color: var(--text-strong);
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--surface-overlay);
 }
 
 .tab-btn:hover::before {
@@ -429,7 +445,7 @@ input[type="number"], .no-spinner {
   width: 32px;
   height: 32px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--surface-overlay);
   transition: all 0.35s ease;
   flex-shrink: 0;
 }
@@ -441,7 +457,7 @@ input[type="number"], .no-spinner {
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--surface-overlay-strong);
   font-size: 0.7rem;
   font-weight: 700;
   color: var(--text-muted);
@@ -451,7 +467,7 @@ input[type="number"], .no-spinner {
 
 /* Active Tab */
 .tab-btn.active {
-  color: #fff;
+  color: var(--on-accent);
   background: linear-gradient(135deg, rgba(212, 175, 55, 0.2), rgba(212, 175, 55, 0.08));
   box-shadow: 0 2px 12px rgba(212, 175, 55, 0.2), inset 0 1px 0 rgba(212, 175, 55, 0.3);
 }
@@ -462,13 +478,13 @@ input[type="number"], .no-spinner {
 
 .tab-btn.active .tab-icon {
   background: var(--accent-color);
-  color: #fff;
+  color: var(--on-accent);
   box-shadow: 0 2px 8px rgba(212, 175, 55, 0.4);
 }
 
 .tab-btn.active .tab-num {
   background: var(--accent-color);
-  color: #fff;
+  color: var(--on-accent);
   box-shadow: 0 0 8px rgba(212, 175, 55, 0.5);
 }
 
@@ -498,7 +514,7 @@ input[type="number"], .no-spinner {
 .tab-panel .card {
   background: linear-gradient(180deg, var(--surface-color) 0%, var(--bg-color) 100%);
   border: 1px solid rgba(212, 175, 55, 0.1);
-  box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  box-shadow: var(--shadow-md), inset 0 1px 0 var(--surface-overlay);
 }
 
 /* Section Header inside tabs */
@@ -1038,4 +1054,3 @@ input[type="number"], .no-spinner {
     transform: scale(1) translateY(0);
   }
 }
-

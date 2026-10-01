@@ -20,17 +20,17 @@ const ThemeToggle = () => {
         alignItems: 'center',
         justifyContent: 'center',
         borderColor: 'var(--border-color)',
-        color: theme === 'dark' ? 'var(--accent-color)' : '#f59e0b',
+        color: theme === 'dark' ? 'var(--accent-color)' : 'var(--text-muted)',
         backgroundColor: 'var(--surface-color)',
         transition: 'all var(--transition-normal)',
-        boxShadow: theme === 'dark' ? 'none' : '0 0 15px rgba(245, 158, 11, 0.2)',
+        boxShadow: theme === 'dark' ? 'none' : 'var(--shadow-sm)',
       }}
       title={theme === 'dark' ? t('switch_light') : t('switch_dark')}
     >
       {theme === 'dark' ? (
         <Sun size={20} className="fade-in" />
       ) : (
-        <Moon size={20} className="fade-in" color="#475569" />
+        <Moon size={20} className="fade-in" />
       )}
     </button>
   );

@@ -199,10 +199,10 @@ const AppLayout = () => {
                                   transition: 'background-color 0.15s',
                                   backgroundColor: isActive ? 'rgba(var(--accent-rgb), 0.1)' : 'transparent',
                                   borderRight: isActive ? '3px solid var(--accent-color)' : '3px solid transparent',
-                                  opacity: isActive ? 0.6 : 1,
+                                  opacity: 1,
                                   pointerEvents: isActive ? 'none' : 'auto'
                                 }}
-                                onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)'; }}
+                                onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.backgroundColor = 'var(--surface-overlay-strong)'; }}
                                 onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.backgroundColor = 'transparent'; }}
                               >
                                 <div style={{

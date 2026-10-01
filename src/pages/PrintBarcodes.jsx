@@ -24,8 +24,8 @@ const loadSettings = () => {
   catch { return { ...DEFAULT_PRINT_SETTINGS }; }
 };
 
-const inputStyle = { width: 90, padding: '0.5rem 0.6rem', background: 'var(--bg-color)', border: '1px solid var(--border-color)', borderRadius: 10, color: '#fff', fontSize: '0.95rem', fontWeight: 700, fontFamily: "'Outfit', sans-serif", textAlign: 'center', direction: 'ltr' };
-const rowStyle = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.7rem 0', borderBottom: '1px solid rgba(255,255,255,0.04)' };
+const inputStyle = { width: 90, padding: '0.5rem 0.6rem', background: 'var(--bg-color)', border: '1px solid var(--border-color)', borderRadius: 10, color: 'var(--text-main)', fontSize: '0.95rem', fontWeight: 700, fontFamily: "'Outfit', sans-serif", textAlign: 'center', direction: 'ltr' };
+const rowStyle = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.7rem 0', borderBottom: '1px solid var(--border-color)' };
 
 const FieldRow = ({ label, fieldKey, unit = 'cm', settings, onUpdate }) => (
   <div style={rowStyle}>
@@ -340,7 +340,7 @@ const PrintBarcodes = () => {
           background: linear-gradient(135deg, var(--surface-color), var(--bg-color));
           border-radius: 20px;
           border: 1px solid rgba(212, 175, 55, 0.15);
-          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255,255,255,0.04);
+          box-shadow: var(--shadow-md), inset 0 1px 0 var(--surface-overlay);
           margin-bottom: 1.5rem;
         }
 
@@ -367,7 +367,7 @@ const PrintBarcodes = () => {
           font-size: 1.5rem;
           font-weight: 800;
           letter-spacing: -0.3px;
-          background: linear-gradient(135deg, #fff, var(--accent-color));
+          background: linear-gradient(135deg, var(--text-strong), var(--accent-color));
           -webkit-background-clip: text;
           -webkit-text-fill-color: transparent;
           background-clip: text;
@@ -384,7 +384,7 @@ const PrintBarcodes = () => {
           align-items: center;
           gap: 0.5rem;
           padding: 0.65rem 1.25rem;
-          background: rgba(255,255,255,0.04);
+          background: var(--surface-overlay);
           border: 1px solid var(--border-color);
           border-radius: 12px;
           color: var(--text-muted);
@@ -397,7 +397,7 @@ const PrintBarcodes = () => {
         }
 
         .bc-back-btn:hover {
-          background: rgba(255,255,255,0.08);
+          background: var(--surface-overlay-strong);
           border-color: rgba(212, 175, 55, 0.3);
           color: var(--text-strong);
           transform: translateY(-1px);
@@ -409,7 +409,7 @@ const PrintBarcodes = () => {
           background: var(--surface-color);
           border-radius: 20px;
           border: 1px solid var(--border-color);
-          box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
+          box-shadow: var(--shadow-md);
           margin-bottom: 1.5rem;
         }
 
@@ -452,7 +452,7 @@ const PrintBarcodes = () => {
           letter-spacing: 2.5px;
           font-family: 'Outfit', 'Tajawal', sans-serif;
           background: var(--bg-color);
-          color: #fff;
+          color: var(--text-main);
           border: 1.5px solid var(--border-color);
           border-radius: 14px;
           transition: all 0.3s ease;
@@ -465,7 +465,7 @@ const PrintBarcodes = () => {
         }
 
         .bc-search-input::placeholder {
-          color: rgba(255,255,255,0.2);
+          color: var(--control-placeholder);
           font-weight: 400;
           letter-spacing: 1px;
         }
@@ -476,7 +476,7 @@ const PrintBarcodes = () => {
           gap: 0.5rem;
           padding: 0 2rem;
           background: linear-gradient(135deg, var(--accent-color), #b58d27);
-          color: #000;
+          color: var(--btn-accent-text);
           border: none;
           border-radius: 14px;
           font-family: 'Tajawal', sans-serif;
@@ -544,7 +544,7 @@ const PrintBarcodes = () => {
         .bc-stat-card:hover {
           border-color: rgba(212, 175, 55, 0.2);
           transform: translateY(-2px);
-          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+          box-shadow: var(--shadow-md);
         }
 
         .bc-stat-icon {
@@ -577,7 +577,7 @@ const PrintBarcodes = () => {
           background: var(--surface-color);
           border-radius: 20px;
           border: 1px solid var(--border-color);
-          box-shadow: 0 6px 32px rgba(0, 0, 0, 0.18);
+          box-shadow: var(--shadow-md);
           overflow: hidden;
         }
 
@@ -587,7 +587,7 @@ const PrintBarcodes = () => {
           justify-content: space-between;
           padding: 1.25rem 1.75rem;
           border-bottom: 1px solid var(--border-color);
-          background: rgba(255,255,255,0.015);
+          background: var(--surface-overlay);
         }
 
         .bc-table-title {
@@ -631,7 +631,7 @@ const PrintBarcodes = () => {
           text-transform: uppercase;
           letter-spacing: 0.06em;
           border-bottom: 1px solid var(--border-color);
-          background: rgba(255,255,255,0.02);
+          background: var(--surface-overlay);
           white-space: nowrap;
           text-align: right;
         }
@@ -642,7 +642,7 @@ const PrintBarcodes = () => {
 
         .bc-table tbody td {
           padding: 1rem 1.25rem;
-          border-bottom: 1px solid rgba(255,255,255,0.03);
+          border-bottom: 1px solid var(--border-color);
           vertical-align: middle;
           text-align: right;
         }
@@ -689,7 +689,7 @@ const PrintBarcodes = () => {
           align-items: center;
           gap: 0.5rem;
           padding: 0.45rem 0.85rem;
-          background: rgba(0, 0, 0, 0.25);
+          background: var(--surface-overlay-strong);
           border-radius: 10px;
           border: 1px solid rgba(212, 175, 55, 0.2);
           font-family: 'Courier New', Courier, monospace;
@@ -711,7 +711,7 @@ const PrintBarcodes = () => {
           width: 18px;
           height: 18px;
           border-radius: 6px;
-          border: 2px solid rgba(255,255,255,0.15);
+          border: 2px solid var(--border-color);
           flex-shrink: 0;
         }
 
@@ -727,9 +727,9 @@ const PrintBarcodes = () => {
           justify-content: center;
           min-width: 44px;
           padding: 0.35rem 0.85rem;
-          background: rgba(255,255,255,0.06);
+          background: var(--surface-overlay-strong);
           border-radius: 8px;
-          border: 1px solid rgba(255,255,255,0.08);
+          border: 1px solid var(--border-color);
           font-weight: 700;
           font-size: 0.95rem;
           color: var(--text-strong);
@@ -743,7 +743,7 @@ const PrintBarcodes = () => {
           gap: 0.3rem;
           padding: 0.4rem 1rem;
           background: rgba(16, 185, 129, 0.1);
-          color: #34d399;
+          color: #059669;
           border-radius: 10px;
           font-weight: 800;
           font-size: 1rem;
@@ -778,7 +778,7 @@ const PrintBarcodes = () => {
           gap: 0.35rem;
           padding: 0.5rem 1.5rem;
           background: linear-gradient(135deg, var(--accent-color), #b58d27);
-          color: #000;
+          color: var(--btn-accent-text);
           border-radius: 12px;
           font-weight: 900;
           font-size: 1.15rem;
@@ -821,6 +821,71 @@ const PrintBarcodes = () => {
         }
 
         .page-setup-modal-overlay { display: none; }
+
+        [data-theme='light'] .page-setup-modal-overlay {
+          background: rgba(15, 23, 42, 0.3) !important;
+        }
+
+        [data-theme='light'] .page-setup-modal-content {
+          background: linear-gradient(180deg, #ffffff 0%, #f3f6f7 100%) !important;
+          border-color: var(--border-color) !important;
+          box-shadow: 0 24px 80px rgba(15, 23, 42, 0.22), 0 0 0 1px rgba(148, 163, 184, 0.12) inset !important;
+          color: var(--text-main);
+        }
+
+        [data-theme='light'] .page-setup-modal-header,
+        [data-theme='light'] .page-setup-modal-footer {
+          border-color: var(--border-color) !important;
+        }
+
+        [data-theme='light'] .page-setup-modal-title,
+        [data-theme='light'] .page-setup-modal-preview-card strong {
+          color: var(--text-strong) !important;
+        }
+
+        [data-theme='light'] .page-setup-modal-close {
+          background: var(--surface-overlay-strong) !important;
+          color: var(--text-main) !important;
+          border: 1px solid var(--border-color) !important;
+        }
+
+        [data-theme='light'] .page-setup-modal-preview-card,
+        [data-theme='light'] .page-setup-modal-tabs-inner {
+          background: var(--surface-overlay) !important;
+          border-color: var(--border-color) !important;
+        }
+
+        [data-theme='light'] .page-setup-preview-svg rect:first-of-type {
+          fill: #ffffff !important;
+          stroke: var(--border-color) !important;
+        }
+
+        [data-theme='light'] .page-setup-tab,
+        [data-theme='light'] .page-setup-option {
+          color: var(--text-muted) !important;
+        }
+
+        [data-theme='light'] .page-setup-tab.active,
+        [data-theme='light'] .page-setup-option.active {
+          color: var(--on-accent) !important;
+        }
+
+        [data-theme='light'] .page-setup-modal-content input {
+          color: var(--text-main) !important;
+          background: var(--bg-color) !important;
+        }
+
+        [data-theme='light'] .page-setup-modal-footer button {
+          background: var(--surface-overlay) !important;
+          color: var(--text-main) !important;
+          border-color: var(--border-color) !important;
+        }
+
+        [data-theme='light'] .page-setup-modal-footer button:last-child {
+          background: linear-gradient(135deg, var(--accent-color), #b58d27) !important;
+          color: var(--btn-accent-text) !important;
+          border-color: transparent !important;
+        }
 
         @media print {
           @page {
@@ -1422,31 +1487,31 @@ const PrintBarcodes = () => {
           position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center',
           background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)', animation: 'fadeIn 0.25s ease'
         }}>
-          <div onClick={e => e.stopPropagation()} style={{
+          <div className="page-setup-modal-content" onClick={e => e.stopPropagation()} style={{
             width: '680px', maxWidth: '95vw', maxHeight: '90vh', overflowY: 'auto',
             background: 'linear-gradient(180deg, #1a1f2e 0%, #0f1219 100%)',
             borderRadius: '20px', border: '1px solid rgba(212,175,55,0.2)',
             boxShadow: '0 24px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.05) inset'
           }}>
             {/* Modal Header */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1.25rem 1.75rem', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+            <div className="page-setup-modal-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1.25rem 1.75rem', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                 <div style={{ width: 42, height: 42, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #6366f1, #4f46e5)', borderRadius: 12, boxShadow: '0 4px 14px rgba(99,102,241,0.35)' }}>
                   <Settings size={20} color="#fff" />
                 </div>
                 <div>
-                  <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#fff' }}>{t('print.setup.title')}</h2>
+                  <h2 className="page-setup-modal-title" style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#fff' }}>{t('print.setup.title')}</h2>
                   <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-muted)' }}>{t('print.setup.desc')}</p>
                 </div>
               </div>
-              <button onClick={() => setShowPageSetup(false)} style={{ background: 'rgba(255,255,255,0.06)', border: 'none', borderRadius: 10, width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#fff', transition: 'all 0.2s' }}>
+              <button className="page-setup-modal-close" onClick={() => setShowPageSetup(false)} style={{ background: 'rgba(255,255,255,0.06)', border: 'none', borderRadius: 10, width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#fff', transition: 'all 0.2s' }}>
                 <X size={18} />
               </button>
             </div>
 
             {/* Live Preview */}
-            <div style={{ padding: '1rem 1.75rem 0.5rem' }}>
-              <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, border: '1px solid rgba(255,255,255,0.06)', padding: '1rem', textAlign: 'center' }}>
+            <div className="page-setup-modal-preview" style={{ padding: '1rem 1.75rem 0.5rem' }}>
+              <div className="page-setup-modal-preview-card" style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 14, border: '1px solid rgba(255,255,255,0.06)', padding: '1rem', textAlign: 'center' }}>
                 {(() => {
                   const s = tempSettings;
                   const scale = 28;
@@ -1470,7 +1535,7 @@ const PrintBarcodes = () => {
                     }
                   }
                   return (
-                    <svg width={Math.min(pw + 20, 600)} height={Math.min(ph + 20, 200)} viewBox={`-10 -10 ${pw + 20} ${ph + 20}`} style={{ maxWidth: '100%' }}>
+                    <svg className="page-setup-preview-svg" width={Math.min(pw + 20, 600)} height={Math.min(ph + 20, 200)} viewBox={`-10 -10 ${pw + 20} ${ph + 20}`} style={{ maxWidth: '100%' }}>
                       <rect x={0} y={0} width={pw} height={ph} rx={4} fill="#1e2330" stroke="rgba(255,255,255,0.2)" strokeWidth={1} />
                       {labels}
                     </svg>
@@ -1484,15 +1549,15 @@ const PrintBarcodes = () => {
             </div>
 
             {/* Tabs */}
-            <div style={{ padding: '0.75rem 1.75rem 0' }}>
-              <div style={{ display: 'flex', gap: '0.25rem', background: 'rgba(255,255,255,0.03)', borderRadius: 12, padding: '0.3rem', border: '1px solid rgba(255,255,255,0.05)' }}>
+            <div className="page-setup-modal-tabs" style={{ padding: '0.75rem 1.75rem 0' }}>
+              <div className="page-setup-modal-tabs-inner" style={{ display: 'flex', gap: '0.25rem', background: 'rgba(255,255,255,0.03)', borderRadius: 12, padding: '0.3rem', border: '1px solid rgba(255,255,255,0.05)' }}>
                 {[
                   { id: 'paper', label: `📄 ${t('print.setup.paper_label')}` },
                   { id: 'margins', label: `📐 ${t('print.setup.margins_label')}` },
                   { id: 'label', label: `🏷️ ${t('print.setup.label_label')}` },
                   { id: 'layout', label: `📊 ${t('print.setup.layout_label')}` },
                 ].map(t => (
-                  <button key={t.id} onClick={() => setSetupTab(t.id)} style={{
+                  <button key={t.id} className={`page-setup-tab ${setupTab === t.id ? 'active' : ''}`} onClick={() => setSetupTab(t.id)} style={{
                     flex: 1, padding: '0.6rem 0.5rem', border: 'none', borderRadius: 10, cursor: 'pointer',
                     fontFamily: "'Tajawal', sans-serif", fontSize: '0.82rem', fontWeight: 600, transition: 'all 0.25s',
                     background: setupTab === t.id ? 'linear-gradient(135deg, rgba(212,175,55,0.2), rgba(212,175,55,0.08))' : 'transparent',
@@ -1515,7 +1580,7 @@ const PrintBarcodes = () => {
                     <label style={{ fontSize: '0.9rem', fontWeight: 500, color: 'var(--text-main)' }}>{t('print.setup.orientation')}</label>
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
                       {['portrait', 'landscape'].map(o => (
-                        <button key={o} onClick={() => updateTemp('orientation', o)} style={{
+                        <button key={o} className={`page-setup-option ${tempSettings.orientation === o ? 'active' : ''}`} onClick={() => updateTemp('orientation', o)} style={{
                           padding: '0.45rem 1rem', borderRadius: 10, border: '1px solid', cursor: 'pointer',
                           fontFamily: "'Tajawal', sans-serif", fontWeight: 600, fontSize: '0.85rem', transition: 'all 0.2s',
                           background: tempSettings.orientation === o ? 'rgba(212,175,55,0.15)' : 'transparent',
@@ -1561,7 +1626,7 @@ const PrintBarcodes = () => {
             </div>
 
             {/* Footer Buttons */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.75rem 1.25rem', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+            <div className="page-setup-modal-footer" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.75rem 1.25rem', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
               <button onClick={handleResetSettings} style={{
                 display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.6rem 1.1rem',
                 background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-color)', borderRadius: 12,

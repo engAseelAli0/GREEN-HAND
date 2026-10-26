@@ -20,6 +20,8 @@ const createRowId = () => (
 const createEmptyInvoiceRow = () => ({
   id: createRowId(),
   serial: '',
+  cartonNo: '',
+  cartonQty: '',
   desc: '',
   arabicName: '',
   qty: '',
@@ -62,13 +64,34 @@ const getPackingRowQuantity = (row) => (row?.packages || []).reduce((sum, pkg) =
   sum + ((parseFloat(pkg?.cartonQty) || 0) * (parseFloat(pkg?.qtyPerCarton) || 0))
 ), 0);
 
+const getCartonSummary = (packages) => {
+  const cartonNos = [];
+  let cartonQty = 0;
+
+  (Array.isArray(packages) ? packages : [])
+    .filter(pkg => pkg?.active !== false && pkg?.fromCtn !== undefined && pkg?.toCtn !== undefined)
+    .forEach(pkg => {
+      const from = parseInt(pkg.fromCtn, 10);
+      const to = parseInt(pkg.toCtn, 10);
+      if (!Number.isFinite(from) || !Number.isFinite(to) || from <= 0 || to < from) return;
+
+      cartonNos.push(`${from}-${to}`);
+      cartonQty += to - from + 1;
+    });
+
+  return {
+    cartonNo: [...new Set(cartonNos)].join(', '),
+    cartonQty: cartonQty > 0 ? String(cartonQty) : ''
+  };
+};
+
 const buildPackingImportItems = (record) => {
   const stored = record?.packing_data && typeof record.packing_data === 'object'
     ? record.packing_data
     : {};
   const itemsBySerial = new Map();
 
-  const addItem = (item, quantity) => {
+  const addItem = (item, quantity, cartonNo = '', cartonQty = 0) => {
     const serial = String(item?.serial || '').trim();
     if (!serial) return;
     const key = serial.toLowerCase();
@@ -77,9 +100,15 @@ const buildPackingImportItems = (record) => {
       desc: item?.desc || '',
       image: item?.image || '',
       factoryCode: item?.factoryCode || '',
-      qty: 0
+      qty: 0,
+      cartonNos: [],
+      cartonQty: 0
     };
     current.qty += Number(quantity) || 0;
+    if (cartonNo && !current.cartonNos.includes(String(cartonNo))) {
+      current.cartonNos.push(String(cartonNo));
+    }
+    current.cartonQty += Number(cartonQty) || 0;
     if (!current.desc && item?.desc) current.desc = item.desc;
     if (!current.image && item?.image) current.image = item.image;
     if (!current.factoryCode && item?.factoryCode) current.factoryCode = item.factoryCode;
@@ -87,17 +116,37 @@ const buildPackingImportItems = (record) => {
   };
 
   (Array.isArray(stored.rows) ? stored.rows : []).forEach(row => {
-    addItem(row, getPackingRowQuantity(row));
+    const packages = (Array.isArray(row?.packages) ? row.packages : [])
+      .filter(pkg => pkg?.cartonNo || pkg?.cartonQty);
+
+    if (packages.length > 0) {
+      packages.forEach(pkg => {
+        addItem(
+          row,
+          (parseFloat(pkg.cartonQty) || 0) * (parseFloat(pkg.qtyPerCarton) || 0),
+          pkg.cartonNo,
+          pkg.cartonQty
+        );
+      });
+    } else {
+      addItem(row, getPackingRowQuantity(row));
+    }
   });
 
   (Array.isArray(stored.mixedGroups) ? stored.mixedGroups : []).forEach(group => {
     const cartonQty = parseFloat(group?.cartonQty) || 0;
     (Array.isArray(group?.items) ? group.items : []).forEach(item => {
-      addItem(item, cartonQty * (parseFloat(item?.qtyPerCarton) || 0));
+      addItem(item, cartonQty * (parseFloat(item?.qtyPerCarton) || 0), group?.cartonNo, cartonQty);
     });
   });
 
-  return Array.from(itemsBySerial.values()).filter(item => item.qty > 0);
+  return Array.from(itemsBySerial.values())
+    .filter(item => item.qty > 0)
+    .map(item => ({
+      ...item,
+      cartonNo: item.cartonNos.join(', '),
+      cartonQty: item.cartonQty > 0 ? String(item.cartonQty) : ''
+    }));
 };
 
 const ShippingInvoice = () => {
@@ -222,7 +271,7 @@ const ShippingInvoice = () => {
 
   const handleRowChange = (id, field, value) => {
     let finalValue = value;
-    if (['qty', 'unitPrice', 'serial'].includes(field)) {
+    if (['qty', 'unitPrice', 'cartonQty', 'serial'].includes(field)) {
         finalValue = toEnglishNumbers(value);
     }
     setRows(prev => prev.map(row => (
@@ -379,6 +428,24 @@ const ShippingInvoice = () => {
     if (updatedRows.length === 0) {
         updatedRows = [createEmptyInvoiceRow()];
     }
+
+    const receivingBySerial = new Map();
+    const serialVariants = [...new Set(updatedRows
+      .map(row => String(row.serial || '').trim())
+      .filter(Boolean)
+      .flatMap(serial => [serial, serial.toLowerCase(), serial.toUpperCase()]))];
+    if (serialVariants.length > 0) {
+      const { data: receivingRecords } = await supabase
+        .from('receivings')
+        .select('serial_number, receive_data')
+        .in('serial_number', serialVariants);
+
+      (receivingRecords || []).forEach(record => {
+        const key = String(record.serial_number || '').trim().toLowerCase();
+        if (key) receivingBySerial.set(key, record);
+      });
+    }
+
     for (let i = 0; i < updatedRows.length; i++) {
         let r = updatedRows[i];
         if (r.serial.trim() && (removeBadRows ? true : !badSerialsToSkip.includes(r.serial.trim()))) {
@@ -410,9 +477,18 @@ const ShippingInvoice = () => {
                     if (!fetchedCustomerName && d.buyerMobile) {
                         fetchedCustomerName = d.buyerMobile;
                     }
+                    const receiving = receivingBySerial.get(r.serial.trim().toLowerCase());
+                    const receivingPackages = receiving?.receive_data?.packages;
+                    const cartonSummary = getCartonSummary(
+                      Array.isArray(receivingPackages) && receivingPackages.length > 0
+                        ? receivingPackages
+                        : d.factoryPackages
+                    );
                     updatedRows[i] = withCalculatedRowTotal({
                         ...r,
                         serial: matchedSerial,
+                        cartonNo: cartonSummary.cartonNo,
+                        cartonQty: cartonSummary.cartonQty,
                         desc: englishOnly(d.productName) || '',
                         arabicName: englishOnly(d.productName) || '',
                         qty: totalPieces.toString(),
@@ -703,6 +779,8 @@ const ShippingInvoice = () => {
           ...createEmptyInvoiceRow(),
           id: createRowId(),
           serial: order?.serial_number || item.serial,
+          cartonNo: item.cartonNo || '',
+          cartonQty: item.cartonQty || '',
           desc: item.desc || orderData.productName || '',
           arabicName: orderData.productName || item.desc || '',
           qty: String(item.qty || 0),
@@ -967,9 +1045,10 @@ const ShippingInvoice = () => {
         tableRowsHtml += `
           <tr>
             <td style="${tc}font-weight:bold;">${index + 1}</td>
+            <td style="${tc}font-weight:bold;">${row.cartonNo || '-'}</td>
             <td style="${tc}font-weight:bold;mso-number-format:'\\@';">${row.serial}</td>
             <td style="${bl}">${row.desc || ''}</td>
-            <td style="${tc}direction:rtl;">${row.arabicName || ''}</td>
+            <td style="${tc}font-weight:bold;">${row.cartonQty || '-'}</td>
             <td style="${tc}font-weight:bold;">${row.qty || ''}</td>
             <td style="${tc}">${row.currency || ''}</td>
             <td style="${tc}">${row.unitPrice || ''}</td>
@@ -1009,9 +1088,10 @@ const ShippingInvoice = () => {
           <thead>
             <tr>
               <th style="${hr}width:40px;">No</th>
+              <th style="${hr}width:95px;">${t('packing.table.cols.carton_no')}<br/><small>${t('packing.table.cols.carton_no_ar')}</small></th>
               <th style="${hr}width:130px;">${t('shipping.table.cols.item_no')}<br/><small>${t('shipping.table.cols.item_no_ar')}</small></th>
               <th style="${hr}">${t('shipping.table.cols.desc')}<br/><small>${t('shipping.table.cols.desc_ar')}</small></th>
-              <th style="${hr}">${t('shipping.table.cols.arabic_name')}<br/><small>${t('shipping.table.cols.arabic_name_en')}</small></th>
+              <th style="${hr}width:80px;">${t('packing.table.cols.carton_qty')}<br/><small>${t('packing.table.cols.carton_qty_ar')}</small></th>
               <th style="${hr}width:80px;">${t('shipping.table.cols.qty')}<br/><small>${t('shipping.table.cols.qty_ar')}</small></th>
               <th style="${hr}width:80px;">${t('shipping.table.cols.currency')}<br/><small>${t('shipping.table.cols.currency_ar')}</small></th>
               <th style="${hr}width:90px;">${t('shipping.table.cols.unit_price')}<br/><small>${t('shipping.table.cols.unit_price_ar')}</small></th>
@@ -1313,9 +1393,10 @@ const ShippingInvoice = () => {
     <thead>
       <tr>
         <th width="40">${t('shipping.table.cols.no')}</th>
+        <th width="95">${t('packing.table.cols.carton_no')}<br/><span style="font-size:8px; font-weight:normal;">${t('packing.table.cols.carton_no_ar')}</span></th>
         <th width="120">${t('shipping.table.cols.item_no')}<br/><span style="font-size:8px; font-weight:normal;">${t('shipping.table.cols.item_no_ar')}</span></th>
         <th>${t('shipping.table.cols.desc')}<br/><span style="font-size:8px; font-weight:normal;">${t('shipping.table.cols.desc_ar')}</span></th>
-        <th>${t('shipping.table.cols.arabic_name')}<br/><span style="font-size:8px; font-weight:normal;">${t('shipping.table.cols.arabic_name_en')}</span></th>
+        <th width="80">${t('packing.table.cols.carton_qty')}<br/><span style="font-size:8px; font-weight:normal;">${t('packing.table.cols.carton_qty_ar')}</span></th>
         <th width="80">${t('shipping.table.cols.qty')}<br/><span style="font-size:8px; font-weight:normal;">${t('shipping.table.cols.qty_ar')}</span></th>
         <th width="80">${t('shipping.table.cols.currency')}<br/><span style="font-size:8px; font-weight:normal;">${t('shipping.table.cols.currency_ar')}</span></th>
         <th width="90">${t('shipping.table.cols.unit_price')}<br/><span style="font-size:8px; font-weight:normal;">${t('shipping.table.cols.unit_price_ar')}</span></th>
@@ -1333,9 +1414,10 @@ const ShippingInvoice = () => {
         htmlString += `
       <tr height="${needsImageRowHeight ? 95 : 25}" style="${needsImageRowHeight ? 'height:95px;' : ''}">
         <td style="font-weight:bold;">${index + 1}</td>
+        <td class="text-cell" style="font-weight:bold;">${row.cartonNo || '-'}</td>
         <td class="text-cell" style="font-weight:bold;">${row.serial}</td>
         <td>${row.desc || ''}</td>
-        <td style="direction:rtl;">${row.arabicName || ''}</td>
+        <td style="font-weight:bold;">${row.cartonQty || '-'}</td>
         <td style="font-weight:bold;">${row.qty || ''}</td>
         <td>${row.currency || ''}</td>
         <td>${row.unitPrice || ''}</td>
@@ -1629,9 +1711,10 @@ ${imgInfo.base64Data}
                <thead>
                  <tr style={{ background: 'var(--surface-highlight)', borderBottom: '2px solid var(--accent-color)' }}>
                    <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '40px' }}>{t('shipping.table.cols.no')}</th>
+                   <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '105px' }}>{t('packing.table.cols.carton_no')}<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>{t('packing.table.cols.carton_no_ar')}</span></th>
                    <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '140px' }}>{t('shipping.table.cols.item_no')}<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>{t('shipping.table.cols.item_no_ar')}</span></th>
                    <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)' }}>{t('shipping.table.cols.desc')}<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>{t('shipping.table.cols.desc_ar')}</span></th>
-                   <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)' }}>{t('shipping.table.cols.arabic_name')}<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>{t('shipping.table.cols.arabic_name_en')}</span></th>
+                   <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '90px' }}>{t('packing.table.cols.carton_qty')}<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>{t('packing.table.cols.carton_qty_ar')}</span></th>
                    <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '80px' }}>{t('shipping.table.cols.qty')}<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>{t('shipping.table.cols.qty_ar')}</span></th>
                    <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '80px' }}>{t('shipping.table.cols.currency')}<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>{t('shipping.table.cols.currency_ar')}</span></th>
                    <th style={{ padding: '10px 5px', border: '1px solid var(--border-color)', width: '90px' }}>{t('shipping.table.cols.unit_price')}<br/><span style={{fontSize:'0.75rem', color:'var(--text-muted)'}}>{t('shipping.table.cols.unit_price_ar')}</span></th>
@@ -1647,6 +1730,10 @@ ${imgInfo.base64Data}
                  {rows.map((row, index) => (
                    <tr key={row.id} style={{ background: index % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)', transition: 'background-color 0.2s' }}>
                      <td style={{ border: '1px solid var(--border-color)', padding: '5px', fontWeight: 'bold' }}>{index + 1}</td>
+                   <td style={{ border: '1px solid var(--border-color)', padding: '5px' }}>
+                      <input type="text" value={row.cartonNo || ''} onChange={e => handleRowChange(row.id, 'cartonNo', e.target.value)} style={{ width: '100%', background: 'transparent', border: 'none', color: 'var(--text-main)', textAlign: 'center', fontWeight: 'bold' }} placeholder="-" />
+                      <span className="print-val" style={{ display: 'none' }}>{row.cartonNo || '-'}</span>
+                   </td>
                      
                      <td style={{ border: '1px solid var(--border-color)', padding: '5px', position: 'relative' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -1760,15 +1847,15 @@ ${imgInfo.base64Data}
                         )}
                         <span className="print-val" style={{ display: 'none' }}>{row.serial}</span>
                      </td>
-                     
+
                      <td style={{ border: '1px solid var(--border-color)', padding: '5px' }}>
                         <input type="text" value={row.desc} onChange={e => handleRowChange(row.id, 'desc', e.target.value)} style={{ width: '100%', background: 'transparent', border: 'none', color: 'var(--text-main)', textAlign: 'center' }} />
                         <span className="print-val" style={{ display: 'none' }}>{row.desc}</span>
                      </td>
                      
                      <td style={{ border: '1px solid var(--border-color)', padding: '5px' }}>
-                        <input type="text" value={row.arabicName} onChange={e => handleRowChange(row.id, 'arabicName', e.target.value)} style={{ width: '100%', background: 'transparent', border: 'none', color: 'var(--text-main)', textAlign: 'center', direction: 'rtl' }} />
-                        <span className="print-val" style={{ display: 'none' }}>{row.arabicName}</span>
+                        <input type="number" value={row.cartonQty || ''} onChange={e => handleRowChange(row.id, 'cartonQty', e.target.value)} style={{ width: '100%', background: 'transparent', border: 'none', color: 'var(--text-main)', textAlign: 'center', fontWeight: 'bold' }} placeholder="-" />
+                        <span className="print-val" style={{ display: 'none' }}>{row.cartonQty || '-'}</span>
                      </td>
                      
                      <td style={{ border: '1px solid var(--border-color)', padding: '5px' }}>

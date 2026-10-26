@@ -20,6 +20,7 @@ const WarehouseReceipt = () => {
   const [orders, setOrders] = useState([]);
   const [receivings, setReceivings] = useState([]);
   const [filteredData, setFilteredData] = useState([]);
+  const [mixedGroups, setMixedGroups] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
 
@@ -123,7 +124,11 @@ const WarehouseReceipt = () => {
   };
 
   const applyFilters = (currentOrders = orders, currentReceivings = receivings) => {
-    if (!currentOrders.length) return;
+    if (!currentOrders.length) {
+      setFilteredData([]);
+      setMixedGroups([]);
+      return;
+    }
 
     const getCartonNumber = (value) => {
       const match = String(value ?? '').match(/\d+/);
@@ -133,14 +138,20 @@ const WarehouseReceipt = () => {
     // Create a map for fast receiving lookups
     const recMap = {};
     currentReceivings.forEach(r => {
-      recMap[r.serial_number] = r;
+      const key = String(r.serial_number || '').trim().toLowerCase();
+      if (key) recMap[key] = r;
     });
 
+    const orderMap = new Map(
+      currentOrders.map(order => [String(order.serial_number || '').trim().toLowerCase(), order])
+    );
+
     let result = [];
+    const detectedMixedGroups = [];
 
     currentOrders.forEach(o => {
       const oData = o.order_data || {};
-      const rData = recMap[o.serial_number];
+      const rData = recMap[String(o.serial_number || '').trim().toLowerCase()];
       const isReceived = rData?.receive_data?.status && (
         rData.receive_data.status.includes('Received') ||
         rData.receive_data.status === 'مستلمة' ||
@@ -170,10 +181,10 @@ const WarehouseReceipt = () => {
         
         // Extract packages
         let pkgs = [];
-        if (rData?.receive_data?.packages && rData.receive_data.packages.some(p => p.active && (p.fromCtn || p.toCtn))) {
-            pkgs = rData.receive_data.packages.filter(p => p.active && (p.fromCtn || p.toCtn));
-        } else if (oData.factoryPackages && oData.factoryPackages.some(p => p.active && (p.fromCtn || p.toCtn))) {
-            pkgs = oData.factoryPackages.filter(p => p.active && (p.fromCtn || p.toCtn));
+        if (rData?.receive_data?.packages && rData.receive_data.packages.some(p => p.active !== false && (p.fromCtn || p.toCtn))) {
+            pkgs = rData.receive_data.packages.filter(p => p.active !== false && (p.fromCtn || p.toCtn));
+        } else if (oData.factoryPackages && oData.factoryPackages.some(p => p.active !== false && (p.fromCtn || p.toCtn))) {
+            pkgs = oData.factoryPackages.filter(p => p.active !== false && (p.fromCtn || p.toCtn));
         } else {
             // Fallback to order carton info
             pkgs = [{
@@ -190,6 +201,58 @@ const WarehouseReceipt = () => {
             if (fromDifference !== 0) return fromDifference;
             return getCartonNumber(a.toCtn) - getCartonNumber(b.toCtn);
         });
+
+        // Mixed cartons are stored as one receiving package with an explicit list
+        // of item serials. They must not be reduced to the parent order's total;
+        // keep them as their own group, like the PackingList invoice does.
+        const mixedPackages = pkgs.filter(pkg => {
+          const mixedItems = Array.isArray(pkg.mixedItems)
+            ? pkg.mixedItems.filter(item => item.serial?.trim() && (parseInt(item.quantity) || 0) > 0)
+            : [];
+          return pkg.status === 'Mixed'
+            && parseInt(pkg.fromCtn) > 0
+            && parseInt(pkg.fromCtn) === parseInt(pkg.toCtn)
+            && mixedItems.length > 0;
+        });
+
+        mixedPackages.forEach((pkg, pkgIndex) => {
+          const cartonNo = String(parseInt(pkg.fromCtn, 10));
+          const mixedItems = pkg.mixedItems.filter(item => item.serial?.trim() && (parseInt(item.quantity) || 0) > 0);
+          const items = mixedItems.map(item => {
+            const itemSerial = item.serial.trim();
+            const itemOrder = orderMap.get(itemSerial.toLowerCase());
+            const itemData = itemOrder?.order_data || {};
+            const quantity = parseInt(item.quantity, 10) || 0;
+            const unitPrice = parseFloat(itemData.productPrice ?? oData.productPrice) || 0;
+            const itemQty = quantity * (pkg.kind === 'Doz' ? 12 : 1);
+
+            return {
+              serial: itemOrder?.serial_number || itemSerial,
+              productName: itemData.productName || itemSerial,
+              ctnPcs: quantity,
+              itemQty,
+              ccy: itemData.currency || oData.currency || 'RMB',
+              unitPrice,
+              totalPrice: itemQty * unitPrice,
+              cartonSize: itemData.cartonSize || oData.cartonSize || '-',
+              cbm: itemData.cbm || oData.cbm || '-'
+            };
+          });
+
+          if (items.length > 0) {
+            detectedMixedGroups.push({
+              id: pkg.mixedCaseId || `${o.serial_number}-${pkg.id || pkgIndex}-${cartonNo}`,
+              cartonNo,
+              cartonQty: '1',
+              receivedAt,
+              items
+            });
+          }
+        });
+
+        // A mixed package is represented by its individual items above, so it
+        // must not also be processed as a normal package.
+        pkgs = pkgs.filter(pkg => !mixedPackages.includes(pkg));
 
         // Calculate totals for the entire serial
         let serialTotalCtn = 0;
@@ -221,19 +284,41 @@ const WarehouseReceipt = () => {
             };
         });
 
-        result.push({
-            serial: o.serial_number,
-            receivedAt,
-            productName: oData.productName,
-            ccy: oData.currency || 'RMB',
-            cartonSize: oData.cartonSize || '-',
-            totalCtn: serialTotalCtn,
-            totalProd: serialTotalProd,
-            totalAmount: serialTotalPrice,
-            packages: processedPkgs
-        });
+        if (processedPkgs.length > 0) {
+          result.push({
+              serial: o.serial_number,
+              receivedAt,
+              productName: oData.productName,
+              ccy: oData.currency || 'RMB',
+              cartonSize: oData.cartonSize || '-',
+              totalCtn: serialTotalCtn,
+              totalProd: serialTotalProd,
+              totalAmount: serialTotalPrice,
+              packages: processedPkgs
+          });
+        }
       }
     });
+
+    // Keep the totals shown for each mixed item consistent when the same item
+    // appears in more than one mixed carton.
+    const mixedItemTotals = new Map();
+    detectedMixedGroups.forEach(group => group.items.forEach(item => {
+      const key = item.serial.trim().toLowerCase();
+      const current = mixedItemTotals.get(key) || { quantity: 0, amount: 0 };
+      current.quantity += item.itemQty;
+      current.amount += item.totalPrice;
+      mixedItemTotals.set(key, current);
+    }));
+
+    const normalizedMixedGroups = detectedMixedGroups.map(group => ({
+      ...group,
+      items: group.items.map(item => ({
+        ...item,
+        totalQty: mixedItemTotals.get(item.serial.trim().toLowerCase())?.quantity || item.itemQty,
+        totalAmount: mixedItemTotals.get(item.serial.trim().toLowerCase())?.amount || item.totalPrice
+      }))
+    }));
 
     // Orders are grouped in the invoice, so sort each group by its first carton number.
     result.sort((a, b) => {
@@ -246,7 +331,8 @@ const WarehouseReceipt = () => {
     });
 
     setFilteredData(result);
-    toast.success(t('warehouse.messages.results_found', { count: result.length }), { id: 'filter-toast' });
+    setMixedGroups(normalizedMixedGroups);
+    toast.success(t('warehouse.messages.results_found', { count: result.length + normalizedMixedGroups.length }), { id: 'filter-toast' });
   };
 
   const handleSearch = async () => {
@@ -259,14 +345,19 @@ const WarehouseReceipt = () => {
 
 
   // Grand Totals
-  const grandTotalItems = filteredData.length;
-  const grandTotalCtn = filteredData.reduce((acc, row) => acc + row.totalCtn, 0);
-  const grandTotalPcs = filteredData.reduce((acc, row) => acc + row.totalProd, 0);
-  const grandTotalAmount = filteredData.reduce((acc, row) => acc + row.totalAmount, 0);
+  const mixedSerials = new Set(mixedGroups.flatMap(group => group.items.map(item => item.serial)));
+  const normalSerials = new Set(filteredData.map(row => row.serial));
+  const grandTotalItems = new Set([...normalSerials, ...mixedSerials]).size;
+  const grandTotalCtn = filteredData.reduce((acc, row) => acc + row.totalCtn, 0) + mixedGroups.length;
+  const grandTotalPcs = filteredData.reduce((acc, row) => acc + row.totalProd, 0)
+    + mixedGroups.reduce((acc, group) => acc + group.items.reduce((sum, item) => sum + item.itemQty, 0), 0);
+  const grandTotalAmount = filteredData.reduce((acc, row) => acc + row.totalAmount, 0)
+    + mixedGroups.reduce((acc, group) => acc + group.items.reduce((sum, item) => sum + item.totalPrice, 0), 0);
+  const hasReceiptData = filteredData.length > 0 || mixedGroups.length > 0;
 
   // Export Handlers - تصدير نفس تصميم الطباعة بالكامل بدقة متناهية
   const exportToPDF = async () => {
-    if (filteredData.length === 0) return toast.error(t('warehouse.messages.no_data_export'));
+    if (!hasReceiptData) return toast.error(t('warehouse.messages.no_data_export'));
 
     const toastId = toast.loading(t('warehouse.messages.exporting_pdf'));
     let clone = null;
@@ -337,9 +428,20 @@ const WarehouseReceipt = () => {
         .map(localBottom)
         .filter((value) => value > 0);
 
+      // Never cut through a rowspan group. If a page ends between two item
+      // rows, the browser canvas can hide the merged carton/date/total cells.
+      // Keep every merged data cell together, for both normal and mixed rows.
+      const rowSpanRanges = [...clone.querySelectorAll('.receipt-data-body td[rowspan]')]
+        .filter(cell => Number(cell.getAttribute('rowspan')) > 1)
+        .map(cell => ({
+          top: localTop(cell),
+          bottom: localBottom(cell)
+        }));
+
       const orderContentEnd = orderEndRows.length
         ? Math.max(...orderEndRows.map(localBottom))
         : (tableHead ? localBottom(tableHead) : 0);
+      const tableContentEndDom = totalsGroup ? localBottom(totalsGroup) : orderContentEnd;
 
       const canvas = await html2canvas(clone, {
         scale: 2,
@@ -356,10 +458,14 @@ const WarehouseReceipt = () => {
 
       const preferredBreaks = uniqueSorted(preferredDomBreaks);
       const rowBreaks = uniqueSorted(rowDomBreaks);
+      const rowSpanCanvasRanges = rowSpanRanges.map(range => ({
+        top: toCanvasY(range.top),
+        bottom: toCanvasY(range.bottom)
+      }));
       const headTop = tableHead ? toCanvasY(localTop(tableHead)) : 0;
       const headBottom = tableHead ? toCanvasY(localBottom(tableHead)) : 0;
       const headHeight = Math.max(0, headBottom - headTop);
-      const orderEnd = toCanvasY(orderContentEnd);
+      const tableContentEnd = toCanvasY(tableContentEndDom);
 
       clone.remove();
       clone = null;
@@ -378,20 +484,30 @@ const WarehouseReceipt = () => {
 
         const minimumUsefulEnd = pageStart + Math.min(40 * renderedScale, availableHeight * 0.15);
         const findLastBreak = (breaks) => {
-          const candidates = breaks.filter((point) => point > minimumUsefulEnd && point <= target);
+          const candidates = breaks.filter((point) => point > minimumUsefulEnd && point <= target)
+            .filter((point) => !rowSpanCanvasRanges.some(range => point > range.top && point < range.bottom));
           return candidates.length ? candidates[candidates.length - 1] : 0;
         };
 
-        return findLastBreak(preferredBreaks)
-          || findLastBreak(rowBreaks)
-          || Math.max(pageStart + 1, Math.floor(target));
+        const preferredEnd = findLastBreak(preferredBreaks);
+        if (preferredEnd) return preferredEnd;
+
+        const rowEnd = findLastBreak(rowBreaks);
+        if (rowEnd) return rowEnd;
+
+        // If the available space ends inside a merged group, extend this page
+        // to the end of that group instead of splitting its row-spanned cells.
+        const splitRowSpanRange = rowSpanCanvasRanges.find(range => target > range.top && target < range.bottom);
+        if (splitRowSpanRange) return splitRowSpanRange.bottom;
+
+        return Math.max(pageStart + 1, Math.floor(target));
       };
 
       const pages = [];
       let pageStart = 0;
 
       while (pageStart < canvas.height - 1) {
-        const repeatTableHead = pages.length > 0 && headHeight > 0 && pageStart < orderEnd;
+        const repeatTableHead = pages.length > 0 && headHeight > 0 && pageStart < tableContentEnd;
         const availableHeight = pageCapacity - (repeatTableHead ? headHeight : 0);
         const pageEnd = findPageEnd(pageStart, availableHeight);
 
@@ -535,10 +651,10 @@ const WarehouseReceipt = () => {
       </div>
 
       {/* Results Controls */}
-      {filteredData.length > 0 && (
+      {hasReceiptData && (
         <div className="hide-on-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
            <h3 style={{ margin: 0, color: 'var(--text-strong)' }}>
-            {t('warehouse.results.preview')} <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', fontWeight: 'normal' }}>({filteredData.length} {t('warehouse.results.models_count')})</span>
+            {t('warehouse.results.preview')} <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', fontWeight: 'normal' }}>({grandTotalItems} {t('warehouse.results.models_count')})</span>
            </h3>
            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
               {hasPermission('warehouse-receipt', 'export') && (<>
@@ -555,7 +671,7 @@ const WarehouseReceipt = () => {
       )}
 
       {/* RECEIPT PRINT AREA */}
-      {filteredData.length > 0 && (
+      {hasReceiptData && (
         <div id="receipt-print-area" className="warehouse-receipt-sheet" style={{ 
             backgroundColor: '#ffffff', 
             color: '#0f172a', 
@@ -787,6 +903,56 @@ const WarehouseReceipt = () => {
                             </React.Fragment>
                         );
                     })}
+
+                    {mixedGroups.length > 0 && (
+                        <tr className="receipt-mixed-header">
+                            <td colSpan={14} style={{ padding: '8px 4px', borderTop: '2px solid #0f172a', borderBottom: '2px solid #0f172a', backgroundColor: '#fee2e2', color: '#b91c1c', fontWeight: 'bold', textAlign: 'center' }}>
+                                {t('packing.table.mixed_header')}
+                            </td>
+                        </tr>
+                    )}
+
+                    {mixedGroups.map((group) => group.items.map((item, itemIdx) => {
+                        const isFirstItem = itemIdx === 0;
+                        const isLastItem = itemIdx === group.items.length - 1;
+                        const rowSpan = group.items.length;
+                        const tBorderStyle = '1px solid #cbd5e1';
+                        const bottomBorder = isLastItem ? '2px solid #f59e0b' : tBorderStyle;
+                        const itemBackground = itemIdx % 2 === 0 ? '#fff7ed' : '#fffbeb';
+                        const { eng, chi } = getProductDisplayNames(item.productName);
+
+                        return (
+                            <tr className={`receipt-data-row receipt-mixed-row${isLastItem ? ' receipt-order-end' : ''}`} data-mixed-group={group.id} key={`mixed-${group.id}-${item.serial}`} style={{ textAlign: 'center', backgroundColor: itemBackground }}>
+                                {isFirstItem && (
+                                    <td rowSpan={rowSpan} style={{ padding: '4px', borderRight: '2px solid #f59e0b', borderBottom: '2px solid #f59e0b', backgroundColor: '#ffedd5', verticalAlign: 'middle', fontWeight: 'bold', color: '#b45309', position: 'relative', zIndex: 2 }}>{group.cartonNo}</td>
+                                )}
+                                <td style={{ padding: '4px', borderRight: tBorderStyle, borderBottom: bottomBorder, backgroundColor: itemBackground, verticalAlign: 'middle', fontWeight: 'bold' }}>{item.serial}</td>
+                                {isFirstItem && (
+                                    <td rowSpan={rowSpan} style={{ padding: '4px', borderRight: '2px solid #f59e0b', borderBottom: '2px solid #f59e0b', backgroundColor: '#ffedd5', verticalAlign: 'middle', fontSize: '0.72rem', fontWeight: 'bold', position: 'relative', zIndex: 2 }}>{formatReceivedAt(group.receivedAt)}</td>
+                                )}
+                                <td style={{ padding: '3px 4px', borderRight: tBorderStyle, borderBottom: bottomBorder, backgroundColor: itemBackground, verticalAlign: 'middle' }}>
+                                    {eng && chi ? (
+                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', lineHeight: 1.2 }}>
+                                            <span style={{ fontSize: eng.length > 20 ? '0.85rem' : '0.92rem', fontWeight: 700, color: '#0f172a', wordBreak: 'break-word' }}>{eng}</span>
+                                            <span style={{ fontSize: chi.length > 10 ? '0.85rem' : '0.9rem', fontWeight: 700, color: '#0f172a', wordBreak: 'break-word' }}>{chi}</span>
+                                        </div>
+                                    ) : (eng || chi || item.productName || '-')}
+                                </td>
+                                {isFirstItem && (
+                                    <td rowSpan={rowSpan} style={{ padding: '4px', borderRight: '2px solid #f59e0b', borderBottom: '2px solid #f59e0b', backgroundColor: '#ffedd5', verticalAlign: 'middle', fontWeight: 'bold', position: 'relative', zIndex: 2 }}>{group.cartonQty}</td>
+                                )}
+                                <td style={{ padding: '4px', borderRight: tBorderStyle, borderBottom: bottomBorder, backgroundColor: itemBackground, verticalAlign: 'middle' }}>{item.ctnPcs}</td>
+                                <td style={{ padding: '4px', borderRight: tBorderStyle, borderBottom: bottomBorder, backgroundColor: itemBackground, verticalAlign: 'middle' }}>{item.itemQty}</td>
+                                <td style={{ padding: '4px', borderRight: tBorderStyle, borderBottom: bottomBorder, backgroundColor: itemBackground, verticalAlign: 'middle', fontWeight: 'bold' }}>{item.totalQty}</td>
+                                <td style={{ padding: '4px', borderRight: tBorderStyle, borderBottom: bottomBorder, backgroundColor: itemBackground, verticalAlign: 'middle', fontSize: '0.7rem' }}>¥ {item.ccy}</td>
+                                <td style={{ padding: '4px', borderRight: tBorderStyle, borderBottom: bottomBorder, backgroundColor: itemBackground, verticalAlign: 'middle' }}>{item.unitPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                <td style={{ padding: '4px', borderRight: tBorderStyle, borderBottom: bottomBorder, backgroundColor: itemBackground, verticalAlign: 'middle' }}>{item.totalPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                <td style={{ padding: '4px', borderRight: tBorderStyle, borderBottom: bottomBorder, backgroundColor: itemBackground, verticalAlign: 'middle', fontWeight: 'bold' }}>{item.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                <td style={{ padding: '4px', borderRight: tBorderStyle, borderBottom: bottomBorder, backgroundColor: itemBackground, verticalAlign: 'middle', fontSize: '0.75rem' }}>{item.cartonSize}</td>
+                                <td style={{ padding: '4px', borderRight: tBorderStyle, borderBottom: bottomBorder, backgroundColor: itemBackground, verticalAlign: 'middle' }}>{item.cbm}</td>
+                            </tr>
+                        );
+                    }))}
                 </tbody>
 
                     {/* Totals Row */}

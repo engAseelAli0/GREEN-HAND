@@ -231,6 +231,7 @@
     },
     "factory": {
       "section_title": "工厂与纸箱包装细节",
+      "showing_for_company": "{{company}} 的工厂",
       "factory_select": "生产工厂",
       "factory_placeholder": "点击选择工厂",
       "factory_code": "工厂代码",
@@ -403,7 +404,10 @@
       "checking_serial": "正在检查款号...",
       "serial_available": "款号可用",
       "serial_taken": "该款号已被占用！",
-      "delete_error": "删除时发生错误"
+      "delete_error": "删除时发生错误",
+      "serial_same_as_original": "⚠️ 款号与原款号相同！请更改款号后再保存为新副本。",
+      "must_change_image_for_copy": "⚠️ 保存为副本前，必须将之前产品的图片更换为新款号的产品图片！",
+      "must_upload_new_image_for_copy": "⚠️ 保存为副本前，请先上传该款号对应的新产品图片！"
     },
     "units": {
       "carton": "箱",
@@ -1389,6 +1393,7 @@
       "duplicate_factory_code": "另一个工厂已注册此代码！",
       "color_abbr_limit": "请输入不超过 7 个字符的颜色缩写（例如 WHT）",
       "factory_info_required": "请清楚填写工厂地址和手机号",
+      "company_required_for_factory": "请选择该工厂所属的公司",
       "company_info_required": "请填写公司传真和手机号",
       "trademark_name_required": "请先输入品牌名称",
       "upload_success": "品牌图片上传成功！",
